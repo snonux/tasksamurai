@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"tasksamurai/internal/task"
 	"tasksamurai/internal/ui"
 
@@ -66,18 +68,25 @@ func taskToRow(t task.Task) table.Row {
 		t.Priority,
 		tags,
 		t.Recur,
-		formatDate(t.Due),
+		formatDue(t.Due),
 		urg,
 		strings.Join(anns, "; "),
 	}
 }
 
-func formatDate(s string) string {
+func formatDue(s string) string {
 	if s == "" {
 		return ""
 	}
-	if ts, err := time.Parse("20060102T150405Z", s); err == nil {
-		return ts.Format("2006-01-02")
+	ts, err := time.Parse("20060102T150405Z", s)
+	if err != nil {
+		return s
 	}
-	return s
+
+	days := int(time.Until(ts).Hours() / 24)
+	val := fmt.Sprintf("%dd", days)
+	if days < 0 {
+		val = lipgloss.NewStyle().Background(lipgloss.Color("1")).Render(val)
+	}
+	return val
 }

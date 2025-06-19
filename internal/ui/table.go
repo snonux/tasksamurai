@@ -7,7 +7,10 @@ import (
 )
 
 // Model wraps a Bubble Tea table.Model to display tasks.
-type Model struct{ tbl table.Model }
+type Model struct {
+	tbl      table.Model
+	showHelp bool
+}
 
 // New creates a new UI model with the provided rows.
 func New(rows []table.Row) Model {
@@ -45,11 +48,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.tbl.SetWidth(msg.Width)
 		m.tbl.SetHeight(msg.Height - 2)
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "?":
+			m.showHelp = true
+			return m, nil
+		case "q":
+			if m.showHelp {
+				m.showHelp = false
+				return m, nil
+			}
+			return m, tea.Quit
+		}
 	}
+
+	if m.showHelp {
+		return m, nil
+	}
+
 	var cmd tea.Cmd
 	m.tbl, cmd = m.tbl.Update(msg)
 	return m, cmd
 }
 
 // View renders the table UI.
-func (m Model) View() string { return m.tbl.View() }
+func (m Model) View() string {
+	if m.showHelp {
+		return lipgloss.JoinVertical(lipgloss.Left,
+			m.tbl.HelpView(),
+			"q: quit",
+			"?: help", // show help toggle line
+		)
+	}
+	return m.tbl.View()
+}
