@@ -1,9 +1,17 @@
 package task
 
 import (
-	"os"
-	"testing"
+        "os"
+        "os/exec"
+        "testing"
 )
+
+func requireTask(t *testing.T) {
+        t.Helper()
+        if _, err := exec.LookPath("task"); err != nil {
+                t.Skip("task command not available")
+        }
+}
 
 func setupTaskEnv(t *testing.T) {
 	tmp := t.TempDir()
@@ -20,7 +28,8 @@ func setupTaskEnv(t *testing.T) {
 }
 
 func TestAddAndExport(t *testing.T) {
-	setupTaskEnv(t)
+        requireTask(t)
+        setupTaskEnv(t)
 
 	if err := Add("hello world", []string{"tag", "anothertag", "tasksamuraitesting"}); err != nil {
 		t.Fatalf("add task 1: %v", err)
@@ -60,7 +69,8 @@ func TestAddAndExport(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
-	setupTaskEnv(t)
+        requireTask(t)
+        setupTaskEnv(t)
 
 	if err := Add("sample", []string{"one"}); err != nil {
 		t.Fatalf("add: %v", err)
