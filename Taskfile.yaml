@@ -3,6 +3,9 @@ version: '3'
 tasks:
   default:
     cmds:
+      - go build -o tasksamurai ./cmd/tasksamurai
+  run:
+    cmds:
       - go run ./cmd/tasksamurai
   test:
     cmds:
