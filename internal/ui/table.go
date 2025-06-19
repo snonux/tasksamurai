@@ -1,20 +1,20 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	atable "tasksamurai/internal/atable"
 )
 
 // Model wraps a Bubble Tea table.Model to display tasks.
 type Model struct {
-	tbl      table.Model
+	tbl      atable.Model
 	showHelp bool
 }
 
 // New creates a new UI model with the provided rows.
-func New(rows []table.Row) Model {
-	cols := []table.Column{
+func New(rows []atable.Row) Model {
+	cols := []atable.Column{
 		{Title: "ID", Width: 4},
 		{Title: "Task", Width: 30},
 		{Title: "Active", Width: 6},
@@ -26,12 +26,12 @@ func New(rows []table.Row) Model {
 		{Title: "Urg", Width: 5},
 		{Title: "Annotations", Width: 20},
 	}
-	t := table.New(
-		table.WithColumns(cols),
-		table.WithRows(rows),
-		table.WithFocused(true),
+	t := atable.New(
+		atable.WithColumns(cols),
+		atable.WithRows(rows),
+		atable.WithFocused(true),
 	)
-	styles := table.DefaultStyles()
+	styles := atable.DefaultStyles()
 	styles.Header = styles.Header.Foreground(lipgloss.Color("205"))
 	styles.Selected = styles.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
 	styles.Cell = styles.Cell.Padding(0, 1)

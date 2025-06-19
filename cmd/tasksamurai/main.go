@@ -12,8 +12,8 @@ import (
 	"tasksamurai/internal/task"
 	"tasksamurai/internal/ui"
 
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
+	atable "tasksamurai/internal/atable"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var rows []table.Row
+	var rows []atable.Row
 	for _, t := range tasks {
 		if t.Status == "completed" {
 			continue
@@ -40,7 +40,7 @@ func main() {
 	}
 }
 
-func taskToRow(t task.Task) table.Row {
+func taskToRow(t task.Task) atable.Row {
 	active := ""
 	if t.Start != "" {
 		active = "yes"
@@ -60,7 +60,7 @@ func taskToRow(t task.Task) table.Row {
 		anns = append(anns, a.Description)
 	}
 
-	return table.Row{
+	return atable.Row{
 		strconv.Itoa(t.ID),
 		t.Description,
 		active,
