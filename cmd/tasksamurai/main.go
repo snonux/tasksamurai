@@ -85,8 +85,9 @@ func formatDue(s string) string {
 
 	days := int(time.Until(ts).Hours() / 24)
 	val := fmt.Sprintf("%dd", days)
+	style := lipgloss.NewStyle()
 	if days < 0 {
-		val = lipgloss.NewStyle().Background(lipgloss.Color("1")).Render(val)
+		style = style.Background(lipgloss.Color("1"))
 	}
-	return val
+	return style.Render(val)
 }
