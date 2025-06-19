@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
+	"strconv"
 )
 
 // Task represents a taskwarrior task as returned by `task export`.
@@ -70,4 +71,73 @@ func Export() ([]Task, error) {
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func run(args ...string) error {
+	cmd := exec.Command("task", args...)
+	return cmd.Run()
+}
+
+// SetStatus changes the status of the task with the given id.
+func SetStatus(id int, status string) error {
+	return run(strconv.Itoa(id), "modify", "status:"+status)
+}
+
+// SetPriority changes the priority of the task with the given id.
+func SetPriority(id int, priority string) error {
+	return run(strconv.Itoa(id), "modify", "priority:"+priority)
+}
+
+// AddTags adds tags to the task with the given id.
+func AddTags(id int, tags []string) error {
+	args := []string{strconv.Itoa(id), "modify"}
+	for _, t := range tags {
+		if len(t) > 0 && t[0] != '+' {
+			t = "+" + t
+		}
+		args = append(args, t)
+	}
+	return run(args...)
+}
+
+// RemoveTags removes tags from the task with the given id.
+func RemoveTags(id int, tags []string) error {
+	args := []string{strconv.Itoa(id), "modify"}
+	for _, t := range tags {
+		if len(t) > 0 && t[0] != '-' {
+			t = "-" + t
+		}
+		args = append(args, t)
+	}
+	return run(args...)
+}
+
+// SetRecurrence sets the recurrence for the task with the given id.
+func SetRecurrence(id int, rec string) error {
+	return run(strconv.Itoa(id), "modify", "recur:"+rec)
+}
+
+// SetDueDate sets the due date for the task with the given id.
+func SetDueDate(id int, due string) error {
+	return run(strconv.Itoa(id), "modify", "due:"+due)
+}
+
+// SetDescription changes the description of the task with the given id.
+func SetDescription(id int, desc string) error {
+	return run(strconv.Itoa(id), "modify", "description:"+desc)
+}
+
+// Annotate adds an annotation to the task with the given id.
+func Annotate(id int, text string) error {
+	return run(strconv.Itoa(id), "annotate", text)
+}
+
+// Denotate removes an annotation from the task with the given id.
+func Denotate(id int, annoID int) error {
+	return run(strconv.Itoa(id), "denotate", strconv.Itoa(annoID))
+}
+
+// Edit opens the task in an editor for manual modification.
+func Edit(id int) error {
+	return run(strconv.Itoa(id), "edit")
 }
