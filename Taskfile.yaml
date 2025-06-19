@@ -4,3 +4,6 @@ tasks:
   default:
     cmds:
       - go run ./cmd/tasksamurai
+  test:
+    cmds:
+      - go test ./...
