@@ -8,12 +8,24 @@ import (
 )
 
 // Task represents a taskwarrior task as returned by `task export`.
+type Annotation struct {
+	Entry       string `json:"entry"`
+	Description string `json:"description"`
+}
+
 type Task struct {
-	ID          int      `json:"id"`
-	UUID        string   `json:"uuid"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Status      string   `json:"status"`
+	ID          int          `json:"id"`
+	UUID        string       `json:"uuid"`
+	Description string       `json:"description"`
+	Tags        []string     `json:"tags"`
+	Status      string       `json:"status"`
+	Start       string       `json:"start"`
+	Entry       string       `json:"entry"`
+	Due         string       `json:"due"`
+	Priority    string       `json:"priority"`
+	Recur       string       `json:"recur"`
+	Urgency     float64      `json:"urgency"`
+	Annotations []Annotation `json:"annotations"`
 }
 
 // Add creates a new task with the given description and tags.
