@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +172,60 @@ func TestDoneHotkey(t *testing.T) {
 
 	if strings.TrimSpace(string(data)) != "1 done" {
 		t.Fatalf("done not called: %q", data)
+	}
+}
+
+func TestUndoHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %s\n", logFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New("")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	m = mv.(Model)
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least two commands, got %d", len(lines))
+	}
+	if lines[0] != "1 done" {
+		t.Fatalf("done not called: %q", lines[0])
+	}
+	if lines[1] != "1 modify status:pending" {
+		t.Fatalf("undo not called: %q", lines[1])
 	}
 }
 
