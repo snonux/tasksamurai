@@ -128,3 +128,39 @@ func TestModifyHelpers(t *testing.T) {
 		t.Errorf("annotation not added")
 	}
 }
+
+func TestSetTags(t *testing.T) {
+	if _, err := exec.LookPath("task"); err != nil {
+		t.Skip("task command not available")
+	}
+	tmp := t.TempDir()
+	if err := os.Setenv("TASKDATA", tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("TASKRC", "/dev/null"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	if err := Add("hello", []string{"foo", "bar"}); err != nil {
+		t.Fatalf("add task: %v", err)
+	}
+
+	if err := SetTags(1, []string{"baz"}); err != nil {
+		t.Fatalf("set tags: %v", err)
+	}
+
+	tasks, err := Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(tasks))
+	}
+	if len(tasks[0].Tags) != 1 || tasks[0].Tags[0] != "baz" {
+		t.Errorf("tags not replaced: %+v", tasks[0].Tags)
+	}
+}

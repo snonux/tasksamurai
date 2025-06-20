@@ -25,6 +25,11 @@ type Model struct {
 	annotateID    int
 	annotateInput textinput.Model
 
+	tagging    bool
+	tagReplace bool
+	tagID      int
+	tagInput   textinput.Model
+
 	filter string
 	tasks  []task.Task
 
@@ -48,6 +53,8 @@ func New(filter string) (Model, error) {
 	m := Model{filter: filter}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
+	m.tagInput = textinput.New()
+	m.tagInput.Prompt = "tags: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -144,6 +151,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.annotateInput, cmd = m.annotateInput.Update(msg)
 			return m, cmd
 		}
+		if m.tagging {
+			switch msg.Type {
+			case tea.KeyEnter:
+				tokens := strings.Fields(m.tagInput.Value())
+				if m.tagReplace {
+					task.SetTags(m.tagID, tokens)
+				} else {
+					var addTags, delTags []string
+					for _, tkn := range tokens {
+						if strings.HasPrefix(tkn, "-") {
+							delTags = append(delTags, strings.TrimPrefix(tkn, "-"))
+						} else {
+							addTags = append(addTags, strings.TrimPrefix(strings.TrimPrefix(tkn, "+"), ""))
+						}
+					}
+					if len(addTags) > 0 {
+						task.AddTags(m.tagID, addTags)
+					}
+					if len(delTags) > 0 {
+						task.RemoveTags(m.tagID, delTags)
+					}
+				}
+				m.tagging = false
+				m.tagReplace = false
+				m.tagInput.Blur()
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.tagging = false
+				m.tagReplace = false
+				m.tagInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.tagInput, cmd = m.tagInput.Update(msg)
+			return m, cmd
+		}
 		switch msg.String() {
 		case "?":
 			m.showHelp = true
@@ -191,6 +235,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "t":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagID = id
+					m.tagReplace = false
+					m.tagging = true
+					m.tagInput.SetValue("")
+					m.tagInput.Focus()
+					return m, nil
+				}
+			}
+		case "T":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagID = id
+					m.tagReplace = true
+					m.tagging = true
+					m.tagInput.SetValue("")
+					m.tagInput.Focus()
+					return m, nil
+				}
+			}
 		}
 	}
 
@@ -211,6 +279,8 @@ func (m Model) View() string {
 			"E: edit task",
 			"s: toggle start/stop",
 			"a: annotate task",
+			"t: modify tags",
+			"T: set tags",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
@@ -223,6 +293,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.annotateInput.View(),
+		)
+	}
+	if m.tagging {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.tagInput.View(),
 		)
 	}
 	return view
@@ -253,7 +329,17 @@ func taskToRow(t task.Task) atable.Row {
 		age = fmt.Sprintf("%dd", days)
 	}
 
-	tags := strings.Join(t.Tags, ",")
+	tagsList := make([]string, 0, len(t.Tags))
+	for _, tg := range t.Tags {
+		if tg == "" {
+			continue
+		}
+		if !strings.HasPrefix(tg, "+") {
+			tg = "+" + tg
+		}
+		tagsList = append(tagsList, tg)
+	}
+	tags := strings.Join(tagsList, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 
 	var anns []string

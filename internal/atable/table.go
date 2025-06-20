@@ -306,6 +306,9 @@ func (m *Model) UpdateViewport() {
 	m.end = clamp(m.cursor+m.viewport.Height, m.cursor, len(m.rows))
 	for i := m.start; i < m.end; i++ {
 		renderedRows = append(renderedRows, m.renderRow(i))
+		if i < m.end-1 {
+			renderedRows = append(renderedRows, "")
+		}
 	}
 
 	m.viewport.SetContent(

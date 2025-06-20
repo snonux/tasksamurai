@@ -150,6 +150,23 @@ func RemoveTags(id int, tags []string) error {
 	return run(args...)
 }
 
+// SetTags replaces all tags on the task with the provided set.
+func SetTags(id int, tags []string) error {
+	clean := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimPrefix(t, "+")
+		t = strings.TrimPrefix(t, "-")
+		if t != "" {
+			clean = append(clean, t)
+		}
+	}
+	arg := "tags:"
+	if len(clean) > 0 {
+		arg += strings.Join(clean, ",")
+	}
+	return run(strconv.Itoa(id), "modify", arg)
+}
+
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
 	return run(strconv.Itoa(id), "modify", "recur:"+rec)
