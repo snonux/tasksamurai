@@ -271,6 +271,7 @@ func (m Model) statusLine() string {
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
+		Width(m.tbl.Width()).
 		Render(status)
 }
 
@@ -283,6 +284,7 @@ func (m Model) topStatusLine() string {
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
+		Width(m.tbl.Width()).
 		Render(header)
 }
 
