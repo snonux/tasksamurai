@@ -272,12 +272,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			m.showHelp = true
 			return m, nil
-		case "q":
+		case "q", "esc":
 			if m.showHelp {
 				m.showHelp = false
 				return m, nil
 			}
-			return m, tea.Quit
+			if m.searchRegex != nil {
+				m.searchRegex = nil
+				m.searchMatches = nil
+				m.searchIndex = 0
+				m.reload()
+				return m, nil
+			}
+			if msg.String() == "q" {
+				return m, tea.Quit
+			}
+			return m, nil
 		case "e", "E":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])

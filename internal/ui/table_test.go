@@ -431,3 +431,104 @@ func TestNavigationHotkeys(t *testing.T) {
 		t.Fatalf("G hotkey: expected 1 got %d", m.tbl.Cursor())
 	}
 }
+
+func setupBasicTask(t *testing.T, tmp string) string {
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"y\",\"description\":\"beta\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
+func setupEnv(t *testing.T, taskPath string) {
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", filepath.Dir(taskPath)+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	tmp := filepath.Dir(taskPath)
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+}
+
+func TestEscClosesHelp(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = mv.(Model)
+	if !m.showHelp {
+		t.Fatalf("help not shown")
+	}
+
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mv.(Model)
+	if m.showHelp {
+		t.Fatalf("esc did not close help")
+	}
+}
+
+func TestSearchExitHotkeys(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// enter search mode
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = mv.(Model)
+	for _, r := range "alpha" {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mv.(Model)
+	}
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mv.(Model)
+	if m.searchRegex == nil {
+		t.Fatalf("search regex not set")
+	}
+
+	// escape search results with ESC
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mv.(Model)
+	if m.searchRegex != nil {
+		t.Fatalf("esc did not clear search")
+	}
+
+	// search again and exit with q
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = mv.(Model)
+	for _, r := range "beta" {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mv.(Model)
+	}
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mv.(Model)
+	if m.searchRegex == nil {
+		t.Fatalf("search regex not set for q")
+	}
+
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mv.(Model)
+	if m.searchRegex != nil {
+		t.Fatalf("q did not clear search")
+	}
+}
