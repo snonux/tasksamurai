@@ -1,5 +1,7 @@
 # tasksamurai
 
+![tasksamurai logo](logo.png)
+
 tasksamurai is a terminal interface for Taskwarrior built with Bubble Tea.
 
 ## Hotkeys
