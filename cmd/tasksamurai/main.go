@@ -26,6 +26,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Show some fireworks on startup.
+	ui.Fireworks()
+
 	// Clear the screen before starting the TUI to avoid leaving any
 	// previous command line artefacts behind.
 	fmt.Print("\033[H\033[2J")
@@ -35,6 +38,4 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)
 	}
-
-	ui.Fireworks()
 }

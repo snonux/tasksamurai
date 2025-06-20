@@ -48,7 +48,7 @@ func (m fwModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case tickMsg:
-		if time.Since(m.start) > 5*time.Second {
+		if time.Since(m.start) > 3*time.Second {
 			return m, tea.Quit
 		}
 		// advance frames
@@ -119,7 +119,7 @@ func (m fwModel) View() string {
 	return b.String()
 }
 
-// Fireworks runs a short fireworks animation. It stops after five seconds or
+// Fireworks runs a short fireworks animation. It stops after three seconds or
 // when a key is pressed.
 func Fireworks() {
 	rand.Seed(time.Now().UnixNano())
