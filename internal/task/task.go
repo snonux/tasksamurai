@@ -113,6 +113,11 @@ func SetStatus(id int, status string) error {
 	return run(strconv.Itoa(id), "modify", "status:"+status)
 }
 
+// SetStatusUUID changes the status of the task with the given UUID.
+func SetStatusUUID(uuid, status string) error {
+	return run(uuid, "modify", "status:"+status)
+}
+
 // Start begins the task with the given id.
 func Start(id int) error {
 	return run(strconv.Itoa(id), "start")

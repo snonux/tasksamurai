@@ -39,7 +39,7 @@ type Model struct {
 	filters []string
 	tasks   []task.Task
 
-	undoStack []int
+	undoStack []string
 
 	total      int
 	inProgress int
@@ -224,15 +224,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				idStr := ansi.Strip(row[0])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					task.Done(id)
-					m.undoStack = append(m.undoStack, id)
+					for _, tsk := range m.tasks {
+						if tsk.ID == id {
+							m.undoStack = append(m.undoStack, tsk.UUID)
+							break
+						}
+					}
 					m.reload()
 				}
 			}
 		case "U":
 			if n := len(m.undoStack); n > 0 {
-				id := m.undoStack[n-1]
+				uuid := m.undoStack[n-1]
 				m.undoStack = m.undoStack[:n-1]
-				task.SetStatus(id, "pending")
+				task.SetStatusUUID(uuid, "pending")
 				m.reload()
 			}
 		case "d":

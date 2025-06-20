@@ -202,7 +202,7 @@ func TestUndoHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestUndoHotkey(t *testing.T) {
 	if lines[0] != "1 done" {
 		t.Fatalf("done not called: %q", lines[0])
 	}
-	if lines[1] != "1 modify status:pending" {
+	if lines[1] != "x modify status:pending" {
 		t.Fatalf("undo not called: %q", lines[1])
 	}
 }
