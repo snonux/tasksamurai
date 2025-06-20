@@ -128,3 +128,41 @@ func TestModifyHelpers(t *testing.T) {
 		t.Errorf("annotation not added")
 	}
 }
+
+func TestDeletePriority(t *testing.T) {
+	if _, err := exec.LookPath("task"); err != nil {
+		t.Skip("task command not available")
+	}
+	tmp := t.TempDir()
+	if err := os.Setenv("TASKDATA", tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("TASKRC", "/dev/null"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	if err := Add("hello", nil); err != nil {
+		t.Fatalf("add task: %v", err)
+	}
+	if err := SetPriority(1, "H"); err != nil {
+		t.Fatalf("set priority: %v", err)
+	}
+	if err := DeletePriority(1); err != nil {
+		t.Fatalf("delete priority: %v", err)
+	}
+
+	tasks, err := Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(tasks))
+	}
+	if tasks[0].Priority != "" {
+		t.Errorf("priority not cleared: %v", tasks[0].Priority)
+	}
+}

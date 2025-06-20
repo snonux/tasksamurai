@@ -35,6 +35,10 @@ type Model struct {
 	dueID      int
 	dueInput   textinput.Model
 
+	priorityEditing bool
+	priorityID      int
+	priorityInput   textinput.Model
+
 	filter string
 	tasks  []task.Task
 
@@ -60,6 +64,8 @@ func New(filter string) (Model, error) {
 	m.annotateInput.Prompt = "annotation: "
 	m.dueInput = textinput.New()
 	m.dueInput.Prompt = "due: "
+	m.priorityInput = textinput.New()
+	m.priorityInput.Prompt = "priority: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -186,6 +192,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dueInput, cmd = m.dueInput.Update(msg)
 			return m, cmd
 		}
+		if m.priorityEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				val := strings.ToUpper(m.priorityInput.Value())
+				if val == "H" || val == "M" || val == "L" {
+					task.SetPriority(m.priorityID, val)
+				}
+				m.priorityEditing = false
+				m.priorityInput.Blur()
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.priorityEditing = false
+				m.priorityInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.priorityInput, cmd = m.priorityInput.Update(msg)
+			return m, cmd
+		}
 		switch msg.String() {
 		case "?":
 			m.showHelp = true
@@ -275,6 +301,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "p":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.priorityID = id
+					m.priorityEditing = true
+					m.priorityInput.SetValue("")
+					m.priorityInput.Focus()
+					return m, nil
+				}
+			}
+		case "P":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					task.DeletePriority(id)
+					m.reload()
+				}
+			}
 		}
 	}
 
@@ -299,6 +344,8 @@ func (m Model) View() string {
 			"r: random due date",
 			"a: annotate task",
 			"A: replace annotations",
+			"p: set priority",
+			"P: clear priority",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
@@ -318,6 +365,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.dueInput.View(),
+		)
+	}
+	if m.priorityEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.priorityInput.View(),
 		)
 	}
 	return view

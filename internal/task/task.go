@@ -138,6 +138,11 @@ func SetPriority(id int, priority string) error {
 	return run(strconv.Itoa(id), "modify", "priority:"+priority)
 }
 
+// DeletePriority removes the priority from the task with the given id.
+func DeletePriority(id int) error {
+	return run(strconv.Itoa(id), "modify", "priority:")
+}
+
 // AddTags adds tags to the task with the given id.
 func AddTags(id int, tags []string) error {
 	args := []string{strconv.Itoa(id), "modify"}
