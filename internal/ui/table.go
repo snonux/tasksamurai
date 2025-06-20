@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"tasksamurai/internal"
 	atable "tasksamurai/internal/atable"
 	"tasksamurai/internal/task"
 )
@@ -480,7 +481,7 @@ func (m Model) View() string {
 }
 
 func (m Model) statusLine() string {
-	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d", m.total, m.inProgress, m.due)
+	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d | press H for help", m.total, m.inProgress, m.due)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
@@ -494,11 +495,12 @@ func (m Model) topStatusLine() string {
 	if idx := m.tbl.ColumnCursor(); idx >= 0 && idx < len(cols) {
 		header = cols[idx].Title
 	}
+	line := fmt.Sprintf("Task Samurai %s | %s", internal.Version, header)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
 		Width(m.tbl.Width()).
-		Render(header)
+		Render(line)
 }
 
 func taskToRow(t task.Task) atable.Row {
