@@ -89,13 +89,18 @@ func (m *Model) reload() error {
 		return err
 	}
 
-	var rows []atable.Row
 	var filtered []task.Task
 	for _, tsk := range tasks {
 		if tsk.Status == "completed" {
 			continue
 		}
 		filtered = append(filtered, tsk)
+	}
+
+	task.SortTasks(filtered)
+
+	var rows []atable.Row
+	for _, tsk := range filtered {
 		rows = append(rows, taskToRow(tsk))
 	}
 
