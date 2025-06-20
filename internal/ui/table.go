@@ -38,6 +38,8 @@ type Model struct {
 	filter string
 	tasks  []task.Task
 
+	undoStack []int
+
 	total      int
 	inProgress int
 	due        int
@@ -227,8 +229,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				idStr := ansi.Strip(row[0])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					task.Done(id)
+					m.undoStack = append(m.undoStack, id)
 					m.reload()
 				}
+			}
+		case "U":
+			if n := len(m.undoStack); n > 0 {
+				id := m.undoStack[n-1]
+				m.undoStack = m.undoStack[:n-1]
+				task.SetStatus(id, "pending")
+				m.reload()
 			}
 		case "d":
 			if row := m.tbl.SelectedRow(); row != nil {
@@ -295,6 +305,7 @@ func (m Model) View() string {
 			"E: edit task",
 			"s: toggle start/stop",
 			"D: mark task done",
+			"U: undo done",
 			"d: set due date",
 			"r: random due date",
 			"a: annotate task",
