@@ -128,7 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Quit
-		case "E":
+		case "e", "E":
 			if row := m.tbl.SelectedRow(); row != nil {
 				if id, err := strconv.Atoi(row[0]); err == nil {
 					return m, editCmd(id)
@@ -137,13 +137,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			if row := m.tbl.SelectedRow(); row != nil {
 				if id, err := strconv.Atoi(row[0]); err == nil {
-					idx := m.tbl.Cursor()
-					if idx >= 0 && idx < len(m.tasks) {
-						if m.tasks[idx].Start == "" {
-							task.Start(id)
-						} else {
-							task.Stop(id)
+					started := false
+					for _, tsk := range m.tasks {
+						if tsk.ID == id {
+							started = tsk.Start != ""
+							break
 						}
+					}
+					if started {
+						task.Stop(id)
+					} else {
+						task.Start(id)
 					}
 					m.reload()
 				}
