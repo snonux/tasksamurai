@@ -142,6 +142,15 @@ func Denotate(id int, annoID int) error {
 }
 
 // Edit opens the task in an editor for manual modification.
+// EditCmd returns an exec.Cmd that edits the task with the given id.
+// The caller is responsible for running the command, typically via
+// tea.ExecProcess so that the terminal state is properly managed.
+func EditCmd(id int) *exec.Cmd {
+	return exec.Command("task", strconv.Itoa(id), "edit")
+}
+
+// Edit opens the task in an editor for manual modification.
+// This is a convenience wrapper around EditCmd.
 func Edit(id int) error {
-	return run(strconv.Itoa(id), "edit")
+	return EditCmd(id).Run()
 }
