@@ -171,8 +171,15 @@ func Annotate(id int, text string) error {
 }
 
 // Denotate removes an annotation from the task with the given id.
-func Denotate(id int, annoID int) error {
-	return run(strconv.Itoa(id), "denotate", strconv.Itoa(annoID))
+// Denotate removes an annotation from the task with the given id. The
+// annotation text is matched exactly when provided. If text is empty, the
+// oldest annotation is removed.
+func Denotate(id int, text string) error {
+	args := []string{strconv.Itoa(id), "denotate"}
+	if text != "" {
+		args = append(args, text)
+	}
+	return run(args...)
 }
 
 // ReplaceAnnotations removes all existing annotations from the task with the
@@ -187,8 +194,8 @@ func ReplaceAnnotations(id int, text string) error {
 		return fmt.Errorf("task %d not found", id)
 	}
 	anns := tasks[0].Annotations
-	for i := len(anns); i >= 1; i-- {
-		if err := Denotate(id, i); err != nil {
+	for i := len(anns) - 1; i >= 0; i-- {
+		if err := Denotate(id, anns[i].Description); err != nil {
 			return err
 		}
 	}
