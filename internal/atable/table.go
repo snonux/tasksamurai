@@ -128,10 +128,7 @@ func DefaultStyles() Styles {
 	return Styles{
 		Selected: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")),
 		Header:   lipgloss.NewStyle().Bold(true).Padding(0, 1),
-		Cell: lipgloss.NewStyle().
-			Padding(0, 1).
-			Foreground(lipgloss.Color("226")).
-			Background(lipgloss.Color("21")),
+		Cell:     lipgloss.NewStyle().Padding(0, 1),
 	}
 }
 
