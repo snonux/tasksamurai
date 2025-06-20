@@ -42,7 +42,7 @@ type Model struct {
 
 	dueEditing bool
 	dueID      int
-	dueInput   textinput.Model
+	dueDate    time.Time
 
 	searching     bool
 	searchInput   textinput.Model
@@ -79,8 +79,7 @@ func New(filters []string) (Model, error) {
 	m := Model{filters: filters}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
-	m.dueInput = textinput.New()
-	m.dueInput.Prompt = "due: "
+	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
 
@@ -208,19 +207,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dueEditing {
 			switch msg.Type {
 			case tea.KeyEnter:
-				task.SetDueDate(m.dueID, m.dueInput.Value())
+				task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02"))
 				m.dueEditing = false
-				m.dueInput.Blur()
 				m.reload()
 				return m, nil
 			case tea.KeyEsc:
 				m.dueEditing = false
-				m.dueInput.Blur()
 				return m, nil
 			}
-			var cmd tea.Cmd
-			m.dueInput, cmd = m.dueInput.Update(msg)
-			return m, cmd
+			switch msg.String() {
+			case "h", "left":
+				m.dueDate = m.dueDate.AddDate(0, 0, -1)
+			case "l", "right":
+				m.dueDate = m.dueDate.AddDate(0, 0, 1)
+			case "k", "up":
+				m.dueDate = m.dueDate.AddDate(0, 0, -7)
+			case "j", "down":
+				m.dueDate = m.dueDate.AddDate(0, 0, 7)
+			}
+			return m, nil
 		}
 		if m.prioritySelecting {
 			switch msg.Type {
@@ -341,8 +346,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.dueID = id
 					m.dueEditing = true
-					m.dueInput.SetValue("")
-					m.dueInput.Focus()
+					m.dueDate = time.Now()
 					return m, nil
 				}
 			}
@@ -455,7 +459,7 @@ func (m Model) View() string {
 	if m.dueEditing {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
-			m.dueInput.View(),
+			m.dueView(),
 		)
 	}
 	if m.prioritySelecting {
@@ -558,6 +562,10 @@ func formatPriority(p string) string {
 		return p
 	}
 	return style.Render(p)
+}
+
+func (m Model) dueView() string {
+	return fmt.Sprintf("due: %s", m.dueDate.Format("2006-01-02"))
 }
 
 func (m Model) priorityView() string {
