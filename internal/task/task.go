@@ -235,7 +235,7 @@ func Edit(id int) error {
 	return EditCmd(id).Run()
 }
 
-// SortTasks orders tasks by due date, priority, tag names and id.
+// SortTasks orders tasks by priority, due date, tag names and id.
 // Tasks without a due date are placed after tasks with a due date.
 func SortTasks(tasks []Task) {
 	joinTags := func(tags []string) string {
@@ -274,6 +274,11 @@ func SortTasks(tasks []Task) {
 	sort.Slice(tasks, func(i, j int) bool {
 		ti, tj := tasks[i], tasks[j]
 
+		pi, pj := priVal(ti.Priority), priVal(tj.Priority)
+		if pi != pj {
+			return pi > pj
+		}
+
 		di, iok := parseDue(ti.Due)
 		dj, jok := parseDue(tj.Due)
 		if iok && !jok {
@@ -284,11 +289,6 @@ func SortTasks(tasks []Task) {
 		}
 		if iok && jok && !di.Equal(dj) {
 			return di.Before(dj)
-		}
-
-		pi, pj := priVal(ti.Priority), priVal(tj.Priority)
-		if pi != pj {
-			return pi > pj
 		}
 
 		tgI, tgJ := joinTags(ti.Tags), joinTags(tj.Tags)

@@ -21,7 +21,7 @@ func TestSortTasks(t *testing.T) {
 	for _, tsk := range tasks {
 		ids = append(ids, tsk.ID)
 	}
-	want := []int{1, 5, 6, 4, 2, 3}
+	want := []int{1, 5, 6, 2, 4, 3}
 	if !reflect.DeepEqual(ids, want) {
 		t.Fatalf("unexpected order: %v", ids)
 	}
