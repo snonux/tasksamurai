@@ -314,7 +314,11 @@ func TestSetPriorityHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	m = mv.(Model)
-	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}})
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mv.(Model)
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mv.(Model)
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = mv.(Model)
 	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mv.(Model)

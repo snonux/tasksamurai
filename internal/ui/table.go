@@ -21,6 +21,52 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+type priorityList struct {
+	items []string
+	index int
+}
+
+func newPriorityList() priorityList {
+	return priorityList{items: []string{"None", "L", "M", "H"}}
+}
+
+func (p priorityList) View() string {
+	var out []string
+	for i, it := range p.items {
+		prefix := "  "
+		if i == p.index {
+			prefix = "> "
+		}
+		out = append(out, prefix+it)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, out...)
+}
+
+func (p *priorityList) Update(msg tea.Msg) bool {
+	if k, ok := msg.(tea.KeyMsg); ok {
+		switch k.String() {
+		case "up", "k":
+			if p.index > 0 {
+				p.index--
+			}
+		case "down", "j":
+			if p.index < len(p.items)-1 {
+				p.index++
+			}
+		case "enter", "esc":
+			return true
+		}
+	}
+	return false
+}
+
+func (p priorityList) Value() string {
+	if p.index == 0 {
+		return ""
+	}
+	return p.items[p.index]
+}
+
 // Model wraps a Bubble Tea table.Model to display tasks.
 type Model struct {
 	tbl      atable.Model
@@ -37,7 +83,7 @@ type Model struct {
 
 	priorityEditing bool
 	priorityID      int
-	priorityInput   textinput.Model
+	prioritySelect  priorityList
 
 	filter string
 	tasks  []task.Task
@@ -64,8 +110,7 @@ func New(filter string) (Model, error) {
 	m.annotateInput.Prompt = "annotation: "
 	m.dueInput = textinput.New()
 	m.dueInput.Prompt = "due: "
-	m.priorityInput = textinput.New()
-	m.priorityInput.Prompt = "priority: "
+	m.prioritySelect = newPriorityList()
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -193,24 +238,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if m.priorityEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				val := strings.ToUpper(m.priorityInput.Value())
-				if val == "H" || val == "M" || val == "L" {
+			if m.prioritySelect.Update(msg) {
+				val := m.prioritySelect.Value()
+				if val == "" {
+					task.DeletePriority(m.priorityID)
+				} else {
 					task.SetPriority(m.priorityID, val)
 				}
 				m.priorityEditing = false
-				m.priorityInput.Blur()
 				m.reload()
 				return m, nil
-			case tea.KeyEsc:
-				m.priorityEditing = false
-				m.priorityInput.Blur()
-				return m, nil
 			}
-			var cmd tea.Cmd
-			m.priorityInput, cmd = m.priorityInput.Update(msg)
-			return m, cmd
+			return m, nil
 		}
 		switch msg.String() {
 		case "?":
@@ -307,8 +346,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.priorityID = id
 					m.priorityEditing = true
-					m.priorityInput.SetValue("")
-					m.priorityInput.Focus()
+					m.prioritySelect = newPriorityList()
 					return m, nil
 				}
 			}
@@ -370,7 +408,7 @@ func (m Model) View() string {
 	if m.priorityEditing {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
-			m.priorityInput.View(),
+			m.prioritySelect.View(),
 		)
 	}
 	return view
