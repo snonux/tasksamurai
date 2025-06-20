@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,12 @@ type Model struct {
 	dueID      int
 	dueInput   textinput.Model
 
+	searching   bool
+	searchInput textinput.Model
+	searchRegex *regexp.Regexp
+	searchRows  []int
+	searchIndex int
+
 	prioritySelecting bool
 	priorityID        int
 	priorityIndex     int
@@ -69,6 +76,8 @@ func New(filters []string) (Model, error) {
 	m.annotateInput.Prompt = "annotation: "
 	m.dueInput = textinput.New()
 	m.dueInput.Prompt = "due: "
+	m.searchInput = textinput.New()
+	m.searchInput.Prompt = "search: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -114,8 +123,15 @@ func (m *Model) reload() error {
 	task.SortTasks(tasks)
 
 	var rows []atable.Row
-	for _, tsk := range tasks {
-		rows = append(rows, taskToRow(tsk))
+	m.searchRows = nil
+	for i, tsk := range tasks {
+		rows = append(rows, taskToRowSearch(tsk, m.searchRegex))
+		if m.searchRegex != nil && matchTask(tsk, m.searchRegex) {
+			m.searchRows = append(m.searchRows, i)
+		}
+	}
+	if len(m.searchRows) > 0 {
+		m.searchIndex = 0
 	}
 
 	m.tasks = tasks
@@ -199,6 +215,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.prioritySelecting = false
 				return m, nil
+			}
+			if m.searching {
+				switch msg.Type {
+				case tea.KeyEnter:
+					re, err := regexp.Compile(m.searchInput.Value())
+					if err == nil {
+						m.searchRegex = re
+					} else {
+						m.searchRegex = nil
+					}
+					m.searching = false
+					m.searchInput.Blur()
+					m.reload()
+					if len(m.searchRows) > 0 {
+						m.tbl.SetCursor(m.searchRows[m.searchIndex])
+					}
+					return m, nil
+				case tea.KeyEsc:
+					m.searching = false
+					m.searchInput.Blur()
+					return m, nil
+				}
+				var cmd tea.Cmd
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				return m, cmd
 			}
 			switch msg.String() {
 			case "h", "left":
@@ -320,6 +361,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "/":
+			m.searching = true
+			m.searchInput.SetValue("")
+			m.searchInput.Focus()
+			return m, nil
+		case "n":
+			if len(m.searchRows) > 0 {
+				m.searchIndex = (m.searchIndex + 1) % len(m.searchRows)
+				m.tbl.SetCursor(m.searchRows[m.searchIndex])
+				return m, nil
+			}
+		case "N":
+			if len(m.searchRows) > 0 {
+				m.searchIndex = (m.searchIndex - 1 + len(m.searchRows)) % len(m.searchRows)
+				m.tbl.SetCursor(m.searchRows[m.searchIndex])
+				return m, nil
+			}
 		}
 	}
 
@@ -371,6 +429,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.priorityView(),
+		)
+	}
+	if m.searching {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.searchInput.View(),
 		)
 	}
 	return view
@@ -477,4 +541,68 @@ func (m Model) priorityView() string {
 		parts = append(parts, style.Render(label))
 	}
 	return "priority: " + strings.Join(parts, " ")
+}
+
+func highlightRegex(s string, re *regexp.Regexp) string {
+	if re == nil {
+		return s
+	}
+	style := lipgloss.NewStyle().Background(lipgloss.Color("226"))
+	return re.ReplaceAllStringFunc(s, func(m string) string {
+		return style.Render(m)
+	})
+}
+
+func matchTask(t task.Task, re *regexp.Regexp) bool {
+	if re == nil {
+		return false
+	}
+	if re.MatchString(t.Description) {
+		return true
+	}
+	if re.MatchString(strings.Join(t.Tags, ",")) {
+		return true
+	}
+	for _, a := range t.Annotations {
+		if re.MatchString(a.Description) {
+			return true
+		}
+	}
+	return false
+}
+
+func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
+	style := lipgloss.NewStyle()
+	if t.Start != "" {
+		style = style.Background(lipgloss.Color("6"))
+	}
+
+	age := ""
+	if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+		days := int(time.Since(ts).Hours() / 24)
+		age = fmt.Sprintf("%dd", days)
+	}
+
+	tags := strings.Join(t.Tags, ",")
+	urg := fmt.Sprintf("%.1f", t.Urgency)
+
+	var anns []string
+	for _, a := range t.Annotations {
+		anns = append(anns, a.Description)
+	}
+
+	tagStr := highlightRegex(tags, re)
+	descStr := highlightRegex(t.Description, re)
+	annStr := highlightRegex(strings.Join(anns, "; "), re)
+
+	return atable.Row{
+		style.Render(strconv.Itoa(t.ID)),
+		formatPriority(t.Priority),
+		style.Render(age),
+		formatDue(t.Due),
+		style.Render(urg),
+		style.Render(tagStr),
+		style.Render(descStr),
+		style.Render(annStr),
+	}
 }
