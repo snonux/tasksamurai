@@ -471,7 +471,7 @@ func TestEscClosesHelp(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}})
 	m = mv.(Model)
 	if !m.showHelp {
 		t.Fatalf("help not shown")

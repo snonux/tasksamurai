@@ -274,7 +274,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch msg.String() {
-		case "h":
+		case "H":
 			m.showHelp = true
 			return m, nil
 		case "q", "esc":
@@ -443,7 +443,7 @@ func (m Model) View() string {
 			"p: set priority",
 			"/, ?: search",
 			"q: quit",
-			"h: help", // show help toggle line
+			"H: help", // show help toggle line
 		)
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
