@@ -97,7 +97,10 @@ func newTable(rows []atable.Row) atable.Model {
 }
 
 func (m *Model) reload() error {
-	tasks, err := task.Export(m.filters...)
+	// Always show only pending tasks by default.
+	filters := append([]string(nil), m.filters...)
+	filters = append(filters, "status:pending")
+	tasks, err := task.Export(filters...)
 	if err != nil {
 		return err
 	}
