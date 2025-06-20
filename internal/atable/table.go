@@ -17,12 +17,13 @@ type Model struct {
 	KeyMap KeyMap
 	Help   help.Model
 
-	cols      []Column
-	rows      []Row
-	cursor    int
-	colCursor int
-	focus     bool
-	styles    Styles
+	cols        []Column
+	rows        []Row
+	cursor      int
+	colCursor   int
+	focus       bool
+	styles      Styles
+	showHeaders bool
 
 	viewport viewport.Model
 	start    int
@@ -149,9 +150,10 @@ func New(opts ...Option) Model {
 		colCursor: 0,
 		viewport:  viewport.New(0, 20), //nolint:mnd
 
-		KeyMap: DefaultKeyMap(),
-		Help:   help.New(),
-		styles: DefaultStyles(),
+		KeyMap:      DefaultKeyMap(),
+		Help:        help.New(),
+		styles:      DefaultStyles(),
+		showHeaders: true,
 	}
 
 	for _, opt := range opts {
@@ -212,6 +214,13 @@ func WithKeyMap(km KeyMap) Option {
 	}
 }
 
+// WithShowHeaders controls rendering of table headers.
+func WithShowHeaders(show bool) Option {
+	return func(m *Model) {
+		m.showHeaders = show
+	}
+}
+
 // Update is the Bubble Tea update loop.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.focus {
@@ -267,7 +276,11 @@ func (m *Model) Blur() {
 
 // View renders the component.
 func (m Model) View() string {
-	return m.headersView() + "\n" + m.viewport.View()
+	headers := m.headersView()
+	if headers == "" {
+		return m.viewport.View()
+	}
+	return headers + "\n" + m.viewport.View()
 }
 
 // HelpView is a helper method for rendering the help menu from the keymap.
@@ -447,6 +460,9 @@ func (m *Model) FromValues(value, separator string) {
 }
 
 func (m Model) headersView() string {
+	if !m.showHeaders {
+		return ""
+	}
 	s := make([]string, 0, len(m.cols))
 	for _, col := range m.cols {
 		if col.Width <= 0 {
