@@ -17,11 +17,12 @@ type Model struct {
 	KeyMap KeyMap
 	Help   help.Model
 
-	cols   []Column
-	rows   []Row
-	cursor int
-	focus  bool
-	styles Styles
+	cols      []Column
+	rows      []Row
+	cursor    int
+	colCursor int
+	focus     bool
+	styles    Styles
 
 	viewport viewport.Model
 	start    int
@@ -48,11 +49,13 @@ type KeyMap struct {
 	HalfPageDown key.Binding
 	GotoTop      key.Binding
 	GotoBottom   key.Binding
+	CellLeft     key.Binding
+	CellRight    key.Binding
 }
 
 // ShortHelp implements the KeyMap interface.
 func (km KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{km.LineUp, km.LineDown}
+	return []key.Binding{km.LineUp, km.LineDown, km.CellLeft, km.CellRight}
 }
 
 // FullHelp implements the KeyMap interface.
@@ -60,6 +63,7 @@ func (km KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.LineUp, km.LineDown, km.GotoTop, km.GotoBottom},
 		{km.PageUp, km.PageDown, km.HalfPageUp, km.HalfPageDown},
+		{km.CellLeft, km.CellRight},
 	}
 }
 
@@ -99,6 +103,14 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("end", "G"),
 			key.WithHelp("G/end", "go to end"),
 		),
+		CellLeft: key.NewBinding(
+			key.WithKeys("left", "h"),
+			key.WithHelp("←/h", "left"),
+		),
+		CellRight: key.NewBinding(
+			key.WithKeys("right", "l"),
+			key.WithHelp("→/l", "right"),
+		),
 	}
 }
 
@@ -133,8 +145,9 @@ type Option func(*Model)
 // New creates a new model for the table widget.
 func New(opts ...Option) Model {
 	m := Model{
-		cursor:   0,
-		viewport: viewport.New(0, 20), //nolint:mnd
+		cursor:    0,
+		colCursor: 0,
+		viewport:  viewport.New(0, 20), //nolint:mnd
 
 		KeyMap: DefaultKeyMap(),
 		Help:   help.New(),
@@ -224,6 +237,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.GotoTop()
 		case key.Matches(msg, m.KeyMap.GotoBottom):
 			m.GotoBottom()
+		case key.Matches(msg, m.KeyMap.CellLeft):
+			m.MoveLeft(1)
+		case key.Matches(msg, m.KeyMap.CellRight):
+			m.MoveRight(1)
 		}
 	}
 
@@ -342,9 +359,20 @@ func (m Model) Cursor() int {
 	return m.cursor
 }
 
+// ColumnCursor returns the index of the selected column.
+func (m Model) ColumnCursor() int {
+	return m.colCursor
+}
+
 // SetCursor sets the cursor position in the table.
 func (m *Model) SetCursor(n int) {
 	m.cursor = clamp(n, 0, len(m.rows)-1)
+	m.UpdateViewport()
+}
+
+// SetColumnCursor sets the column cursor position in the table.
+func (m *Model) SetColumnCursor(n int) {
+	m.colCursor = clamp(n, 0, len(m.cols)-1)
 	m.UpdateViewport()
 }
 
@@ -378,6 +406,18 @@ func (m *Model) MoveDown(n int) {
 	case m.cursor > m.viewport.YOffset+m.viewport.Height-1:
 		m.viewport.SetYOffset(clamp(m.viewport.YOffset+1, 0, 1))
 	}
+}
+
+// MoveLeft moves the column selection left by n columns.
+func (m *Model) MoveLeft(n int) {
+	m.colCursor = clamp(m.colCursor-n, 0, len(m.cols)-1)
+	m.UpdateViewport()
+}
+
+// MoveRight moves the column selection right by n columns.
+func (m *Model) MoveRight(n int) {
+	m.colCursor = clamp(m.colCursor+n, 0, len(m.cols)-1)
+	m.UpdateViewport()
 }
 
 // GotoTop moves the selection to the first row.
@@ -426,17 +466,15 @@ func (m *Model) renderRow(r int) string {
 			continue
 		}
 		style := lipgloss.NewStyle().Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
-		renderedCell := m.styles.Cell.Render(style.Render(ansi.Truncate(value, m.cols[i].Width, "…")))
+		cellStyle := m.styles.Cell
+		if r == m.cursor && i == m.colCursor {
+			cellStyle = m.styles.Selected
+		}
+		renderedCell := cellStyle.Render(style.Render(ansi.Truncate(value, m.cols[i].Width, "…")))
 		s = append(s, renderedCell)
 	}
 
-	row := lipgloss.JoinHorizontal(lipgloss.Top, s...)
-
-	if r == m.cursor {
-		return m.styles.Selected.Render(row)
-	}
-
-	return row
+	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
 }
 
 func clamp(v, low, high int) int {
