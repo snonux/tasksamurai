@@ -24,6 +24,11 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+type cellMatch struct {
+	row int
+	col int
+}
+
 // Model wraps a Bubble Tea table.Model to display tasks.
 
 type Model struct {
@@ -39,11 +44,11 @@ type Model struct {
 	dueID      int
 	dueInput   textinput.Model
 
-	searching   bool
-	searchInput textinput.Model
-	searchRegex *regexp.Regexp
-	searchRows  []int
-	searchIndex int
+	searching     bool
+	searchInput   textinput.Model
+	searchRegex   *regexp.Regexp
+	searchMatches []cellMatch
+	searchIndex   int
 
 	prioritySelecting bool
 	priorityID        int
@@ -123,14 +128,26 @@ func (m *Model) reload() error {
 	task.SortTasks(tasks)
 
 	var rows []atable.Row
-	m.searchRows = nil
+	m.searchMatches = nil
 	for i, tsk := range tasks {
 		rows = append(rows, taskToRowSearch(tsk, m.searchRegex))
-		if m.searchRegex != nil && matchTask(tsk, m.searchRegex) {
-			m.searchRows = append(m.searchRows, i)
+		if m.searchRegex != nil {
+			tags := strings.Join(tsk.Tags, ",")
+			if m.searchRegex.MatchString(tags) {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
+			}
+			if m.searchRegex.MatchString(tsk.Description) {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
+			}
+			for _, a := range tsk.Annotations {
+				if m.searchRegex.MatchString(a.Description) {
+					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
+					break
+				}
+			}
 		}
 	}
-	if len(m.searchRows) > 0 {
+	if len(m.searchMatches) > 0 {
 		m.searchIndex = 0
 	}
 
@@ -236,8 +253,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searching = false
 				m.searchInput.Blur()
 				m.reload()
-				if len(m.searchRows) > 0 {
-					m.tbl.SetCursor(m.searchRows[m.searchIndex])
+				if len(m.searchMatches) > 0 {
+					match := m.searchMatches[m.searchIndex]
+					m.tbl.SetCursor(match.row)
+					m.tbl.SetColumnCursor(match.col)
 				}
 				return m, nil
 			case tea.KeyEsc:
@@ -367,15 +386,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.searchInput.Focus()
 			return m, nil
 		case "n":
-			if len(m.searchRows) > 0 {
-				m.searchIndex = (m.searchIndex + 1) % len(m.searchRows)
-				m.tbl.SetCursor(m.searchRows[m.searchIndex])
+			if len(m.searchMatches) > 0 {
+				m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
+				match := m.searchMatches[m.searchIndex]
+				m.tbl.SetCursor(match.row)
+				m.tbl.SetColumnCursor(match.col)
 				return m, nil
 			}
 		case "N":
-			if len(m.searchRows) > 0 {
-				m.searchIndex = (m.searchIndex - 1 + len(m.searchRows)) % len(m.searchRows)
-				m.tbl.SetCursor(m.searchRows[m.searchIndex])
+			if len(m.searchMatches) > 0 {
+				m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
+				match := m.searchMatches[m.searchIndex]
+				m.tbl.SetCursor(match.row)
+				m.tbl.SetColumnCursor(match.col)
 				return m, nil
 			}
 		}
@@ -549,24 +572,6 @@ func highlightCell(rendered string, re *regexp.Regexp, raw string) string {
 	}
 	style := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
 	return style.Render(rendered)
-}
-
-func matchTask(t task.Task, re *regexp.Regexp) bool {
-	if re == nil {
-		return false
-	}
-	if re.MatchString(t.Description) {
-		return true
-	}
-	if re.MatchString(strings.Join(t.Tags, ",")) {
-		return true
-	}
-	for _, a := range t.Annotations {
-		if re.MatchString(a.Description) {
-			return true
-		}
-	}
-	return false
 }
 
 func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
