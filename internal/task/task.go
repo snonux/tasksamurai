@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strconv"
 )
@@ -146,7 +147,11 @@ func Denotate(id int, annoID int) error {
 // The caller is responsible for running the command, typically via
 // tea.ExecProcess so that the terminal state is properly managed.
 func EditCmd(id int) *exec.Cmd {
-	return exec.Command("task", strconv.Itoa(id), "edit")
+	cmd := exec.Command("task", strconv.Itoa(id), "edit")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
 }
 
 // Edit opens the task in an editor for manual modification.
