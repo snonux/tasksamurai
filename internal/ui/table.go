@@ -226,11 +226,11 @@ func formatPriority(p string) string {
 	style := lipgloss.NewStyle()
 	switch p {
 	case "L":
-		style = style.Foreground(lipgloss.Color("10"))
+		style = style.Background(lipgloss.Color("10"))
 	case "M":
-		style = style.Foreground(lipgloss.Color("12"))
+		style = style.Background(lipgloss.Color("12"))
 	case "H":
-		style = style.Foreground(lipgloss.Color("9"))
+		style = style.Background(lipgloss.Color("9"))
 	default:
 		return p
 	}
