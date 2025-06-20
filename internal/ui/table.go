@@ -216,31 +216,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.prioritySelecting = false
 				return m, nil
 			}
-			if m.searching {
-				switch msg.Type {
-				case tea.KeyEnter:
-					re, err := regexp.Compile(m.searchInput.Value())
-					if err == nil {
-						m.searchRegex = re
-					} else {
-						m.searchRegex = nil
-					}
-					m.searching = false
-					m.searchInput.Blur()
-					m.reload()
-					if len(m.searchRows) > 0 {
-						m.tbl.SetCursor(m.searchRows[m.searchIndex])
-					}
-					return m, nil
-				case tea.KeyEsc:
-					m.searching = false
-					m.searchInput.Blur()
-					return m, nil
-				}
-				var cmd tea.Cmd
-				m.searchInput, cmd = m.searchInput.Update(msg)
-				return m, cmd
-			}
 			switch msg.String() {
 			case "h", "left":
 				m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
@@ -248,6 +223,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
 			}
 			return m, nil
+		}
+		if m.searching {
+			switch msg.Type {
+			case tea.KeyEnter:
+				re, err := regexp.Compile(m.searchInput.Value())
+				if err == nil {
+					m.searchRegex = re
+				} else {
+					m.searchRegex = nil
+				}
+				m.searching = false
+				m.searchInput.Blur()
+				m.reload()
+				if len(m.searchRows) > 0 {
+					m.tbl.SetCursor(m.searchRows[m.searchIndex])
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.searching = false
+				m.searchInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			return m, cmd
 		}
 		switch msg.String() {
 		case "?":
