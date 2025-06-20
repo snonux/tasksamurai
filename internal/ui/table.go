@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,10 @@ import (
 	atable "tasksamurai/internal/atable"
 	"tasksamurai/internal/task"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // Model wraps a Bubble Tea table.Model to display tasks.
 type Model struct {
@@ -236,6 +241,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "r":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					days := rand.Intn(31) + 7
+					due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
+					task.SetDueDate(id, due)
+					m.reload()
+				}
+			}
 		case "a":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
@@ -281,6 +296,7 @@ func (m Model) View() string {
 			"s: toggle start/stop",
 			"D: mark task done",
 			"d: set due date",
+			"r: random due date",
 			"a: annotate task",
 			"A: replace annotations",
 			"q: quit",
