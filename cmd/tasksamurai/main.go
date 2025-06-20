@@ -27,7 +27,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(&m)
+	// Clear the screen before starting the TUI to avoid leaving any
+	// previous command line artefacts behind.
+	fmt.Print("\033[H\033[2J")
+
+	p := tea.NewProgram(&m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)
