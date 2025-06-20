@@ -29,6 +29,9 @@ func tick() tea.Cmd {
 
 func (m fwModel) Init() tea.Cmd {
 	m.start = time.Now()
+	// Ignore the first key in case the exit key from the previous program
+	// is still buffered when the fireworks start.
+	m.ignoreFirstKey = true
 	return tick()
 }
 
