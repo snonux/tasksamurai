@@ -71,6 +71,7 @@ func newTable(rows []atable.Row) atable.Model {
 		atable.WithColumns(cols),
 		atable.WithRows(rows),
 		atable.WithFocused(true),
+		atable.WithShowHeaders(false),
 	)
 	styles := atable.DefaultStyles()
 	styles.Header = styles.Header.Foreground(lipgloss.Color("205"))
@@ -228,7 +229,12 @@ func (m Model) View() string {
 }
 
 func (m Model) statusLine() string {
-	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d", m.total, m.inProgress, m.due)
+	header := ""
+	cols := m.tbl.Columns()
+	if idx := m.tbl.ColumnCursor(); idx >= 0 && idx < len(cols) {
+		header = cols[idx].Title
+	}
+	status := fmt.Sprintf("%s Total:%d InProgress:%d Due:%d", header, m.total, m.inProgress, m.due)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
