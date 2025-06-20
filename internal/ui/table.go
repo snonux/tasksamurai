@@ -460,6 +460,7 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.topStatusLine(),
 		m.tbl.View(),
+		m.expandedCellView(),
 		m.statusLine(),
 	)
 	if m.cellExpanded {
