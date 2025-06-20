@@ -95,8 +95,8 @@ func newTable(rows []atable.Row) atable.Model {
 		{Title: "ID", Width: 4},
 		{Title: "Pri", Width: 4},
 		{Title: "Age", Width: 6},
-		{Title: "Due", Width: 10},
 		{Title: "Urg", Width: 5},
+		{Title: "Due", Width: 10},
 		{Title: "Tags", Width: 15},
 		{Title: "Description", Width: 45},
 		{Title: "Annotations", Width: 20},
@@ -524,14 +524,17 @@ func taskToRow(t task.Task) atable.Row {
 		style.Render(strconv.Itoa(t.ID)),
 		formatPriority(t.Priority),
 		style.Render(age),
-		formatDue(t.Due),
 		style.Render(urg),
+		formatDue(t.Due),
 		style.Render(tags),
 		style.Render(t.Description),
 		style.Render(strings.Join(anns, "; ")),
 	}
 }
 
+// formatDue returns a formatted due date string. Dates due today or tomorrow
+// are returned as "today" or "tomorrow" respectively. Past due dates are
+// highlighted in red.
 func formatDue(s string) string {
 	if s == "" {
 		return ""
@@ -542,7 +545,15 @@ func formatDue(s string) string {
 	}
 
 	days := int(time.Until(ts).Hours() / 24)
-	val := fmt.Sprintf("%dd", days)
+	var val string
+	switch days {
+	case 0:
+		val = "today"
+	case 1:
+		val = "tomorrow"
+	default:
+		val = fmt.Sprintf("%dd", days)
+	}
 	style := lipgloss.NewStyle()
 	if days < 0 {
 		style = style.Background(lipgloss.Color("1"))
@@ -631,8 +642,8 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 		idStr,
 		priStr,
 		ageStr,
-		dueStr,
 		urgStr,
+		dueStr,
 		tagStr,
 		descStr,
 		annStr,
