@@ -160,7 +160,7 @@ func TestDoneHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
 
 	data, err := os.ReadFile(doneFile)
@@ -170,5 +170,56 @@ func TestDoneHotkey(t *testing.T) {
 
 	if strings.TrimSpace(string(data)) != "1 done" {
 		t.Fatalf("done not called: %q", data)
+	}
+}
+
+func TestDueDateHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	dueFile := filepath.Join(tmp, "due.txt")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo \"$@\" > " + dueFile + "\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New("")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m = mv.(Model)
+	for _, r := range "2024-12-31" {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mv.(Model)
+	}
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(dueFile)
+	if err != nil {
+		t.Fatalf("read due: %v", err)
+	}
+
+	if strings.TrimSpace(string(data)) != "1 modify due:2024-12-31" {
+		t.Fatalf("due not set: %q", data)
 	}
 }
