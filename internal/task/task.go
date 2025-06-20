@@ -150,6 +150,27 @@ func RemoveTags(id int, tags []string) error {
 	return run(args...)
 }
 
+// ReplaceTags removes all existing tags and sets the provided list.
+func ReplaceTags(id int, tags []string) error {
+	tasks, err := Export(strconv.Itoa(id))
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("task %d not found", id)
+	}
+	existing := tasks[0].Tags
+	if len(existing) > 0 {
+		if err := RemoveTags(id, existing); err != nil {
+			return err
+		}
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	return AddTags(id, tags)
+}
+
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
 	return run(strconv.Itoa(id), "modify", "recur:"+rec)

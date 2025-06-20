@@ -26,6 +26,11 @@ type Model struct {
 	annotateInput      textinput.Model
 	replaceAnnotations bool
 
+	tagging     bool
+	tagID       int
+	tagInput    textinput.Model
+	replaceTags bool
+
 	filter string
 	tasks  []task.Task
 
@@ -49,6 +54,8 @@ func New(filter string) (Model, error) {
 	m := Model{filter: filter}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
+	m.tagInput = textinput.New()
+	m.tagInput.Prompt = "tags: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -128,6 +135,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reload()
 		return m, nil
 	case tea.KeyMsg:
+		if m.tagging {
+			switch msg.Type {
+			case tea.KeyEnter:
+				addTags, removeTags := parseTags(m.tagInput.Value())
+				if m.replaceTags {
+					task.ReplaceTags(m.tagID, addTags)
+					m.replaceTags = false
+				} else {
+					if len(addTags) > 0 {
+						task.AddTags(m.tagID, addTags)
+					}
+					if len(removeTags) > 0 {
+						task.RemoveTags(m.tagID, removeTags)
+					}
+				}
+				m.tagging = false
+				m.tagInput.Blur()
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.tagging = false
+				m.replaceTags = false
+				m.tagInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.tagInput, cmd = m.tagInput.Update(msg)
+			return m, cmd
+		}
 		if m.annotating {
 			switch msg.Type {
 			case tea.KeyEnter:
@@ -211,6 +247,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "t":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagID = id
+					m.tagging = true
+					m.replaceTags = false
+					m.tagInput.SetValue("")
+					m.tagInput.Focus()
+					return m, nil
+				}
+			}
+		case "T":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagID = id
+					m.tagging = true
+					m.replaceTags = true
+					m.tagInput.SetValue("")
+					m.tagInput.Focus()
+					return m, nil
+				}
+			}
 		}
 	}
 
@@ -232,6 +292,8 @@ func (m Model) View() string {
 			"s: toggle start/stop",
 			"a: annotate task",
 			"A: replace annotations",
+			"t: modify tags",
+			"T: replace tags",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
@@ -244,6 +306,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.annotateInput.View(),
+		)
+	}
+	if m.tagging {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.tagInput.View(),
 		)
 	}
 	return view
@@ -274,7 +342,11 @@ func taskToRow(t task.Task) atable.Row {
 		age = fmt.Sprintf("%dd", days)
 	}
 
-	tags := strings.Join(t.Tags, ",")
+	tagParts := make([]string, len(t.Tags))
+	for i, tg := range t.Tags {
+		tagParts[i] = "+" + tg
+	}
+	tags := strings.Join(tagParts, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 
 	var anns []string
@@ -325,4 +397,19 @@ func formatPriority(p string) string {
 		return p
 	}
 	return style.Render(p)
+}
+
+func parseTags(input string) (addTags, removeTags []string) {
+	fields := strings.Fields(input)
+	for _, f := range fields {
+		switch {
+		case strings.HasPrefix(f, "+"):
+			addTags = append(addTags, strings.TrimPrefix(f, "+"))
+		case strings.HasPrefix(f, "-"):
+			removeTags = append(removeTags, strings.TrimPrefix(f, "-"))
+		default:
+			addTags = append(addTags, f)
+		}
+	}
+	return
 }

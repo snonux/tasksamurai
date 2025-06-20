@@ -490,7 +490,8 @@ func (m *Model) renderRow(r int) string {
 		s = append(s, renderedCell)
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
+	row := lipgloss.JoinHorizontal(lipgloss.Top, s...)
+	return lipgloss.NewStyle().MarginBottom(1).Render(row)
 }
 
 func clamp(v, low, high int) int {
