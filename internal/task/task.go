@@ -175,6 +175,29 @@ func Denotate(id int, annoID int) error {
 	return run(strconv.Itoa(id), "denotate", strconv.Itoa(annoID))
 }
 
+// ReplaceAnnotations removes all existing annotations from the task with the
+// given id and sets a single annotation with the provided text. If text is
+// empty, all annotations are simply removed.
+func ReplaceAnnotations(id int, text string) error {
+	tasks, err := Export(strconv.Itoa(id))
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("task %d not found", id)
+	}
+	anns := tasks[0].Annotations
+	for i := len(anns); i >= 1; i-- {
+		if err := Denotate(id, i); err != nil {
+			return err
+		}
+	}
+	if text == "" {
+		return nil
+	}
+	return Annotate(id, text)
+}
+
 // Edit opens the task in an editor for manual modification.
 // EditCmd returns an exec.Cmd that edits the task with the given id.
 // The caller is responsible for running the command, typically via

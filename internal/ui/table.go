@@ -21,9 +21,10 @@ type Model struct {
 	tbl      atable.Model
 	showHelp bool
 
-	annotating    bool
-	annotateID    int
-	annotateInput textinput.Model
+	annotating         bool
+	annotateID         int
+	annotateInput      textinput.Model
+	replaceAnnotations bool
 
 	filter string
 	tasks  []task.Task
@@ -129,13 +130,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.annotating {
 			switch msg.Type {
 			case tea.KeyEnter:
-				task.Annotate(m.annotateID, m.annotateInput.Value())
+				if m.replaceAnnotations {
+					task.ReplaceAnnotations(m.annotateID, m.annotateInput.Value())
+					m.replaceAnnotations = false
+				} else {
+					task.Annotate(m.annotateID, m.annotateInput.Value())
+				}
 				m.annotating = false
 				m.annotateInput.Blur()
 				m.reload()
 				return m, nil
 			case tea.KeyEsc:
 				m.annotating = false
+				m.replaceAnnotations = false
 				m.annotateInput.Blur()
 				return m, nil
 			}
@@ -185,6 +192,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.annotateID = id
 					m.annotating = true
+					m.replaceAnnotations = false
+					m.annotateInput.SetValue("")
+					m.annotateInput.Focus()
+					return m, nil
+				}
+			}
+		case "A":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.annotateID = id
+					m.annotating = true
+					m.replaceAnnotations = true
 					m.annotateInput.SetValue("")
 					m.annotateInput.Focus()
 					return m, nil
@@ -210,6 +230,7 @@ func (m Model) View() string {
 			"E: edit task",
 			"s: toggle start/stop",
 			"a: annotate task",
+			"A: replace annotations",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
