@@ -187,6 +187,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
+		case "d":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					task.Done(id)
+					m.reload()
+				}
+			}
+		case "D":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					task.Delete(id)
+					m.reload()
+				}
+			}
 		case "a":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
@@ -230,6 +246,8 @@ func (m Model) View() string {
 			m.tbl.HelpView(),
 			"E: edit task",
 			"s: toggle start/stop",
+			"d: mark task done",
+			"D: delete task",
 			"a: annotate task",
 			"A: replace annotations",
 			"q: quit",

@@ -121,6 +121,16 @@ func Stop(id int) error {
 	return run(strconv.Itoa(id), "stop")
 }
 
+// Done marks the task with the given id as completed.
+func Done(id int) error {
+	return run(strconv.Itoa(id), "done")
+}
+
+// Delete removes the task with the given id.
+func Delete(id int) error {
+	return run(strconv.Itoa(id), "delete")
+}
+
 // SetPriority changes the priority of the task with the given id.
 func SetPriority(id int, priority string) error {
 	return run(strconv.Itoa(id), "modify", "priority:"+priority)
