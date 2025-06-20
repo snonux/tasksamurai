@@ -46,8 +46,12 @@ func Add(description string, tags []string) error {
 
 // Export retrieves all tasks using `task export rc.json.array=off` and parses
 // the JSON output into a slice of Task structs.
-func Export() ([]Task, error) {
-	cmd := exec.Command("task", "export", "rc.json.array=off")
+// Export retrieves tasks using `task <filter> export rc.json.array=off` and parses
+// the JSON output into a slice of Task structs. Optional filter arguments are
+// passed directly to the `task` command before `export`.
+func Export(filters ...string) ([]Task, error) {
+	args := append(filters, "export", "rc.json.array=off")
+	cmd := exec.Command("task", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err

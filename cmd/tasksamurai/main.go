@@ -1,93 +1,28 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
-	"time"
 
-	"github.com/charmbracelet/lipgloss"
-
-	"tasksamurai/internal/task"
 	"tasksamurai/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
-	atable "tasksamurai/internal/atable"
 )
 
 func main() {
-	tasks, err := task.Export()
+	filter := flag.String("filter", "", "task filter expression")
+	flag.Parse()
+
+	m, err := ui.New(*filter)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to export tasks:", err)
+		fmt.Fprintln(os.Stderr, "failed to load tasks:", err)
 		os.Exit(1)
 	}
-
-	var rows []atable.Row
-	for _, t := range tasks {
-		if t.Status == "completed" {
-			continue
-		}
-		rows = append(rows, taskToRow(t))
-	}
-
-	m := ui.New(rows)
 
 	p := tea.NewProgram(&m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)
 	}
-}
-
-func taskToRow(t task.Task) atable.Row {
-	active := ""
-	if t.Start != "" {
-		active = "yes"
-	}
-
-	age := ""
-	if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
-		days := int(time.Since(ts).Hours() / 24)
-		age = fmt.Sprintf("%dd", days)
-	}
-
-	tags := strings.Join(t.Tags, ",")
-	urg := fmt.Sprintf("%.1f", t.Urgency)
-
-	var anns []string
-	for _, a := range t.Annotations {
-		anns = append(anns, a.Description)
-	}
-
-	return atable.Row{
-		strconv.Itoa(t.ID),
-		t.Description,
-		active,
-		age,
-		t.Priority,
-		tags,
-		t.Recur,
-		formatDue(t.Due),
-		urg,
-		strings.Join(anns, "; "),
-	}
-}
-
-func formatDue(s string) string {
-	if s == "" {
-		return ""
-	}
-	ts, err := time.Parse("20060102T150405Z", s)
-	if err != nil {
-		return s
-	}
-
-	days := int(time.Until(ts).Hours() / 24)
-	val := fmt.Sprintf("%dd", days)
-	style := lipgloss.NewStyle()
-	if days < 0 {
-		style = style.Background(lipgloss.Color("1"))
-	}
-	return style.Render(val)
 }
