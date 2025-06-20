@@ -465,12 +465,12 @@ func (m *Model) renderRow(r int) string {
 		if m.cols[i].Width <= 0 {
 			continue
 		}
-		style := lipgloss.NewStyle().Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
-		cellStyle := m.styles.Cell
+		style := m.styles.Cell
 		if r == m.cursor && i == m.colCursor {
-			cellStyle = m.styles.Selected
+			style = m.styles.Selected
 		}
-		renderedCell := cellStyle.Render(style.Render(ansi.Truncate(value, m.cols[i].Width, "…")))
+		style = style.Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
+		renderedCell := style.Render(ansi.Truncate(value, m.cols[i].Width, "…"))
 		s = append(s, renderedCell)
 	}
 
