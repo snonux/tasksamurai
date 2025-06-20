@@ -88,6 +88,16 @@ func SetStatus(id int, status string) error {
 	return run(strconv.Itoa(id), "modify", "status:"+status)
 }
 
+// Start begins the task with the given id.
+func Start(id int) error {
+	return run(strconv.Itoa(id), "start")
+}
+
+// Stop stops the task with the given id.
+func Stop(id int) error {
+	return run(strconv.Itoa(id), "stop")
+}
+
 // SetPriority changes the priority of the task with the given id.
 func SetPriority(id int, priority string) error {
 	return run(strconv.Itoa(id), "modify", "priority:"+priority)
