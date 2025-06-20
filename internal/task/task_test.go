@@ -2,10 +2,14 @@ package task
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 )
 
 func TestAddAndExport(t *testing.T) {
+	if _, err := exec.LookPath("task"); err != nil {
+		t.Skip("task command not available")
+	}
 	tmp := t.TempDir()
 	if err := os.Setenv("TASKDATA", tmp); err != nil {
 		t.Fatal(err)
@@ -56,6 +60,9 @@ func TestAddAndExport(t *testing.T) {
 }
 
 func TestModifyHelpers(t *testing.T) {
+	if _, err := exec.LookPath("task"); err != nil {
+		t.Skip("task command not available")
+	}
 	tmp := t.TempDir()
 	if err := os.Setenv("TASKDATA", tmp); err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -19,6 +20,10 @@ import (
 type Model struct {
 	tbl      atable.Model
 	showHelp bool
+
+	annotating    bool
+	annotateID    int
+	annotateInput textinput.Model
 
 	filter string
 	tasks  []task.Task
@@ -41,6 +46,8 @@ func editCmd(id int) tea.Cmd {
 // New creates a new UI model with the provided rows.
 func New(filter string) (Model, error) {
 	m := Model{filter: filter}
+	m.annotateInput = textinput.New()
+	m.annotateInput.Prompt = "annotation: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -119,6 +126,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reload()
 		return m, nil
 	case tea.KeyMsg:
+		if m.annotating {
+			switch msg.Type {
+			case tea.KeyEnter:
+				task.Annotate(m.annotateID, m.annotateInput.Value())
+				m.annotating = false
+				m.annotateInput.Blur()
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.annotating = false
+				m.annotateInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.annotateInput, cmd = m.annotateInput.Update(msg)
+			return m, cmd
+		}
 		switch msg.String() {
 		case "?":
 			m.showHelp = true
@@ -155,6 +179,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
+		case "a":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.annotateID = id
+					m.annotating = true
+					m.annotateInput.SetValue("")
+					m.annotateInput.Focus()
+					return m, nil
+				}
+			}
 		}
 	}
 
@@ -174,14 +209,22 @@ func (m Model) View() string {
 			m.tbl.HelpView(),
 			"E: edit task",
 			"s: toggle start/stop",
+			"a: annotate task",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left,
+	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.tbl.View(),
 		m.statusLine(),
 	)
+	if m.annotating {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.annotateInput.View(),
+		)
+	}
+	return view
 }
 
 func (m Model) statusLine() string {
