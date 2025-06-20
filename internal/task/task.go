@@ -8,8 +8,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Task represents a taskwarrior task as returned by `task export`.
@@ -231,4 +233,69 @@ func EditCmd(id int) *exec.Cmd {
 // This is a convenience wrapper around EditCmd.
 func Edit(id int) error {
 	return EditCmd(id).Run()
+}
+
+// SortTasks orders tasks by due date, priority, tag names and id.
+// Tasks without a due date are placed after tasks with a due date.
+func SortTasks(tasks []Task) {
+	joinTags := func(tags []string) string {
+		if len(tags) == 0 {
+			return ""
+		}
+		cpy := append([]string(nil), tags...)
+		sort.Strings(cpy)
+		return strings.Join(cpy, ",")
+	}
+
+	priVal := func(p string) int {
+		switch p {
+		case "H":
+			return 3
+		case "M":
+			return 2
+		case "L":
+			return 1
+		default:
+			return 0
+		}
+	}
+
+	parseDue := func(s string) (time.Time, bool) {
+		if s == "" {
+			return time.Time{}, false
+		}
+		t, err := time.Parse("20060102T150405Z", s)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return t, true
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		ti, tj := tasks[i], tasks[j]
+
+		di, iok := parseDue(ti.Due)
+		dj, jok := parseDue(tj.Due)
+		if iok && !jok {
+			return true
+		}
+		if !iok && jok {
+			return false
+		}
+		if iok && jok && !di.Equal(dj) {
+			return di.Before(dj)
+		}
+
+		pi, pj := priVal(ti.Priority), priVal(tj.Priority)
+		if pi != pj {
+			return pi > pj
+		}
+
+		tgI, tgJ := joinTags(ti.Tags), joinTags(tj.Tags)
+		if tgI != tgJ {
+			return tgI < tgJ
+		}
+
+		return ti.ID < tj.ID
+	})
 }
