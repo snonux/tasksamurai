@@ -26,6 +26,10 @@ type Model struct {
 	annotateInput      textinput.Model
 	replaceAnnotations bool
 
+	dueEditing bool
+	dueID      int
+	dueInput   textinput.Model
+
 	filter string
 	tasks  []task.Task
 
@@ -49,6 +53,8 @@ func New(filter string) (Model, error) {
 	m := Model{filter: filter}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
+	m.dueInput = textinput.New()
+	m.dueInput.Prompt = "due: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -156,6 +162,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.annotateInput, cmd = m.annotateInput.Update(msg)
 			return m, cmd
 		}
+		if m.dueEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				task.SetDueDate(m.dueID, m.dueInput.Value())
+				m.dueEditing = false
+				m.dueInput.Blur()
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.dueEditing = false
+				m.dueInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.dueInput, cmd = m.dueInput.Update(msg)
+			return m, cmd
+		}
 		switch msg.String() {
 		case "?":
 			m.showHelp = true
@@ -192,12 +215,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
-		case "d":
+		case "D":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					task.Done(id)
 					m.reload()
+				}
+			}
+		case "d":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.dueID = id
+					m.dueEditing = true
+					m.dueInput.SetValue("")
+					m.dueInput.Focus()
+					return m, nil
 				}
 			}
 		case "a":
@@ -243,7 +277,8 @@ func (m Model) View() string {
 			m.tbl.HelpView(),
 			"E: edit task",
 			"s: toggle start/stop",
-			"d: mark task done",
+			"D: mark task done",
+			"d: set due date",
 			"a: annotate task",
 			"A: replace annotations",
 			"q: quit",
@@ -258,6 +293,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.annotateInput.View(),
+		)
+	}
+	if m.dueEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.dueInput.View(),
 		)
 	}
 	return view
