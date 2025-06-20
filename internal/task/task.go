@@ -250,7 +250,7 @@ func SortTasks(tasks []Task) {
 		}
 		cpy := append([]string(nil), tags...)
 		sort.Strings(cpy)
-		return strings.Join(cpy, ",")
+		return strings.Join(cpy, " ")
 	}
 
 	priVal := func(p string) int {
