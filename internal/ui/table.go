@@ -131,7 +131,7 @@ func (m *Model) reload() error {
 	for i, tsk := range tasks {
 		rows = append(rows, taskToRowSearch(tsk, m.searchRegex))
 		if m.searchRegex != nil {
-			tags := strings.Join(tsk.Tags, ",")
+			tags := strings.Join(tsk.Tags, " ")
 			if m.searchRegex.MatchString(tags) {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
 			}
@@ -512,7 +512,7 @@ func taskToRow(t task.Task) atable.Row {
 		age = fmt.Sprintf("%dd", days)
 	}
 
-	tags := strings.Join(t.Tags, ",")
+	tags := strings.Join(t.Tags, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 
 	var anns []string
@@ -605,7 +605,7 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 		age = fmt.Sprintf("%dd", days)
 	}
 
-	tags := strings.Join(t.Tags, ",")
+	tags := strings.Join(t.Tags, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 
 	var anns []string

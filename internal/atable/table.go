@@ -472,7 +472,7 @@ func (m Model) headersView() string {
 		renderedCell := style.Render(ansi.Truncate(col.Title, col.Width, "…"))
 		s = append(s, m.styles.Header.Render(renderedCell))
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
+	return lipgloss.JoinHorizontal(lipgloss.Top, addSpacing(s)...)
 }
 
 func (m *Model) renderRow(r int) string {
@@ -490,9 +490,23 @@ func (m *Model) renderRow(r int) string {
 		s = append(s, renderedCell)
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
+	return lipgloss.JoinHorizontal(lipgloss.Top, addSpacing(s)...)
 }
 
 func clamp(v, low, high int) int {
 	return min(max(v, low), high)
+}
+
+func addSpacing(cells []string) []string {
+	if len(cells) <= 1 {
+		return cells
+	}
+	spaced := make([]string, 0, len(cells)*2-1)
+	for i, cell := range cells {
+		if i > 0 {
+			spaced = append(spaced, " ")
+		}
+		spaced = append(spaced, cell)
+	}
+	return spaced
 }
