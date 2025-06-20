@@ -51,7 +51,6 @@ func newTable(rows []atable.Row) atable.Model {
 	cols := []atable.Column{
 		{Title: "ID", Width: 4},
 		{Title: "Task", Width: 30},
-		{Title: "Active", Width: 6},
 		{Title: "Age", Width: 6},
 		{Title: "Pri", Width: 4},
 		{Title: "Tags", Width: 15},
@@ -135,6 +134,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, editCmd(id)
 				}
 			}
+		case "s":
+			if row := m.tbl.SelectedRow(); row != nil {
+				if id, err := strconv.Atoi(row[0]); err == nil {
+					task.Start(id)
+					m.reload()
+				}
+			}
+		case "S":
+			if row := m.tbl.SelectedRow(); row != nil {
+				if id, err := strconv.Atoi(row[0]); err == nil {
+					task.Stop(id)
+					m.reload()
+				}
+			}
 		}
 	}
 
@@ -152,6 +165,9 @@ func (m Model) View() string {
 	if m.showHelp {
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.tbl.HelpView(),
+			"E: edit task",
+			"s: start task",
+			"S: stop task",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
@@ -171,9 +187,9 @@ func (m Model) statusLine() string {
 }
 
 func taskToRow(t task.Task) atable.Row {
-	active := ""
+	style := lipgloss.NewStyle()
 	if t.Start != "" {
-		active = "yes"
+		style = style.Background(lipgloss.Color("6"))
 	}
 
 	age := ""
@@ -191,16 +207,15 @@ func taskToRow(t task.Task) atable.Row {
 	}
 
 	return atable.Row{
-		strconv.Itoa(t.ID),
-		t.Description,
-		active,
-		age,
+		style.Render(strconv.Itoa(t.ID)),
+		style.Render(t.Description),
+		style.Render(age),
 		formatPriority(t.Priority),
-		tags,
-		t.Recur,
+		style.Render(tags),
+		style.Render(t.Recur),
 		formatDue(t.Due),
-		urg,
-		strings.Join(anns, "; "),
+		style.Render(urg),
+		style.Render(strings.Join(anns, "; ")),
 	}
 }
 
