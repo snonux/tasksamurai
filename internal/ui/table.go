@@ -74,7 +74,8 @@ func newTable(rows []atable.Row) atable.Model {
 }
 
 func (m *Model) reload() error {
-	tasks, err := task.Export(strings.Fields(m.filter)...)
+	filters := append(strings.Fields(m.filter), "status:pending")
+	tasks, err := task.Export(filters...)
 	if err != nil {
 		return err
 	}
@@ -190,7 +191,7 @@ func taskToRow(t task.Task) atable.Row {
 		t.Description,
 		active,
 		age,
-		t.Priority,
+		formatPriority(t.Priority),
 		tags,
 		t.Recur,
 		formatDue(t.Due),
@@ -215,4 +216,19 @@ func formatDue(s string) string {
 		style = style.Background(lipgloss.Color("1"))
 	}
 	return style.Render(val)
+}
+
+func formatPriority(p string) string {
+	style := lipgloss.NewStyle()
+	switch p {
+	case "L":
+		style = style.Foreground(lipgloss.Color("10"))
+	case "M":
+		style = style.Foreground(lipgloss.Color("12"))
+	case "H":
+		style = style.Foreground(lipgloss.Color("9"))
+	default:
+		return p
+	}
+	return style.Render(p)
 }
