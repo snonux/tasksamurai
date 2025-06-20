@@ -199,9 +199,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.prioritySelecting = false
 				return m, nil
-			case tea.KeyLeft:
+			}
+			switch msg.String() {
+			case "h", "left":
 				m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
-			case tea.KeyRight:
+			case "l", "right":
 				m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
 			}
 			return m, nil
