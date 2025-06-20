@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,12 @@ type Model struct {
 	dueID      int
 	dueInput   textinput.Model
 
+	searching   bool
+	searchInput textinput.Model
+	searchRegex *regexp.Regexp
+	searchCells []struct{ row, col int }
+	searchIndex int
+
 	prioritySelecting bool
 	priorityID        int
 	priorityIndex     int
@@ -69,6 +76,8 @@ func New(filters []string) (Model, error) {
 	m.annotateInput.Prompt = "annotation: "
 	m.dueInput = textinput.New()
 	m.dueInput.Prompt = "due: "
+	m.searchInput = textinput.New()
+	m.searchInput.Prompt = "search: "
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -114,9 +123,22 @@ func (m *Model) reload() error {
 	task.SortTasks(tasks)
 
 	var rows []atable.Row
-	for _, tsk := range tasks {
+	m.searchCells = nil
+	for i, tsk := range tasks {
 		rows = append(rows, taskToRow(tsk))
+		if m.searchRegex != nil {
+			if cols := matchTaskCols(tsk, m.searchRegex); len(cols) > 0 {
+				for _, c := range cols {
+					m.searchCells = append(m.searchCells, struct{ row, col int }{i, c})
+				}
+			}
+		}
 	}
+	if len(m.searchCells) > 0 {
+		m.searchIndex = 0
+	}
+
+	m.tbl.SetHighlight(m.searchRegex, []int{5, 6, 7})
 
 	m.tasks = tasks
 	m.total = task.TotalTasks(tasks)
@@ -207,6 +229,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
 			}
 			return m, nil
+		}
+		if m.searching {
+			switch msg.Type {
+			case tea.KeyEnter:
+				re, err := regexp.Compile(m.searchInput.Value())
+				if err == nil {
+					m.searchRegex = re
+				} else {
+					m.searchRegex = nil
+				}
+				m.searching = false
+				m.searchInput.Blur()
+				m.reload()
+				if len(m.searchCells) > 0 {
+					m.tbl.SetCursor(m.searchCells[m.searchIndex].row)
+					m.tbl.SetColumnCursor(m.searchCells[m.searchIndex].col)
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.searching = false
+				m.searchInput.Blur()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			return m, cmd
 		}
 		switch msg.String() {
 		case "?":
@@ -320,6 +368,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "/":
+			m.searching = true
+			m.searchInput.SetValue("")
+			m.searchInput.Focus()
+			return m, nil
+		case "n":
+			if len(m.searchCells) > 0 {
+				m.searchIndex = (m.searchIndex + 1) % len(m.searchCells)
+				m.tbl.SetCursor(m.searchCells[m.searchIndex].row)
+				m.tbl.SetColumnCursor(m.searchCells[m.searchIndex].col)
+				return m, nil
+			}
+		case "N":
+			if len(m.searchCells) > 0 {
+				m.searchIndex = (m.searchIndex - 1 + len(m.searchCells)) % len(m.searchCells)
+				m.tbl.SetCursor(m.searchCells[m.searchIndex].row)
+				m.tbl.SetColumnCursor(m.searchCells[m.searchIndex].col)
+				return m, nil
+			}
 		}
 	}
 
@@ -371,6 +438,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.priorityView(),
+		)
+	}
+	if m.searching {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.searchInput.View(),
 		)
 	}
 	return view
@@ -477,4 +550,42 @@ func (m Model) priorityView() string {
 		parts = append(parts, style.Render(label))
 	}
 	return "priority: " + strings.Join(parts, " ")
+}
+
+func matchTask(t task.Task, re *regexp.Regexp) bool {
+	if re == nil {
+		return false
+	}
+	if re.MatchString(t.Description) {
+		return true
+	}
+	if re.MatchString(strings.Join(t.Tags, ",")) {
+		return true
+	}
+	for _, a := range t.Annotations {
+		if re.MatchString(a.Description) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchTaskCols(t task.Task, re *regexp.Regexp) []int {
+	if re == nil {
+		return nil
+	}
+	var cols []int
+	if re.MatchString(strings.Join(t.Tags, ",")) {
+		cols = append(cols, 5)
+	}
+	if re.MatchString(t.Description) {
+		cols = append(cols, 6)
+	}
+	for _, a := range t.Annotations {
+		if re.MatchString(a.Description) {
+			cols = append(cols, 7)
+			break
+		}
+	}
+	return cols
 }

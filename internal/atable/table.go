@@ -2,6 +2,8 @@
 package table
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -28,6 +30,9 @@ type Model struct {
 	viewport viewport.Model
 	start    int
 	end      int
+
+	highlightRegex *regexp.Regexp
+	highlightCols  map[int]struct{}
 }
 
 // Row represents one line in the table.
@@ -345,6 +350,19 @@ func (m *Model) SetColumns(c []Column) {
 	m.UpdateViewport()
 }
 
+// SetHighlight sets the regex used to highlight cell contents and which columns to search.
+func (m *Model) SetHighlight(re *regexp.Regexp, cols []int) {
+	m.highlightRegex = re
+	if len(cols) == 0 {
+		m.highlightCols = nil
+		return
+	}
+	m.highlightCols = make(map[int]struct{}, len(cols))
+	for _, c := range cols {
+		m.highlightCols[c] = struct{}{}
+	}
+}
+
 // SetWidth sets the width of the viewport of the table.
 func (m *Model) SetWidth(w int) {
 	m.viewport.Width = w
@@ -481,13 +499,25 @@ func (m *Model) renderRow(r int) string {
 		if m.cols[i].Width <= 0 {
 			continue
 		}
-		style := m.styles.Cell
+		baseStyle := m.styles.Cell
 		if r == m.cursor && i == m.colCursor {
-			style = m.styles.Selected
+			baseStyle = m.styles.Selected
 		}
-		style = style.Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
-		renderedCell := style.Render(ansi.Truncate(value, m.cols[i].Width, "…"))
-		s = append(s, renderedCell)
+		widthStyle := lipgloss.NewStyle().Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
+		val := ansi.Truncate(value, m.cols[i].Width, "…")
+		if m.highlightRegex != nil {
+			if _, ok := m.highlightCols[i]; ok {
+				matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("0"))
+				if r == m.cursor && i == m.colCursor {
+					matchStyle = invertStyle(baseStyle)
+				}
+				val = highlightWithBase(val, m.highlightRegex, baseStyle, matchStyle)
+				s = append(s, widthStyle.Render(val))
+				continue
+			}
+		}
+		renderedCell := baseStyle.Render(val)
+		s = append(s, widthStyle.Render(renderedCell))
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, s...)
@@ -495,4 +525,37 @@ func (m *Model) renderRow(r int) string {
 
 func clamp(v, low, high int) int {
 	return min(max(v, low), high)
+}
+
+// highlightWithBase returns the string with regex matches styled using matchStyle
+// and the remaining text styled using baseStyle.
+func highlightWithBase(s string, re *regexp.Regexp, baseStyle, matchStyle lipgloss.Style) string {
+	if re == nil {
+		return baseStyle.Render(s)
+	}
+	locs := re.FindAllStringIndex(s, -1)
+	if len(locs) == 0 {
+		return baseStyle.Render(s)
+	}
+
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		if last < loc[0] {
+			b.WriteString(baseStyle.Render(s[last:loc[0]]))
+		}
+		b.WriteString(matchStyle.Render(s[loc[0]:loc[1]]))
+		last = loc[1]
+	}
+	if last < len(s) {
+		b.WriteString(baseStyle.Render(s[last:]))
+	}
+	return b.String()
+}
+
+// invertStyle returns a style with the foreground and background colors swapped.
+func invertStyle(s lipgloss.Style) lipgloss.Style {
+	fg := fmt.Sprintf("%v", s.GetForeground())
+	bg := fmt.Sprintf("%v", s.GetBackground())
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(bg)).Background(lipgloss.Color(fg))
 }
