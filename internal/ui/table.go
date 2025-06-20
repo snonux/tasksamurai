@@ -50,7 +50,7 @@ func New(filter string) (Model, error) {
 func newTable(rows []atable.Row) atable.Model {
 	cols := []atable.Column{
 		{Title: "ID", Width: 4},
-		{Title: "Task", Width: 30},
+		{Title: "Task", Width: 45},
 		{Title: "Age", Width: 6},
 		{Title: "Pri", Width: 4},
 		{Title: "Tags", Width: 15},
@@ -137,14 +137,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			if row := m.tbl.SelectedRow(); row != nil {
 				if id, err := strconv.Atoi(row[0]); err == nil {
-					task.Start(id)
-					m.reload()
-				}
-			}
-		case "S":
-			if row := m.tbl.SelectedRow(); row != nil {
-				if id, err := strconv.Atoi(row[0]); err == nil {
-					task.Stop(id)
+					idx := m.tbl.Cursor()
+					if idx >= 0 && idx < len(m.tasks) {
+						if m.tasks[idx].Start == "" {
+							task.Start(id)
+						} else {
+							task.Stop(id)
+						}
+					}
 					m.reload()
 				}
 			}
@@ -166,8 +166,7 @@ func (m Model) View() string {
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.tbl.HelpView(),
 			"E: edit task",
-			"s: start task",
-			"S: stop task",
+			"s: toggle start/stop",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
