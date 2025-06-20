@@ -202,7 +202,7 @@ func TestUndoHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
