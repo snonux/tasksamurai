@@ -52,13 +52,12 @@ func New(filter string) (Model, error) {
 func newTable(rows []atable.Row) atable.Model {
 	cols := []atable.Column{
 		{Title: "ID", Width: 4},
-		{Title: "Task", Width: 45},
-		{Title: "Age", Width: 6},
 		{Title: "Pri", Width: 4},
-		{Title: "Tags", Width: 15},
-		{Title: "Recur", Width: 6},
+		{Title: "Age", Width: 6},
 		{Title: "Due", Width: 10},
 		{Title: "Urg", Width: 5},
+		{Title: "Tags", Width: 15},
+		{Title: "Description", Width: 45},
 		{Title: "Annotations", Width: 20},
 	}
 	t := atable.New(
@@ -215,13 +214,12 @@ func taskToRow(t task.Task) atable.Row {
 
 	return atable.Row{
 		style.Render(strconv.Itoa(t.ID)),
-		style.Render(t.Description),
-		style.Render(age),
 		formatPriority(t.Priority),
-		style.Render(tags),
-		style.Render(t.Recur),
+		style.Render(age),
 		formatDue(t.Due),
 		style.Render(urg),
+		style.Render(tags),
+		style.Render(t.Description),
 		style.Render(strings.Join(anns, "; ")),
 	}
 }
