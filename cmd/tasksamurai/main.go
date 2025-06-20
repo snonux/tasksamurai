@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	"tasksamurai/internal/task"
 	"tasksamurai/internal/ui"
@@ -15,6 +17,8 @@ func main() {
 	filter := flag.String("filter", "", "task filter expression")
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	flag.Parse()
+
+	rand.Seed(time.Now().UnixNano())
 
 	if err := task.SetDebugLog(*debugLog); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to enable debug log:", err)

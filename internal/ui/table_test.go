@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -215,5 +216,62 @@ func TestDeleteHotkey(t *testing.T) {
 
 	if strings.TrimSpace(string(data)) != "1 delete" {
 		t.Fatalf("delete not called: %q", data)
+	}
+}
+
+func TestRandomDueHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	dueFile := filepath.Join(tmp, "due.txt")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo \"$@\" > " + dueFile + "\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New("")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(dueFile)
+	if err != nil {
+		t.Fatalf("read due: %v", err)
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(data)))
+	if len(fields) < 3 {
+		t.Fatalf("unexpected command: %q", data)
+	}
+
+	dueStr := strings.TrimPrefix(fields[2], "due:")
+	ts, err := time.Parse("20060102T150405Z", dueStr)
+	if err != nil {
+		t.Fatalf("bad due date: %v", err)
+	}
+
+	delta := ts.Sub(time.Now().UTC())
+	if delta < 7*24*time.Hour-time.Hour || delta > 37*24*time.Hour+time.Hour {
+		t.Fatalf("due date not in range: %v", delta)
 	}
 }

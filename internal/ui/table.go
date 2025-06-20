@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -208,6 +209,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
+		case "r":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					days := rand.Intn(31) + 7 // 7 to 37 days
+					due := time.Now().Add(time.Duration(days) * 24 * time.Hour).UTC().Format("20060102T150405Z")
+					task.SetDueDate(id, due)
+					m.reload()
+				}
+			}
 		case "a":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
@@ -253,6 +264,7 @@ func (m Model) View() string {
 			"s: toggle start/stop",
 			"d: mark task done",
 			"D: delete task",
+			"r: random due date",
 			"a: annotate task",
 			"A: replace annotations",
 			"q: quit",

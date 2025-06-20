@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 func TestAddAndExport(t *testing.T) {
@@ -126,5 +127,41 @@ func TestModifyHelpers(t *testing.T) {
 	}
 	if !annFound {
 		t.Errorf("annotation not added")
+	}
+}
+
+func TestDueDateFormat(t *testing.T) {
+	if _, err := exec.LookPath("task"); err != nil {
+		t.Skip("task command not available")
+	}
+	tmp := t.TempDir()
+	if err := os.Setenv("TASKDATA", tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("TASKRC", "/dev/null"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	if err := Add("check due", nil); err != nil {
+		t.Fatalf("add task: %v", err)
+	}
+	due := time.Now().Add(48 * time.Hour).UTC().Format("20060102T150405Z")
+	if err := SetDueDate(1, due); err != nil {
+		t.Fatalf("set due date: %v", err)
+	}
+
+	tasks, err := Export("1")
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected one task, got %d", len(tasks))
+	}
+	if tasks[0].Due != due {
+		t.Fatalf("due mismatch: %q vs %q", tasks[0].Due, due)
 	}
 }
