@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -130,13 +132,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "e", "E":
 			if row := m.tbl.SelectedRow(); row != nil {
-				if id, err := strconv.Atoi(row[0]); err == nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
 					return m, editCmd(id)
 				}
 			}
 		case "s":
 			if row := m.tbl.SelectedRow(); row != nil {
-				if id, err := strconv.Atoi(row[0]); err == nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
 					started := false
 					for _, tsk := range m.tasks {
 						if tsk.ID == id {

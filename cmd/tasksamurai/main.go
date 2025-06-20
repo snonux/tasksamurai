@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"tasksamurai/internal/task"
 	"tasksamurai/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,7 +13,13 @@ import (
 
 func main() {
 	filter := flag.String("filter", "", "task filter expression")
+	debugLog := flag.String("debug-log", "", "path to debug log file")
 	flag.Parse()
+
+	if err := task.SetDebugLog(*debugLog); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to enable debug log:", err)
+		os.Exit(1)
+	}
 
 	m, err := ui.New(*filter)
 	if err != nil {

@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 )
 
 // Task represents a taskwarrior task as returned by `task export`.
@@ -28,6 +31,23 @@ type Task struct {
 	Recur       string       `json:"recur"`
 	Urgency     float64      `json:"urgency"`
 	Annotations []Annotation `json:"annotations"`
+}
+
+var debugWriter io.Writer
+
+// SetDebugLog enables logging of executed commands to the given file.
+// Passing an empty path disables logging.
+func SetDebugLog(path string) error {
+	if path == "" {
+		debugWriter = nil
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	debugWriter = f
+	return nil
 }
 
 // Add creates a new task with the given description and tags.
@@ -79,6 +99,9 @@ func Export(filters ...string) ([]Task, error) {
 }
 
 func run(args ...string) error {
+	if debugWriter != nil {
+		fmt.Fprintln(debugWriter, "task "+strings.Join(args, " "))
+	}
 	cmd := exec.Command("task", args...)
 	return cmd.Run()
 }
