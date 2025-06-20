@@ -26,6 +26,16 @@ type Model struct {
 	due        int
 }
 
+// editDoneMsg is emitted when the external editor process finishes.
+type editDoneMsg struct{ err error }
+
+// editCmd returns a command that edits the task and sends an
+// editDoneMsg once the process is complete.
+func editCmd(id int) tea.Cmd {
+	c := task.EditCmd(id)
+	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
+}
+
 // New creates a new UI model with the provided rows.
 func New(filter string) (Model, error) {
 	m := Model{filter: filter}
@@ -102,6 +112,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tbl.SetWidth(msg.Width)
 		m.tbl.SetHeight(msg.Height - 2)
 		return m, nil
+	case editDoneMsg:
+		// Ignore any error and reload tasks once editing completes.
+		_ = msg.err
+		m.reload()
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "?":
@@ -115,10 +130,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "E":
 			if row := m.tbl.SelectedRow(); row != nil {
-				id, err := strconv.Atoi(row[0])
-				if err == nil {
-					_ = task.Edit(id)
-					m.reload()
+				if id, err := strconv.Atoi(row[0]); err == nil {
+					return m, editCmd(id)
 				}
 			}
 		}
