@@ -60,6 +60,8 @@ type Model struct {
 
 	undoStack []string
 
+	cellExpanded bool
+
 	total      int
 	inProgress int
 	due        int
@@ -279,6 +281,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showHelp = true
 			return m, nil
 		case "q", "esc":
+			if m.cellExpanded {
+				m.cellExpanded = false
+				return m, nil
+			}
 			if m.showHelp {
 				m.showHelp = false
 				return m, nil
@@ -416,6 +422,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tbl.SetColumnCursor(match.col)
 				return m, nil
 			}
+		case "enter":
+			m.cellExpanded = !m.cellExpanded
+			return m, nil
 		}
 	}
 
@@ -453,6 +462,12 @@ func (m Model) View() string {
 		m.tbl.View(),
 		m.statusLine(),
 	)
+	if m.cellExpanded {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.expandedCellView(),
+		)
+	}
 	if m.annotating {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
@@ -554,6 +569,8 @@ func formatDue(s string) string {
 		val = "today"
 	case 1:
 		val = "tomorrow"
+	case -1:
+		val = "yesterday"
 	default:
 		val = fmt.Sprintf("%dd", days)
 	}
@@ -651,4 +668,41 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 		descStr,
 		annStr,
 	}
+}
+
+func (m Model) expandedCellView() string {
+	row := m.tbl.Cursor()
+	col := m.tbl.ColumnCursor()
+	if row < 0 || row >= len(m.tasks) || col < 0 {
+		return ""
+	}
+	t := m.tasks[row]
+	var val string
+	switch col {
+	case 0:
+		val = strconv.Itoa(t.ID)
+	case 1:
+		val = ansi.Strip(formatPriority(t.Priority))
+	case 2:
+		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+			days := int(time.Since(ts).Hours() / 24)
+			val = fmt.Sprintf("%dd", days)
+		}
+	case 3:
+		val = fmt.Sprintf("%.1f", t.Urgency)
+	case 4:
+		val = ansi.Strip(formatDue(t.Due))
+	case 5:
+		val = strings.Join(t.Tags, " ")
+	case 6:
+		val = t.Description
+	case 7:
+		var anns []string
+		for _, a := range t.Annotations {
+			anns = append(anns, a.Description)
+		}
+		val = strings.Join(anns, "; ")
+	}
+	style := lipgloss.NewStyle().Width(m.tbl.Width())
+	return style.Render(val)
 }
