@@ -40,7 +40,7 @@ func TestAnnotateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestDoneHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestDueDateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestRandomDueDateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New("")
+	m, err := New(nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

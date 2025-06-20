@@ -22,6 +22,7 @@ func init() {
 }
 
 // Model wraps a Bubble Tea table.Model to display tasks.
+
 type Model struct {
 	tbl      atable.Model
 	showHelp bool
@@ -35,8 +36,8 @@ type Model struct {
 	dueID      int
 	dueInput   textinput.Model
 
-	filter string
-	tasks  []task.Task
+	filters []string
+	tasks   []task.Task
 
 	total      int
 	inProgress int
@@ -54,8 +55,8 @@ func editCmd(id int) tea.Cmd {
 }
 
 // New creates a new UI model with the provided rows.
-func New(filter string) (Model, error) {
-	m := Model{filter: filter}
+func New(filters []string) (Model, error) {
+	m := Model{filters: filters}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.dueInput = textinput.New()
@@ -94,31 +95,22 @@ func newTable(rows []atable.Row) atable.Model {
 }
 
 func (m *Model) reload() error {
-	filters := append(strings.Fields(m.filter), "status:pending")
-	tasks, err := task.Export(filters...)
+	tasks, err := task.Export(m.filters...)
 	if err != nil {
 		return err
 	}
 
-	var filtered []task.Task
-	for _, tsk := range tasks {
-		if tsk.Status == "completed" {
-			continue
-		}
-		filtered = append(filtered, tsk)
-	}
-
-	task.SortTasks(filtered)
+	task.SortTasks(tasks)
 
 	var rows []atable.Row
-	for _, tsk := range filtered {
+	for _, tsk := range tasks {
 		rows = append(rows, taskToRow(tsk))
 	}
 
-	m.tasks = filtered
-	m.total = task.TotalTasks(filtered)
-	m.inProgress = task.InProgressTasks(filtered)
-	m.due = task.DueTasks(filtered, time.Now())
+	m.tasks = tasks
+	m.total = task.TotalTasks(tasks)
+	m.inProgress = task.InProgressTasks(tasks)
+	m.due = task.DueTasks(tasks, time.Now())
 
 	if m.tbl.Columns() == nil {
 		m.tbl = newTable(rows)

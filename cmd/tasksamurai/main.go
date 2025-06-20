@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	filter := flag.String("filter", "", "task filter expression")
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	flag.Parse()
 
@@ -21,7 +20,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	m, err := ui.New(*filter)
+	m, err := ui.New(flag.Args())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load tasks:", err)
 		os.Exit(1)
