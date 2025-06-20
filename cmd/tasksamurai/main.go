@@ -35,4 +35,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)
 	}
+
+	ui.Fireworks()
 }
