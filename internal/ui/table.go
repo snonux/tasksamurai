@@ -269,7 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		switch msg.String() {
-		case "?":
+		case "h":
 			m.showHelp = true
 			return m, nil
 		case "q":
@@ -380,7 +380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
-		case "/":
+		case "/", "?":
 			m.searching = true
 			m.searchInput.SetValue("")
 			m.searchInput.Focus()
@@ -428,7 +428,7 @@ func (m Model) View() string {
 			"A: replace annotations",
 			"p: set priority",
 			"q: quit",
-			"?: help", // show help toggle line
+			"h: help", // show help toggle line
 		)
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
