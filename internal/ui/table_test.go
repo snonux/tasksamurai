@@ -263,8 +263,8 @@ func TestDueDateHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	m = mv.(Model)
-	for _, r := range "2024-12-31" {
-		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	for i := 0; i < 3; i++ {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 		m = mv.(Model)
 	}
 	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -275,7 +275,8 @@ func TestDueDateHotkey(t *testing.T) {
 		t.Fatalf("read due: %v", err)
 	}
 
-	if strings.TrimSpace(string(data)) != "1 modify due:2024-12-31" {
+	want := "1 modify due:" + time.Now().AddDate(0, 0, 3).Format("2006-01-02")
+	if strings.TrimSpace(string(data)) != want {
 		t.Fatalf("due not set: %q", data)
 	}
 }
