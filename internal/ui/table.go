@@ -125,7 +125,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.tbl.SetWidth(msg.Width)
-		m.tbl.SetHeight(msg.Height - 2)
+		// Leave room for two status bars and the optional annotation
+		// input line.
+		m.tbl.SetHeight(msg.Height - 3)
 		return m, nil
 	case editDoneMsg:
 		// Ignore any error and reload tasks once editing completes.
@@ -251,6 +253,7 @@ func (m Model) View() string {
 		)
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
+		m.topStatusLine(),
 		m.tbl.View(),
 		m.statusLine(),
 	)
@@ -264,16 +267,23 @@ func (m Model) View() string {
 }
 
 func (m Model) statusLine() string {
+	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d", m.total, m.inProgress, m.due)
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Render(status)
+}
+
+func (m Model) topStatusLine() string {
 	header := ""
 	cols := m.tbl.Columns()
 	if idx := m.tbl.ColumnCursor(); idx >= 0 && idx < len(cols) {
 		header = cols[idx].Title
 	}
-	status := fmt.Sprintf("%s Total:%d InProgress:%d Due:%d", header, m.total, m.inProgress, m.due)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
-		Render(status)
+		Render(header)
 }
 
 func taskToRow(t task.Task) atable.Row {
