@@ -442,6 +442,7 @@ func (m Model) View() string {
 			"A: replace annotations",
 			"p: set priority",
 			"/, ?: search",
+			"esc: close help/search",
 			"q: quit",
 			"h: help", // show help toggle line
 		)
