@@ -162,7 +162,11 @@ func (m Model) View() string {
 }
 
 func (m Model) statusLine() string {
-	return fmt.Sprintf("Total:%d InProgress:%d Due:%d", m.total, m.inProgress, m.due)
+	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d", m.total, m.inProgress, m.due)
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Render(status)
 }
 
 func taskToRow(t task.Task) atable.Row {
