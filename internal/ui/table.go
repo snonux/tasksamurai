@@ -17,6 +17,8 @@ import (
 	"tasksamurai/internal/task"
 )
 
+var priorityOptions = []string{"H", "M", "L", ""}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -35,6 +37,10 @@ type Model struct {
 	dueEditing bool
 	dueID      int
 	dueInput   textinput.Model
+
+	prioritySelecting bool
+	priorityID        int
+	priorityIndex     int
 
 	filters []string
 	tasks   []task.Task
@@ -183,6 +189,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dueInput, cmd = m.dueInput.Update(msg)
 			return m, cmd
 		}
+		if m.prioritySelecting {
+			switch msg.Type {
+			case tea.KeyEnter:
+				task.SetPriority(m.priorityID, priorityOptions[m.priorityIndex])
+				m.prioritySelecting = false
+				m.reload()
+				return m, nil
+			case tea.KeyEsc:
+				m.prioritySelecting = false
+				return m, nil
+			case tea.KeyLeft:
+				m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
+			case tea.KeyRight:
+				m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "?":
 			m.showHelp = true
@@ -261,6 +284,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
+		case "p":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.priorityID = id
+					m.prioritySelecting = true
+					m.priorityIndex = 0
+					return m, nil
+				}
+			}
 		case "a":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
@@ -310,6 +343,7 @@ func (m Model) View() string {
 			"r: random due date",
 			"a: annotate task",
 			"A: replace annotations",
+			"p: set priority",
 			"q: quit",
 			"?: help", // show help toggle line
 		)
@@ -329,6 +363,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.dueInput.View(),
+		)
+	}
+	if m.prioritySelecting {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.priorityView(),
 		)
 	}
 	return view
@@ -419,4 +459,20 @@ func formatPriority(p string) string {
 		return p
 	}
 	return style.Render(p)
+}
+
+func (m Model) priorityView() string {
+	var parts []string
+	for i, p := range priorityOptions {
+		label := p
+		if label == "" {
+			label = "none"
+		}
+		style := lipgloss.NewStyle()
+		if i == m.priorityIndex {
+			style = style.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
+		}
+		parts = append(parts, style.Render(label))
+	}
+	return "priority: " + strings.Join(parts, " ")
 }
