@@ -543,14 +543,12 @@ func (m Model) priorityView() string {
 	return "priority: " + strings.Join(parts, " ")
 }
 
-func highlightRegex(s string, re *regexp.Regexp) string {
-	if re == nil {
-		return s
+func highlightCell(rendered string, re *regexp.Regexp, raw string) string {
+	if re == nil || !re.MatchString(raw) {
+		return rendered
 	}
-	style := lipgloss.NewStyle().Background(lipgloss.Color("226"))
-	return re.ReplaceAllStringFunc(s, func(m string) string {
-		return style.Render(m)
-	})
+	style := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+	return style.Render(rendered)
 }
 
 func matchTask(t task.Task, re *regexp.Regexp) bool {
@@ -591,18 +589,28 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 		anns = append(anns, a.Description)
 	}
 
-	tagStr := highlightRegex(tags, re)
-	descStr := highlightRegex(t.Description, re)
-	annStr := highlightRegex(strings.Join(anns, "; "), re)
+	idStr := style.Render(strconv.Itoa(t.ID))
+	priStr := formatPriority(t.Priority)
+	ageStr := style.Render(age)
+	dueStr := formatDue(t.Due)
+	urgStr := style.Render(urg)
+	tagStr := style.Render(tags)
+	descStr := style.Render(t.Description)
+	annRaw := strings.Join(anns, "; ")
+	annStr := style.Render(annRaw)
+
+	tagStr = highlightCell(tagStr, re, tags)
+	descStr = highlightCell(descStr, re, t.Description)
+	annStr = highlightCell(annStr, re, annRaw)
 
 	return atable.Row{
-		style.Render(strconv.Itoa(t.ID)),
-		formatPriority(t.Priority),
-		style.Render(age),
-		formatDue(t.Due),
-		style.Render(urg),
-		style.Render(tagStr),
-		style.Render(descStr),
-		style.Render(annStr),
+		idStr,
+		priStr,
+		ageStr,
+		dueStr,
+		urgStr,
+		tagStr,
+		descStr,
+		annStr,
 	}
 }
