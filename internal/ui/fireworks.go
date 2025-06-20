@@ -9,10 +9,11 @@ import (
 )
 
 type fwModel struct {
-	width  int
-	height int
-	start  time.Time
-	fws    []firework
+	width          int
+	height         int
+	start          time.Time
+	fws            []firework
+	ignoreFirstKey bool
 }
 
 type firework struct {
@@ -66,6 +67,10 @@ func (m fwModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tick()
 	case tea.KeyMsg:
+		if !m.ignoreFirstKey {
+			m.ignoreFirstKey = true
+			return m, nil
+		}
 		return m, tea.Quit
 	}
 	return m, nil
