@@ -634,6 +634,7 @@ func (m Model) View() string {
 	if m.showHelp {
 		return lipgloss.JoinVertical(lipgloss.Left,
 			m.tbl.HelpView(),
+			"enter/i: edit or expand cell",
 			"E: edit task",
 			"s: toggle start/stop",
 			"D: mark task done",
@@ -643,7 +644,10 @@ func (m Model) View() string {
 			"a: annotate task",
 			"A: replace annotations",
 			"p: set priority",
+			"t: randomize theme",
+			"T: reset theme",
 			"/, ?: search",
+			"n/N: next/prev search match",
 			"esc: close help/search",
 			"q: quit",
 			"H: help", // show help toggle line
