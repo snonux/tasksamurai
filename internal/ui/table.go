@@ -510,7 +510,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.tagsID = id
 					m.tagsEditing = true
-					m.tagsInput.SetValue(strings.Join(m.tasks[m.tbl.Cursor()].Tags, " "))
+					m.tagsInput.SetValue("")
 					m.tagsInput.Focus()
 					m.updateTableHeight()
 					return m, nil
@@ -578,7 +578,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 5:
 						m.tagsID = id
 						m.tagsEditing = true
-						m.tagsInput.SetValue(strings.Join(m.tasks[m.tbl.Cursor()].Tags, " "))
+						m.tagsInput.SetValue("")
 						m.tagsInput.Focus()
 						m.updateTableHeight()
 						return m, nil
