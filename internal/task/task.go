@@ -167,6 +167,50 @@ func RemoveTags(id int, tags []string) error {
 	return run(args...)
 }
 
+// SetTags sets the tags of the task with the given id to exactly the provided set.
+// Tags not present will be removed and new tags added as needed.
+func SetTags(id int, tags []string) error {
+	tasks, err := Export(strconv.Itoa(id))
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("task %d not found", id)
+	}
+	current := make(map[string]struct{})
+	for _, t := range tasks[0].Tags {
+		current[t] = struct{}{}
+	}
+	desired := make(map[string]struct{})
+	for _, t := range tags {
+		desired[t] = struct{}{}
+	}
+
+	var adds, removes []string
+	for t := range desired {
+		if _, ok := current[t]; !ok {
+			adds = append(adds, t)
+		}
+	}
+	for t := range current {
+		if _, ok := desired[t]; !ok {
+			removes = append(removes, t)
+		}
+	}
+
+	if len(adds) > 0 {
+		if err := AddTags(id, adds); err != nil {
+			return err
+		}
+	}
+	if len(removes) > 0 {
+		if err := RemoveTags(id, removes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
 	return run(strconv.Itoa(id), "modify", "recur:"+rec)

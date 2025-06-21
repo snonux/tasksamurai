@@ -42,6 +42,14 @@ type Model struct {
 	annotateInput      textinput.Model
 	replaceAnnotations bool
 
+	descEditing bool
+	descID      int
+	descInput   textinput.Model
+
+	tagsEditing bool
+	tagsID      int
+	tagsInput   textinput.Model
+
 	dueEditing bool
 	dueID      int
 	dueDate    time.Time
@@ -94,6 +102,10 @@ func New(filters []string) (Model, error) {
 	m := Model{filters: filters}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
+	m.descInput = textinput.New()
+	m.descInput.Prompt = "description: "
+	m.tagsInput = textinput.New()
+	m.tagsInput.Prompt = "tags: "
 	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
@@ -223,6 +235,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.annotateInput, cmd = m.annotateInput.Update(msg)
+			return m, cmd
+		}
+		if m.descEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				task.SetDescription(m.descID, m.descInput.Value())
+				m.descEditing = false
+				m.descInput.Blur()
+				m.reload()
+				m.updateTableHeight()
+				return m, nil
+			case tea.KeyEsc:
+				m.descEditing = false
+				m.descInput.Blur()
+				m.updateTableHeight()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.descInput, cmd = m.descInput.Update(msg)
+			return m, cmd
+		}
+		if m.tagsEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				tags := strings.Fields(m.tagsInput.Value())
+				task.SetTags(m.tagsID, tags)
+				m.tagsEditing = false
+				m.tagsInput.Blur()
+				m.reload()
+				m.updateTableHeight()
+				return m, nil
+			case tea.KeyEsc:
+				m.tagsEditing = false
+				m.tagsInput.Blur()
+				m.updateTableHeight()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.tagsInput, cmd = m.tagsInput.Update(msg)
 			return m, cmd
 		}
 		if m.dueEditing {
@@ -461,7 +512,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 				return m, nil
 			}
-		case "enter":
+		case "enter", "i":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					col := m.tbl.ColumnCursor()
+					switch col {
+					case 1:
+						m.priorityID = id
+						m.prioritySelecting = true
+						switch m.tasks[m.tbl.Cursor()].Priority {
+						case "H":
+							m.priorityIndex = 0
+						case "M":
+							m.priorityIndex = 1
+						case "L":
+							m.priorityIndex = 2
+						default:
+							m.priorityIndex = 3
+						}
+						m.updateTableHeight()
+						return m, nil
+					case 4:
+						m.dueID = id
+						if ts, err := time.Parse("20060102T150405Z", m.tasks[m.tbl.Cursor()].Due); err == nil {
+							m.dueDate = ts
+						} else {
+							m.dueDate = time.Now()
+						}
+						m.dueEditing = true
+						m.updateTableHeight()
+						return m, nil
+					case 5:
+						m.tagsID = id
+						m.tagsEditing = true
+						m.tagsInput.SetValue(strings.Join(m.tasks[m.tbl.Cursor()].Tags, " "))
+						m.tagsInput.Focus()
+						m.updateTableHeight()
+						return m, nil
+					case 6:
+						m.annotateID = id
+						m.annotating = true
+						m.replaceAnnotations = true
+						var anns []string
+						for _, a := range m.tasks[m.tbl.Cursor()].Annotations {
+							anns = append(anns, a.Description)
+						}
+						m.annotateInput.SetValue(strings.Join(anns, "; "))
+						m.annotateInput.Focus()
+						m.updateTableHeight()
+						return m, nil
+					case 7:
+						m.descID = id
+						m.descEditing = true
+						m.descInput.SetValue(m.tasks[m.tbl.Cursor()].Description)
+						m.descInput.Focus()
+						m.updateTableHeight()
+						return m, nil
+					}
+				}
+			}
 			m.cellExpanded = !m.cellExpanded
 			m.updateTableHeight()
 			return m, nil
@@ -530,6 +640,18 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.priorityView(),
+		)
+	}
+	if m.descEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.descInput.View(),
+		)
+	}
+	if m.tagsEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.tagsInput.View(),
 		)
 	}
 	if m.searching {
@@ -817,7 +939,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching {
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing {
 		h--
 	}
 	if h < 1 {
