@@ -151,8 +151,8 @@ func New(filters []string) (Model, error) {
 
 func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 	cols := []atable.Column{
-		{Title: "ID", Width: m.idWidth},
 		{Title: "Pri", Width: m.priWidth},
+		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
@@ -496,14 +496,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "e", "E":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					return m, editCmd(id)
 				}
 			}
 		case "s":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					started := false
 					for _, tsk := range m.tasks {
@@ -522,7 +522,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "D":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.blinkID = id
 					m.blinkRow = m.tbl.Cursor()
@@ -541,7 +541,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.dueID = id
 					m.dueEditing = true
@@ -552,7 +552,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.recurID = id
 					m.recurEditing = true
@@ -564,7 +564,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.priorityID = id
 					m.prioritySelecting = true
@@ -575,7 +575,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "a":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.annotateID = id
 					m.annotating = true
@@ -588,7 +588,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "A":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.annotateID = id
 					m.annotating = true
@@ -607,7 +607,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "t":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					m.tagsID = id
 					m.tagsEditing = true
@@ -656,11 +656,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter", "i":
 			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
+				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
 					col := m.tbl.ColumnCursor()
 					switch col {
-					case 1:
+					case 0:
 						m.priorityID = id
 						m.prioritySelecting = true
 						switch m.tasks[m.tbl.Cursor()].Priority {
@@ -878,8 +878,8 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 	}
 
 	return atable.Row{
-		style.Render(strconv.Itoa(t.ID)),
 		m.formatPriority(t.Priority, m.priWidth),
+		style.Render(strconv.Itoa(t.ID)),
 		style.Render(age),
 		m.formatDue(t.Due, m.dueWidth),
 		style.Render(recur),
@@ -1019,8 +1019,8 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 		return cellStyle
 	}
 
-	idStr := getStyle(0).Render(strconv.Itoa(t.ID))
 	priStr := m.formatPriority(t.Priority, m.priWidth)
+	idStr := getStyle(1).Render(strconv.Itoa(t.ID))
 	ageStr := getStyle(2).Render(age)
 	dueStr := m.formatDue(t.Due, m.dueWidth)
 	recurStr := m.highlightCell(getStyle(4), re, recur)
@@ -1035,8 +1035,8 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	urgStr := getStyle(8).Render(urg)
 
 	return atable.Row{
-		idStr,
 		priStr,
+		idStr,
 		ageStr,
 		dueStr,
 		recurStr,
@@ -1057,9 +1057,9 @@ func (m Model) expandedCellView() string {
 	var val string
 	switch col {
 	case 0:
-		val = strconv.Itoa(t.ID)
-	case 1:
 		val = ansi.Strip(m.formatPriority(t.Priority, m.priWidth))
+	case 1:
+		val = strconv.Itoa(t.ID)
 	case 2:
 		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
 			days := int(time.Since(ts).Hours() / 24)
@@ -1224,8 +1224,8 @@ func (m *Model) computeColumnWidths() {
 
 func (m *Model) applyColumns() {
 	cols := []atable.Column{
-		{Title: "ID", Width: m.idWidth},
 		{Title: "Pri", Width: m.priWidth},
+		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
