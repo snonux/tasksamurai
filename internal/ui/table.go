@@ -74,6 +74,8 @@ type Model struct {
 
 	cellExpanded bool
 
+	windowHeight int
+
 	total      int
 	inProgress int
 	due        int
@@ -187,9 +189,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.tbl.SetWidth(msg.Width)
-		// Leave room for two status bars and the optional annotation
-		// input line.
-		m.tbl.SetHeight(msg.Height - 3)
+		m.windowHeight = msg.Height
+		m.updateTableHeight()
 		return m, nil
 	case editDoneMsg:
 		// Ignore any error and reload tasks once editing completes.
@@ -209,11 +210,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.annotating = false
 				m.annotateInput.Blur()
 				m.reload()
+				m.updateTableHeight()
 				return m, nil
 			case tea.KeyEsc:
 				m.annotating = false
 				m.replaceAnnotations = false
 				m.annotateInput.Blur()
+				m.updateTableHeight()
 				return m, nil
 			}
 			var cmd tea.Cmd
@@ -226,9 +229,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02"))
 				m.dueEditing = false
 				m.reload()
+				m.updateTableHeight()
 				return m, nil
 			case tea.KeyEsc:
 				m.dueEditing = false
+				m.updateTableHeight()
 				return m, nil
 			}
 			switch msg.String() {
@@ -249,9 +254,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.SetPriority(m.priorityID, priorityOptions[m.priorityIndex])
 				m.prioritySelecting = false
 				m.reload()
+				m.updateTableHeight()
 				return m, nil
 			case tea.KeyEsc:
 				m.prioritySelecting = false
+				m.updateTableHeight()
 				return m, nil
 			}
 			switch msg.String() {
@@ -274,6 +281,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searching = false
 				m.searchInput.Blur()
 				m.reload()
+				m.updateTableHeight()
 				if len(m.searchMatches) > 0 {
 					match := m.searchMatches[m.searchIndex]
 					prevRow := m.tbl.Cursor()
@@ -286,6 +294,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.searching = false
 				m.searchInput.Blur()
+				m.updateTableHeight()
 				return m, nil
 			}
 			var cmd tea.Cmd
@@ -299,6 +308,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc":
 			if m.cellExpanded {
 				m.cellExpanded = false
+				m.updateTableHeight()
 				return m, nil
 			}
 			if m.showHelp {
@@ -370,6 +380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.dueID = id
 					m.dueEditing = true
 					m.dueDate = time.Now()
+					m.updateTableHeight()
 					return m, nil
 				}
 			}
@@ -390,6 +401,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.priorityID = id
 					m.prioritySelecting = true
 					m.priorityIndex = 0
+					m.updateTableHeight()
 					return m, nil
 				}
 			}
@@ -402,6 +414,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.replaceAnnotations = false
 					m.annotateInput.SetValue("")
 					m.annotateInput.Focus()
+					m.updateTableHeight()
 					return m, nil
 				}
 			}
@@ -414,6 +427,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.replaceAnnotations = true
 					m.annotateInput.SetValue("")
 					m.annotateInput.Focus()
+					m.updateTableHeight()
 					return m, nil
 				}
 			}
@@ -421,6 +435,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.searching = true
 			m.searchInput.SetValue("")
 			m.searchInput.Focus()
+			m.updateTableHeight()
 			return m, nil
 		case "n":
 			if len(m.searchMatches) > 0 {
@@ -446,6 +461,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.cellExpanded = !m.cellExpanded
+			m.updateTableHeight()
 			return m, nil
 		}
 	}
@@ -656,7 +672,7 @@ func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 		if loc[0] > last {
 			b.WriteString(base.Render(raw[last:loc[0]]))
 		}
-		b.WriteString(base.Copy().Inherit(highlight).Render(raw[loc[0]:loc[1]]))
+		b.WriteString(highlight.Copy().Inherit(base).Render(raw[loc[0]:loc[1]]))
 		last = loc[1]
 	}
 	if last < len(raw) {
@@ -767,4 +783,23 @@ func (m *Model) updateSelectionHighlight(prevRow, newRow, prevCol, newCol int) {
 		rows[newRow] = taskToRowSearch(m.tasks[newRow], m.searchRegex, m.tblStyles, newCol)
 	}
 	m.tbl.SetRows(rows)
+}
+
+// updateTableHeight recalculates the table height based on the current window
+// size and which auxiliary views are open.
+func (m *Model) updateTableHeight() {
+	if m.windowHeight == 0 {
+		return
+	}
+	h := m.windowHeight - 3 // space for two status bars and base expanded line
+	if m.cellExpanded {
+		h--
+	}
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching {
+		h--
+	}
+	if h < 1 {
+		h = 1
+	}
+	m.tbl.SetHeight(h)
 }
