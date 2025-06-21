@@ -115,8 +115,8 @@ func newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 		{Title: "Urg", Width: urgWidth},
 		{Title: "Due", Width: dueWidth},
 		{Title: "Tags", Width: tagsWidth},
-		{Title: "Description", Width: descWidth},
 		{Title: "Annotations", Width: annWidth},
+		{Title: "Description", Width: descWidth},
 	}
 	t := atable.New(
 		atable.WithColumns(cols),
@@ -153,11 +153,11 @@ func (m *Model) reload() error {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
 			}
 			if m.searchRegex.MatchString(tsk.Description) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
 			}
 			for _, a := range tsk.Annotations {
 				if m.searchRegex.MatchString(a.Description) {
-					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
+					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
 					break
 				}
 			}
@@ -577,6 +577,11 @@ func taskToRow(t task.Task) atable.Row {
 		anns = append(anns, a.Description)
 	}
 
+	annStr := ""
+	if n := len(anns); n > 0 {
+		annStr = strconv.Itoa(n)
+	}
+
 	return atable.Row{
 		style.Render(strconv.Itoa(t.ID)),
 		formatPriority(t.Priority, priWidth),
@@ -584,8 +589,8 @@ func taskToRow(t task.Task) atable.Row {
 		style.Render(urg),
 		formatDue(t.Due, dueWidth),
 		style.Render(tags),
+		style.Render(annStr),
 		style.Render(t.Description),
-		style.Render(strings.Join(anns, "; ")),
 	}
 }
 
@@ -676,6 +681,14 @@ func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	return b.String()
 }
 
+func highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
+	if re != nil && re.MatchString(raw) {
+		highlight := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+		return highlight.Copy().Inherit(base).Render(display)
+	}
+	return base.Render(display)
+}
+
 func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
 	rowStyle := lipgloss.NewStyle()
 	if t.Start != "" {
@@ -713,9 +726,13 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selec
 	urgStr := getStyle(3).Render(urg)
 
 	tagStr := highlightCell(getStyle(5), re, tags)
-	descStr := highlightCell(getStyle(6), re, t.Description)
 	annRaw := strings.Join(anns, "; ")
-	annStr := highlightCell(getStyle(7), re, annRaw)
+	annCount := ""
+	if n := len(anns); n > 0 {
+		annCount = strconv.Itoa(n)
+	}
+	annStr := highlightCellMatch(getStyle(6), re, annRaw, annCount)
+	descStr := highlightCell(getStyle(7), re, t.Description)
 
 	return atable.Row{
 		idStr,
@@ -724,8 +741,8 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selec
 		urgStr,
 		dueStr,
 		tagStr,
-		descStr,
 		annStr,
+		descStr,
 	}
 }
 
@@ -754,13 +771,13 @@ func (m Model) expandedCellView() string {
 	case 5:
 		val = strings.Join(t.Tags, " ")
 	case 6:
-		val = t.Description
-	case 7:
 		var anns []string
 		for _, a := range t.Annotations {
 			anns = append(anns, a.Description)
 		}
 		val = strings.Join(anns, "; ")
+	case 7:
+		val = t.Description
 	}
 	header := ""
 	cols := m.tbl.Columns()
