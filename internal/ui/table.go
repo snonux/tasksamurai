@@ -23,13 +23,13 @@ var priorityOptions = []string{"H", "M", "L", ""}
 
 const (
 	idWidth   = 4
-	priWidth  = 4
+	priWidth  = 1
 	ageWidth  = 6
 	urgWidth  = 5
 	dueWidth  = 10
 	tagsWidth = 15
 	descWidth = 45
-	annWidth  = 20
+	annWidth  = 1
 )
 
 func init() {
@@ -579,7 +579,7 @@ func taskToRow(t task.Task) atable.Row {
 
 	annStr := ""
 	if n := len(anns); n > 0 {
-		annStr = strconv.Itoa(n)
+		annStr = strconv.FormatInt(int64(n), 16)
 	}
 
 	return atable.Row{
@@ -729,7 +729,7 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selec
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
 	if n := len(anns); n > 0 {
-		annCount = strconv.Itoa(n)
+		annCount = strconv.FormatInt(int64(n), 16)
 	}
 	annStr := highlightCellMatch(getStyle(6), re, annRaw, annCount)
 	descStr := highlightCell(getStyle(7), re, t.Description)
