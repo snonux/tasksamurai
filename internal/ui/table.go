@@ -44,8 +44,9 @@ type cellMatch struct {
 // Model wraps a Bubble Tea table.Model to display tasks.
 
 type Model struct {
-	tbl      atable.Model
-	showHelp bool
+	tbl       atable.Model
+	tblStyles atable.Styles
+	showHelp  bool
 
 	annotating         bool
 	annotateID         int
@@ -104,7 +105,7 @@ func New(filters []string) (Model, error) {
 	return m, nil
 }
 
-func newTable(rows []atable.Row) atable.Model {
+func newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 	cols := []atable.Column{
 		{Title: "ID", Width: idWidth},
 		{Title: "Pri", Width: priWidth},
@@ -126,7 +127,7 @@ func newTable(rows []atable.Row) atable.Model {
 	styles.Selected = styles.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
 	styles.Cell = styles.Cell.Padding(0, 1)
 	t.SetStyles(styles)
-	return t
+	return t, styles
 }
 
 func (m *Model) reload() error {
@@ -143,7 +144,7 @@ func (m *Model) reload() error {
 	var rows []atable.Row
 	m.searchMatches = nil
 	for i, tsk := range tasks {
-		rows = append(rows, taskToRowSearch(tsk, m.searchRegex))
+		rows = append(rows, taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
 		if m.searchRegex != nil {
 			tags := strings.Join(tsk.Tags, " ")
 			if m.searchRegex.MatchString(tags) {
@@ -170,10 +171,11 @@ func (m *Model) reload() error {
 	m.due = task.DueTasks(tasks, time.Now())
 
 	if m.tbl.Columns() == nil {
-		m.tbl = newTable(rows)
+		m.tbl, m.tblStyles = newTable(rows)
 	} else {
 		m.tbl.SetRows(rows)
 	}
+	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
 	return nil
 }
 
@@ -274,8 +276,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.reload()
 				if len(m.searchMatches) > 0 {
 					match := m.searchMatches[m.searchIndex]
+					prevRow := m.tbl.Cursor()
+					prevCol := m.tbl.ColumnCursor()
 					m.tbl.SetCursor(match.row)
 					m.tbl.SetColumnCursor(match.col)
+					m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 				}
 				return m, nil
 			case tea.KeyEsc:
@@ -421,16 +426,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.searchMatches) > 0 {
 				m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
 				match := m.searchMatches[m.searchIndex]
+				prevRow := m.tbl.Cursor()
+				prevCol := m.tbl.ColumnCursor()
 				m.tbl.SetCursor(match.row)
 				m.tbl.SetColumnCursor(match.col)
+				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 				return m, nil
 			}
 		case "N":
 			if len(m.searchMatches) > 0 {
 				m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
 				match := m.searchMatches[m.searchIndex]
+				prevRow := m.tbl.Cursor()
+				prevCol := m.tbl.ColumnCursor()
 				m.tbl.SetCursor(match.row)
 				m.tbl.SetColumnCursor(match.col)
+				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 				return m, nil
 			}
 		case "enter":
@@ -444,7 +455,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
 	m.tbl, cmd = m.tbl.Update(msg)
+	if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
+		m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+	}
 	return m, cmd
 }
 
@@ -649,10 +665,10 @@ func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	return b.String()
 }
 
-func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
-	style := lipgloss.NewStyle()
+func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
+	rowStyle := lipgloss.NewStyle()
 	if t.Start != "" {
-		style = style.Background(lipgloss.Color("6"))
+		rowStyle = rowStyle.Background(lipgloss.Color("6"))
 	}
 
 	age := ""
@@ -669,16 +685,26 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 		anns = append(anns, a.Description)
 	}
 
-	idStr := style.Render(strconv.Itoa(t.ID))
-	priStr := formatPriority(t.Priority, priWidth)
-	ageStr := style.Render(age)
-	dueStr := formatDue(t.Due, dueWidth)
-	urgStr := style.Render(urg)
+	cellStyle := rowStyle.Copy().Inherit(styles.Cell)
+	selStyle := cellStyle.Copy().Inherit(styles.Selected)
 
-	tagStr := highlightCell(style, re, tags)
-	descStr := highlightCell(style, re, t.Description)
+	getStyle := func(col int) lipgloss.Style {
+		if col == selectedCol {
+			return selStyle
+		}
+		return cellStyle
+	}
+
+	idStr := getStyle(0).Render(strconv.Itoa(t.ID))
+	priStr := formatPriority(t.Priority, priWidth)
+	ageStr := getStyle(2).Render(age)
+	dueStr := formatDue(t.Due, dueWidth)
+	urgStr := getStyle(3).Render(urg)
+
+	tagStr := highlightCell(getStyle(5), re, tags)
+	descStr := highlightCell(getStyle(6), re, t.Description)
 	annRaw := strings.Join(anns, "; ")
-	annStr := highlightCell(style, re, annRaw)
+	annStr := highlightCell(getStyle(7), re, annRaw)
 
 	return atable.Row{
 		idStr,
@@ -727,4 +753,18 @@ func (m Model) expandedCellView() string {
 	}
 	style := lipgloss.NewStyle().Width(m.tbl.Width())
 	return style.Render(val)
+}
+
+func (m *Model) updateSelectionHighlight(prevRow, newRow, prevCol, newCol int) {
+	if m.searchRegex == nil {
+		return
+	}
+	rows := m.tbl.Rows()
+	if prevRow >= 0 && prevRow < len(rows) {
+		rows[prevRow] = taskToRowSearch(m.tasks[prevRow], m.searchRegex, m.tblStyles, -1)
+	}
+	if newRow >= 0 && newRow < len(rows) {
+		rows[newRow] = taskToRowSearch(m.tasks[newRow], m.searchRegex, m.tblStyles, newCol)
+	}
+	m.tbl.SetRows(rows)
 }
