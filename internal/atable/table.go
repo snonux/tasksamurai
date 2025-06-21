@@ -476,19 +476,22 @@ func (m Model) headersView() string {
 }
 
 func (m *Model) renderRow(r int) string {
+	highlightRow := r == m.cursor
+	rowStyle := m.styles.Cell
+	if highlightRow {
+		rowStyle = rowStyle.
+			Background(lipgloss.Color("57")).
+			Foreground(lipgloss.Color("0")).
+			Bold(false)
+	}
+
 	s := make([]string, 0, len(m.cols))
 	for i, value := range m.rows[r] {
 		if m.cols[i].Width <= 0 {
 			continue
 		}
-		style := m.styles.Cell
-		if r == m.cursor {
-			style = style.
-				Background(lipgloss.Color("57")).
-				Foreground(lipgloss.Color("0")).
-				Bold(false)
-		}
-		if r == m.cursor && i == m.colCursor {
+		style := rowStyle
+		if highlightRow && i == m.colCursor {
 			style = m.styles.Selected
 		}
 		style = style.Width(m.cols[i].Width).MaxWidth(m.cols[i].Width).Inline(true)
@@ -496,6 +499,9 @@ func (m *Model) renderRow(r int) string {
 		s = append(s, renderedCell)
 	}
 
+	if highlightRow {
+		return lipgloss.JoinHorizontal(lipgloss.Top, addSpacingStyled(s, rowStyle)...)
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, addSpacing(s)...)
 }
 
@@ -511,6 +517,20 @@ func addSpacing(cells []string) []string {
 	for i, cell := range cells {
 		if i > 0 {
 			spaced = append(spaced, " ")
+		}
+		spaced = append(spaced, cell)
+	}
+	return spaced
+}
+
+func addSpacingStyled(cells []string, style lipgloss.Style) []string {
+	if len(cells) <= 1 {
+		return cells
+	}
+	spaced := make([]string, 0, len(cells)*2-1)
+	for i, cell := range cells {
+		if i > 0 {
+			spaced = append(spaced, style.Render(" "))
 		}
 		spaced = append(spaced, cell)
 	}
