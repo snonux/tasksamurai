@@ -10,3 +10,6 @@ tasks:
   test:
     cmds:
       - go test ./...
+  install-taskwarrior:
+    cmds:
+      - go install github.com/taskwarrior/taskwarrior@latest
