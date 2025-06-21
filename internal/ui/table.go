@@ -21,6 +21,17 @@ import (
 
 var priorityOptions = []string{"H", "M", "L", ""}
 
+const (
+	idWidth   = 4
+	priWidth  = 4
+	ageWidth  = 6
+	urgWidth  = 5
+	dueWidth  = 10
+	tagsWidth = 15
+	descWidth = 45
+	annWidth  = 20
+)
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -95,14 +106,14 @@ func New(filters []string) (Model, error) {
 
 func newTable(rows []atable.Row) atable.Model {
 	cols := []atable.Column{
-		{Title: "ID", Width: 4},
-		{Title: "Pri", Width: 4},
-		{Title: "Age", Width: 6},
-		{Title: "Urg", Width: 5},
-		{Title: "Due", Width: 10},
-		{Title: "Tags", Width: 15},
-		{Title: "Description", Width: 45},
-		{Title: "Annotations", Width: 20},
+		{Title: "ID", Width: idWidth},
+		{Title: "Pri", Width: priWidth},
+		{Title: "Age", Width: ageWidth},
+		{Title: "Urg", Width: urgWidth},
+		{Title: "Due", Width: dueWidth},
+		{Title: "Tags", Width: tagsWidth},
+		{Title: "Description", Width: descWidth},
+		{Title: "Annotations", Width: annWidth},
 	}
 	t := atable.New(
 		atable.WithColumns(cols),
@@ -541,10 +552,10 @@ func taskToRow(t task.Task) atable.Row {
 
 	return atable.Row{
 		style.Render(strconv.Itoa(t.ID)),
-		formatPriority(t.Priority),
+		formatPriority(t.Priority, priWidth),
 		style.Render(age),
 		style.Render(urg),
-		formatDue(t.Due),
+		formatDue(t.Due, dueWidth),
 		style.Render(tags),
 		style.Render(t.Description),
 		style.Render(strings.Join(anns, "; ")),
@@ -554,7 +565,7 @@ func taskToRow(t task.Task) atable.Row {
 // formatDue returns a formatted due date string. Dates due today or tomorrow
 // are returned as "today" or "tomorrow" respectively. Past due dates are
 // highlighted in red.
-func formatDue(s string) string {
+func formatDue(s string, width int) string {
 	if s == "" {
 		return ""
 	}
@@ -575,15 +586,15 @@ func formatDue(s string) string {
 	default:
 		val = fmt.Sprintf("%dd", days)
 	}
-	style := lipgloss.NewStyle()
+	style := lipgloss.NewStyle().Width(width)
 	if days < 0 {
 		style = style.Background(lipgloss.Color("1"))
 	}
 	return style.Render(val)
 }
 
-func formatPriority(p string) string {
-	style := lipgloss.NewStyle()
+func formatPriority(p string, width int) string {
+	style := lipgloss.NewStyle().Width(width)
 	switch p {
 	case "L":
 		style = style.Background(lipgloss.Color("10"))
@@ -617,11 +628,11 @@ func (m Model) priorityView() string {
 	return "priority: " + strings.Join(parts, " ")
 }
 
-func highlightCell(rendered string, re *regexp.Regexp, raw string) string {
+func highlightCell(rendered string, re *regexp.Regexp, raw string, width int) string {
 	if re == nil || !re.MatchString(raw) {
 		return rendered
 	}
-	style := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+	style := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21")).Width(width)
 	return style.Render(rendered)
 }
 
@@ -646,18 +657,18 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 	}
 
 	idStr := style.Render(strconv.Itoa(t.ID))
-	priStr := formatPriority(t.Priority)
+	priStr := formatPriority(t.Priority, priWidth)
 	ageStr := style.Render(age)
-	dueStr := formatDue(t.Due)
+	dueStr := formatDue(t.Due, dueWidth)
 	urgStr := style.Render(urg)
 	tagStr := style.Render(tags)
 	descStr := style.Render(t.Description)
 	annRaw := strings.Join(anns, "; ")
 	annStr := style.Render(annRaw)
 
-	tagStr = highlightCell(tagStr, re, tags)
-	descStr = highlightCell(descStr, re, t.Description)
-	annStr = highlightCell(annStr, re, annRaw)
+	tagStr = highlightCell(tagStr, re, tags, tagsWidth)
+	descStr = highlightCell(descStr, re, t.Description, descWidth)
+	annStr = highlightCell(annStr, re, annRaw, annWidth)
 
 	return atable.Row{
 		idStr,
@@ -683,7 +694,7 @@ func (m Model) expandedCellView() string {
 	case 0:
 		val = strconv.Itoa(t.ID)
 	case 1:
-		val = ansi.Strip(formatPriority(t.Priority))
+		val = ansi.Strip(formatPriority(t.Priority, priWidth))
 	case 2:
 		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
 			days := int(time.Since(ts).Hours() / 24)
@@ -692,7 +703,7 @@ func (m Model) expandedCellView() string {
 	case 3:
 		val = fmt.Sprintf("%.1f", t.Urgency)
 	case 4:
-		val = ansi.Strip(formatDue(t.Due))
+		val = ansi.Strip(formatDue(t.Due, dueWidth))
 	case 5:
 		val = strings.Join(t.Tags, " ")
 	case 6:
