@@ -549,12 +549,7 @@ func (m Model) statusLine() string {
 }
 
 func (m Model) topStatusLine() string {
-	header := ""
-	cols := m.tbl.Columns()
-	if idx := m.tbl.ColumnCursor(); idx >= 0 && idx < len(cols) {
-		header = cols[idx].Title
-	}
-	line := fmt.Sprintf("Task Samurai %s | %s", internal.Version, header)
+	line := fmt.Sprintf("Task Samurai %s", internal.Version)
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
@@ -766,6 +761,14 @@ func (m Model) expandedCellView() string {
 			anns = append(anns, a.Description)
 		}
 		val = strings.Join(anns, "; ")
+	}
+	header := ""
+	cols := m.tbl.Columns()
+	if col >= 0 && col < len(cols) {
+		header = cols[col].Title
+	}
+	if header != "" {
+		val = header + ": " + val
 	}
 	style := lipgloss.NewStyle().Width(m.tbl.Width())
 	return style.Render(val)
