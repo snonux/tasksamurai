@@ -21,12 +21,12 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `↑/k` and `↓/j`: move up and down
 - `←/h` and `→/l`: move left and right
 - `b/pgup`: page up
-- `f/pgdn/space`: page down
+- `pgdn/space`: page down
 - `u` or `ctrl+u`: half page up
-- `d` or `ctrl+d`: half page down
+- `ctrl+d`: half page down
 - `g/home/0`: go to start
 - `G/end`: go to end
-- `enter`: expand/collapse the current cell
+- `enter` or `i`: expand/collapse or edit the current cell depending on the column
 
 ### Task actions
 
@@ -36,9 +36,11 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `U`: undo last done
 - `d`: set due date
 - `r`: random due date
+- `R`: edit recurrence
 - `a`: annotate task
 - `A`: replace annotations
 - `p`: set priority
+- `t`: edit tags
 
 ### Search
 
@@ -47,6 +49,9 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 
 ### Misc
 
+- `f`: change filter
+- `c`: random theme
+- `C`: reset theme
 - `H`: toggle help
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
 

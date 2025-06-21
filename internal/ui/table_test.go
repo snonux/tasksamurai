@@ -164,6 +164,10 @@ func TestDoneHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
+	for i := 0; i < blinkCycles; i++ {
+		mv, _ = m.Update(blinkMsg{})
+		m = mv.(Model)
+	}
 
 	data, err := os.ReadFile(doneFile)
 	if err != nil {
@@ -209,6 +213,10 @@ func TestUndoHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
+	for i := 0; i < blinkCycles; i++ {
+		mv, _ = m.Update(blinkMsg{})
+		m = mv.(Model)
+	}
 	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
 	m = mv.(Model)
 
@@ -333,6 +341,57 @@ func TestRandomDueDateHotkey(t *testing.T) {
 	days := int(time.Until(dueTime).Hours() / 24)
 	if days < 7 || days > 37 {
 		t.Fatalf("due date out of range: %d", days)
+	}
+}
+
+func TestRecurrenceHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	recFile := filepath.Join(tmp, "recur.txt")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo \"$@\" > " + recFile + "\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	m = mv.(Model)
+	for _, r := range "daily" {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mv.(Model)
+	}
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(recFile)
+	if err != nil {
+		t.Fatalf("read recur: %v", err)
+	}
+
+	if strings.TrimSpace(string(data)) != "1 modify recur:daily" {
+		t.Fatalf("recur not set: %q", data)
 	}
 }
 
