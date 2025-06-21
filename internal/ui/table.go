@@ -554,6 +554,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					days := rand.Intn(31) + 7
+					due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
+					task.SetDueDate(id, due)
+					m.reload()
+				}
+			}
+		case "R":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[1])
+				if id, err := strconv.Atoi(idStr); err == nil {
 					m.recurID = id
 					m.recurEditing = true
 					m.recurInput.SetValue(m.tasks[m.tbl.Cursor()].Recur)
@@ -752,7 +762,8 @@ func (m Model) View() string {
 			"D: mark task done",
 			"U: undo done",
 			"d: set due date",
-			"r: edit recurrence",
+			"r: random due date",
+			"R: edit recurrence",
 			"a: annotate task",
 			"A: replace annotations",
 			"p: set priority",
