@@ -21,17 +21,6 @@ import (
 
 var priorityOptions = []string{"H", "M", "L", ""}
 
-const (
-	idWidth   = 4
-	priWidth  = 1
-	ageWidth  = 6
-	urgWidth  = 5
-	dueWidth  = 10
-	tagsWidth = 15
-	descWidth = 45
-	annWidth  = 1
-)
-
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -76,6 +65,15 @@ type Model struct {
 
 	windowHeight int
 
+	idWidth   int
+	priWidth  int
+	ageWidth  int
+	urgWidth  int
+	dueWidth  int
+	tagsWidth int
+	descWidth int
+	annWidth  int
+
 	total      int
 	inProgress int
 	due        int
@@ -107,16 +105,16 @@ func New(filters []string) (Model, error) {
 	return m, nil
 }
 
-func newTable(rows []atable.Row) (atable.Model, atable.Styles) {
+func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 	cols := []atable.Column{
-		{Title: "ID", Width: idWidth},
-		{Title: "Pri", Width: priWidth},
-		{Title: "Age", Width: ageWidth},
-		{Title: "Urg", Width: urgWidth},
-		{Title: "Due", Width: dueWidth},
-		{Title: "Tags", Width: tagsWidth},
-		{Title: "Annotations", Width: annWidth},
-		{Title: "Description", Width: descWidth},
+		{Title: "ID", Width: m.idWidth},
+		{Title: "Pri", Width: m.priWidth},
+		{Title: "Age", Width: m.ageWidth},
+		{Title: "Urg", Width: m.urgWidth},
+		{Title: "Due", Width: m.dueWidth},
+		{Title: "Tags", Width: m.tagsWidth},
+		{Title: "Annotations", Width: m.annWidth},
+		{Title: "Description", Width: m.descWidth},
 	}
 	t := atable.New(
 		atable.WithColumns(cols),
@@ -143,10 +141,17 @@ func (m *Model) reload() error {
 
 	task.SortTasks(tasks)
 
+	m.tasks = tasks
+	m.total = task.TotalTasks(tasks)
+	m.inProgress = task.InProgressTasks(tasks)
+	m.due = task.DueTasks(tasks, time.Now())
+
+	m.computeColumnWidths()
+
 	var rows []atable.Row
 	m.searchMatches = nil
 	for i, tsk := range tasks {
-		rows = append(rows, taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
+		rows = append(rows, m.taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
 		if m.searchRegex != nil {
 			tags := strings.Join(tsk.Tags, " ")
 			if m.searchRegex.MatchString(tags) {
@@ -167,15 +172,11 @@ func (m *Model) reload() error {
 		m.searchIndex = 0
 	}
 
-	m.tasks = tasks
-	m.total = task.TotalTasks(tasks)
-	m.inProgress = task.InProgressTasks(tasks)
-	m.due = task.DueTasks(tasks, time.Now())
-
 	if m.tbl.Columns() == nil {
-		m.tbl, m.tblStyles = newTable(rows)
+		m.tbl, m.tblStyles = m.newTable(rows)
 	} else {
 		m.tbl.SetRows(rows)
+		m.applyColumns()
 	}
 	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
 	return nil
@@ -190,6 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.tbl.SetWidth(msg.Width)
 		m.windowHeight = msg.Height
+		m.computeColumnWidths()
 		m.updateTableHeight()
 		return m, nil
 	case editDoneMsg:
@@ -557,7 +559,7 @@ func (m Model) topStatusLine() string {
 		Render(line)
 }
 
-func taskToRow(t task.Task) atable.Row {
+func (m Model) taskToRow(t task.Task) atable.Row {
 	style := lipgloss.NewStyle()
 	if t.Start != "" {
 		style = style.Background(lipgloss.Color("6"))
@@ -584,10 +586,10 @@ func taskToRow(t task.Task) atable.Row {
 
 	return atable.Row{
 		style.Render(strconv.Itoa(t.ID)),
-		formatPriority(t.Priority, priWidth),
+		formatPriority(t.Priority, m.priWidth),
 		style.Render(age),
 		style.Render(urg),
-		formatDue(t.Due, dueWidth),
+		formatDue(t.Due, m.dueWidth),
 		style.Render(tags),
 		style.Render(annStr),
 		style.Render(t.Description),
@@ -689,7 +691,7 @@ func highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display str
 	return base.Render(display)
 }
 
-func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
+func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
 	rowStyle := lipgloss.NewStyle()
 	if t.Start != "" {
 		rowStyle = rowStyle.Background(lipgloss.Color("6"))
@@ -720,9 +722,9 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selec
 	}
 
 	idStr := getStyle(0).Render(strconv.Itoa(t.ID))
-	priStr := formatPriority(t.Priority, priWidth)
+	priStr := formatPriority(t.Priority, m.priWidth)
 	ageStr := getStyle(2).Render(age)
-	dueStr := formatDue(t.Due, dueWidth)
+	dueStr := formatDue(t.Due, m.dueWidth)
 	urgStr := getStyle(3).Render(urg)
 
 	tagStr := highlightCell(getStyle(5), re, tags)
@@ -758,7 +760,7 @@ func (m Model) expandedCellView() string {
 	case 0:
 		val = strconv.Itoa(t.ID)
 	case 1:
-		val = ansi.Strip(formatPriority(t.Priority, priWidth))
+		val = ansi.Strip(formatPriority(t.Priority, m.priWidth))
 	case 2:
 		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
 			days := int(time.Since(ts).Hours() / 24)
@@ -767,7 +769,7 @@ func (m Model) expandedCellView() string {
 	case 3:
 		val = fmt.Sprintf("%.1f", t.Urgency)
 	case 4:
-		val = ansi.Strip(formatDue(t.Due, dueWidth))
+		val = ansi.Strip(formatDue(t.Due, m.dueWidth))
 	case 5:
 		val = strings.Join(t.Tags, " ")
 	case 6:
@@ -797,10 +799,10 @@ func (m *Model) updateSelectionHighlight(prevRow, newRow, prevCol, newCol int) {
 	}
 	rows := m.tbl.Rows()
 	if prevRow >= 0 && prevRow < len(rows) {
-		rows[prevRow] = taskToRowSearch(m.tasks[prevRow], m.searchRegex, m.tblStyles, -1)
+		rows[prevRow] = m.taskToRowSearch(m.tasks[prevRow], m.searchRegex, m.tblStyles, -1)
 	}
 	if newRow >= 0 && newRow < len(rows) {
-		rows[newRow] = taskToRowSearch(m.tasks[newRow], m.searchRegex, m.tblStyles, newCol)
+		rows[newRow] = m.taskToRowSearch(m.tasks[newRow], m.searchRegex, m.tblStyles, newCol)
 	}
 	m.tbl.SetRows(rows)
 }
@@ -822,4 +824,99 @@ func (m *Model) updateTableHeight() {
 		h = 1
 	}
 	m.tbl.SetHeight(h)
+}
+
+func dueText(s string) string {
+	if s == "" {
+		return ""
+	}
+	ts, err := time.Parse("20060102T150405Z", s)
+	if err != nil {
+		return s
+	}
+	days := int(time.Until(ts).Hours() / 24)
+	switch days {
+	case 0:
+		return "today"
+	case 1:
+		return "tomorrow"
+	case -1:
+		return "yesterday"
+	default:
+		return fmt.Sprintf("%dd", days)
+	}
+}
+
+func (m *Model) computeColumnWidths() {
+	maxID := 1
+	maxAge := 0
+	maxUrg := 0
+	maxDue := 0
+	maxTags := 0
+	maxAnn := 1
+	for _, t := range m.tasks {
+		if l := len(strconv.Itoa(t.ID)); l > maxID {
+			maxID = l
+		}
+		age := ""
+		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+			age = fmt.Sprintf("%dd", int(time.Since(ts).Hours()/24))
+		}
+		if l := len(age); l > maxAge {
+			maxAge = l
+		}
+		urg := fmt.Sprintf("%.1f", t.Urgency)
+		if l := len(urg); l > maxUrg {
+			maxUrg = l
+		}
+		due := dueText(t.Due)
+		if l := len(due); l > maxDue {
+			maxDue = l
+		}
+		tags := strings.Join(t.Tags, " ")
+		if l := len(tags); l > maxTags {
+			maxTags = l
+		}
+		ann := len(t.Annotations)
+		if l := len(strconv.FormatInt(int64(ann), 16)); l > maxAnn {
+			maxAnn = l
+		}
+	}
+
+	m.idWidth = maxID
+	m.priWidth = 1
+	m.ageWidth = maxAge
+	m.urgWidth = maxUrg
+	m.dueWidth = maxDue
+	m.tagsWidth = maxTags
+	m.annWidth = maxAnn
+
+	total := m.tbl.Width()
+	if total == 0 {
+		total = 80
+	}
+	base := m.idWidth + m.priWidth + m.ageWidth + m.urgWidth + m.dueWidth + m.tagsWidth + m.annWidth
+	base += 7 // spaces between columns
+	m.descWidth = total - base
+	if m.descWidth < 1 {
+		m.descWidth = 1
+	}
+
+	if m.tbl.Columns() != nil {
+		m.applyColumns()
+	}
+}
+
+func (m *Model) applyColumns() {
+	cols := []atable.Column{
+		{Title: "ID", Width: m.idWidth},
+		{Title: "Pri", Width: m.priWidth},
+		{Title: "Age", Width: m.ageWidth},
+		{Title: "Urg", Width: m.urgWidth},
+		{Title: "Due", Width: m.dueWidth},
+		{Title: "Tags", Width: m.tagsWidth},
+		{Title: "Annotations", Width: m.annWidth},
+		{Title: "Description", Width: m.descWidth},
+	}
+	m.tbl.SetColumns(cols)
 }
