@@ -259,8 +259,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tagsEditing {
 			switch msg.Type {
 			case tea.KeyEnter:
-				tags := strings.Fields(m.tagsInput.Value())
-				task.SetTags(m.tagsID, tags)
+				words := strings.Fields(m.tagsInput.Value())
+				var adds, removes []string
+				for _, w := range words {
+					if strings.HasPrefix(w, "-") {
+						if len(w) > 1 {
+							removes = append(removes, w[1:])
+						}
+					} else {
+						if strings.HasPrefix(w, "+") {
+							w = w[1:]
+						}
+						if w != "" {
+							adds = append(adds, w)
+						}
+					}
+				}
+				if len(adds) > 0 {
+					task.AddTags(m.tagsID, adds)
+				}
+				if len(removes) > 0 {
+					task.RemoveTags(m.tagsID, removes)
+				}
 				m.tagsEditing = false
 				m.tagsInput.Blur()
 				m.reload()
@@ -480,6 +500,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.replaceAnnotations = true
 					m.annotateInput.SetValue("")
 					m.annotateInput.Focus()
+					m.updateTableHeight()
+					return m, nil
+				}
+			}
+		case "t":
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagsID = id
+					m.tagsEditing = true
+					m.tagsInput.SetValue(strings.Join(m.tasks[m.tbl.Cursor()].Tags, " "))
+					m.tagsInput.Focus()
 					m.updateTableHeight()
 					return m, nil
 				}
