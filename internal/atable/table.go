@@ -530,7 +530,7 @@ func addSpacingStyled(cells []string, style lipgloss.Style) []string {
 	spaced := make([]string, 0, len(cells)*2-1)
 	for i, cell := range cells {
 		if i > 0 {
-			spaced = append(spaced, style.Render(" "))
+			spaced = append(spaced, style.Copy().Padding(0, 0).Render(" "))
 		}
 		spaced = append(spaced, cell)
 	}
