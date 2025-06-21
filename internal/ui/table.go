@@ -85,6 +85,9 @@ type Model struct {
 	total      int
 	inProgress int
 	due        int
+
+	theme        Theme
+	defaultTheme Theme
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -109,6 +112,9 @@ func New(filters []string) (Model, error) {
 	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
+
+	m.defaultTheme = DefaultTheme()
+	m.theme = m.defaultTheme
 
 	if err := m.reload(); err != nil {
 		return Model{}, err
@@ -135,11 +141,12 @@ func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 		atable.WithShowHeaders(false),
 	)
 	styles := atable.DefaultStyles()
-	styles.Header = styles.Header.Foreground(lipgloss.Color("205"))
-	styles.Selected = styles.Selected.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
 	styles.Cell = styles.Cell.Padding(0, 1)
 	t.SetStyles(styles)
-	return t, styles
+	m.tbl = t
+	m.tblStyles = styles
+	m.applyTheme()
+	return m.tbl, m.tblStyles
 }
 
 func (m *Model) reload() error {
@@ -505,17 +512,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "t":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[0])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.tagsID = id
-					m.tagsEditing = true
-					m.tagsInput.SetValue("")
-					m.tagsInput.Focus()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
+			m.theme = RandomTheme()
+			m.applyTheme()
+			m.reload()
+			return m, nil
+		case "T":
+			m.theme = m.defaultTheme
+			m.applyTheme()
+			m.reload()
+			return m, nil
 		case "/", "?":
 			m.searching = true
 			m.searchInput.SetValue("")
@@ -698,8 +703,8 @@ func (m Model) View() string {
 func (m Model) statusLine() string {
 	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d | press H for help", m.total, m.inProgress, m.due)
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(lipgloss.Color(m.theme.StatusFG)).
+		Background(lipgloss.Color(m.theme.StatusBG)).
 		Width(m.tbl.Width()).
 		Render(status)
 }
@@ -707,8 +712,8 @@ func (m Model) statusLine() string {
 func (m Model) topStatusLine() string {
 	line := fmt.Sprintf("Task Samurai %s", internal.Version)
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Foreground(lipgloss.Color(m.theme.StatusFG)).
+		Background(lipgloss.Color(m.theme.StatusBG)).
 		Width(m.tbl.Width()).
 		Render(line)
 }
@@ -716,7 +721,7 @@ func (m Model) topStatusLine() string {
 func (m Model) taskToRow(t task.Task) atable.Row {
 	style := lipgloss.NewStyle()
 	if t.Start != "" {
-		style = style.Background(lipgloss.Color("6"))
+		style = style.Background(lipgloss.Color(m.theme.StartBG))
 	}
 
 	age := ""
@@ -740,10 +745,10 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 
 	return atable.Row{
 		style.Render(strconv.Itoa(t.ID)),
-		formatPriority(t.Priority, m.priWidth),
+		m.formatPriority(t.Priority, m.priWidth),
 		style.Render(age),
 		style.Render(urg),
-		formatDue(t.Due, m.dueWidth),
+		m.formatDue(t.Due, m.dueWidth),
 		style.Render(tags),
 		style.Render(annStr),
 		style.Render(t.Description),
@@ -753,7 +758,7 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 // formatDue returns a formatted due date string. Dates due today or tomorrow
 // are returned as "today" or "tomorrow" respectively. Past due dates are
 // highlighted in red.
-func formatDue(s string, width int) string {
+func (m Model) formatDue(s string, width int) string {
 	if s == "" {
 		return ""
 	}
@@ -776,20 +781,20 @@ func formatDue(s string, width int) string {
 	}
 	style := lipgloss.NewStyle().Width(width)
 	if days < 0 {
-		style = style.Background(lipgloss.Color("1"))
+		style = style.Background(lipgloss.Color(m.theme.OverdueBG))
 	}
 	return style.Render(val)
 }
 
-func formatPriority(p string, width int) string {
+func (m Model) formatPriority(p string, width int) string {
 	style := lipgloss.NewStyle().Width(width)
 	switch p {
 	case "L":
-		style = style.Background(lipgloss.Color("10"))
+		style = style.Background(lipgloss.Color(m.theme.PrioLowBG))
 	case "M":
-		style = style.Background(lipgloss.Color("12"))
+		style = style.Background(lipgloss.Color(m.theme.PrioMedBG))
 	case "H":
-		style = style.Background(lipgloss.Color("9"))
+		style = style.Background(lipgloss.Color(m.theme.PrioHighBG))
 	default:
 		return p
 	}
@@ -809,19 +814,19 @@ func (m Model) priorityView() string {
 		}
 		style := lipgloss.NewStyle()
 		if i == m.priorityIndex {
-			style = style.Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
+			style = style.Foreground(lipgloss.Color(m.theme.SelectedFG)).Background(lipgloss.Color(m.theme.SelectedBG))
 		}
 		parts = append(parts, style.Render(label))
 	}
 	return "priority: " + strings.Join(parts, " ")
 }
 
-func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
+func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	if re == nil || !re.MatchString(raw) {
 		return base.Render(raw)
 	}
 
-	highlight := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+	highlight := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.SearchBG)).Foreground(lipgloss.Color(m.theme.SearchFG))
 	var b strings.Builder
 	last := 0
 	for _, loc := range re.FindAllStringIndex(raw, -1) {
@@ -837,9 +842,9 @@ func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	return b.String()
 }
 
-func highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
+func (m Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
 	if re != nil && re.MatchString(raw) {
-		highlight := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+		highlight := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.SearchBG)).Foreground(lipgloss.Color(m.theme.SearchFG))
 		return highlight.Copy().Inherit(base).Render(display)
 	}
 	return base.Render(display)
@@ -848,7 +853,7 @@ func highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display str
 func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
 	rowStyle := lipgloss.NewStyle()
 	if t.Start != "" {
-		rowStyle = rowStyle.Background(lipgloss.Color("6"))
+		rowStyle = rowStyle.Background(lipgloss.Color(m.theme.StartBG))
 	}
 
 	age := ""
@@ -876,19 +881,19 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	}
 
 	idStr := getStyle(0).Render(strconv.Itoa(t.ID))
-	priStr := formatPriority(t.Priority, m.priWidth)
+	priStr := m.formatPriority(t.Priority, m.priWidth)
 	ageStr := getStyle(2).Render(age)
-	dueStr := formatDue(t.Due, m.dueWidth)
+	dueStr := m.formatDue(t.Due, m.dueWidth)
 	urgStr := getStyle(3).Render(urg)
 
-	tagStr := highlightCell(getStyle(5), re, tags)
+	tagStr := m.highlightCell(getStyle(5), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
 	if n := len(anns); n > 0 {
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
-	annStr := highlightCellMatch(getStyle(6), re, annRaw, annCount)
-	descStr := highlightCell(getStyle(7), re, t.Description)
+	annStr := m.highlightCellMatch(getStyle(6), re, annRaw, annCount)
+	descStr := m.highlightCell(getStyle(7), re, t.Description)
 
 	return atable.Row{
 		idStr,
@@ -914,7 +919,7 @@ func (m Model) expandedCellView() string {
 	case 0:
 		val = strconv.Itoa(t.ID)
 	case 1:
-		val = ansi.Strip(formatPriority(t.Priority, m.priWidth))
+		val = ansi.Strip(m.formatPriority(t.Priority, m.priWidth))
 	case 2:
 		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
 			days := int(time.Since(ts).Hours() / 24)
@@ -923,7 +928,7 @@ func (m Model) expandedCellView() string {
 	case 3:
 		val = fmt.Sprintf("%.1f", t.Urgency)
 	case 4:
-		val = ansi.Strip(formatDue(t.Due, m.dueWidth))
+		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case 5:
 		val = strings.Join(t.Tags, " ")
 	case 6:
@@ -1073,4 +1078,11 @@ func (m *Model) applyColumns() {
 		{Title: "Description", Width: m.descWidth},
 	}
 	m.tbl.SetColumns(cols)
+}
+
+func (m *Model) applyTheme() {
+	m.tblStyles.Header = m.tblStyles.Header.Foreground(lipgloss.Color(m.theme.HeaderFG))
+	m.tblStyles.Selected = m.tblStyles.Selected.Foreground(lipgloss.Color(m.theme.SelectedFG)).Background(lipgloss.Color(m.theme.SelectedBG))
+	m.tblStyles.Highlight = m.tblStyles.Highlight.Background(lipgloss.Color(m.theme.RowBG)).Foreground(lipgloss.Color(m.theme.RowFG))
+	m.tbl.SetStyles(m.tblStyles)
 }
