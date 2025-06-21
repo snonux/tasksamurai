@@ -54,6 +54,9 @@ type Model struct {
 	dueID      int
 	dueDate    time.Time
 
+	filterEditing bool
+	filterInput   textinput.Model
+
 	searching     bool
 	searchInput   textinput.Model
 	searchRegex   *regexp.Regexp
@@ -112,6 +115,8 @@ func New(filters []string) (Model, error) {
 	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
+	m.filterInput = textinput.New()
+	m.filterInput.Prompt = "filter: "
 
 	m.defaultTheme = DefaultTheme()
 	m.theme = m.defaultTheme
@@ -349,6 +354,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.filterEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				m.filters = strings.Fields(m.filterInput.Value())
+				m.filterEditing = false
+				m.filterInput.Blur()
+				m.reload()
+				m.updateTableHeight()
+				return m, nil
+			case tea.KeyEsc:
+				m.filterEditing = false
+				m.filterInput.Blur()
+				m.updateTableHeight()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.filterInput, cmd = m.filterInput.Update(msg)
+			return m, cmd
+		}
 		if m.searching {
 			switch msg.Type {
 			case tea.KeyEnter:
@@ -511,6 +535,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+		case "f":
+			m.filterEditing = true
+			m.filterInput.SetValue(strings.Join(m.filters, " "))
+			m.filterInput.Focus()
+			m.updateTableHeight()
+			return m, nil
 		case "t":
 			m.theme = RandomTheme()
 			m.applyTheme()
@@ -644,6 +674,7 @@ func (m Model) View() string {
 			"a: annotate task",
 			"A: replace annotations",
 			"p: set priority",
+			"f: change filter",
 			"t: randomize theme",
 			"T: reset theme",
 			"/, ?: search",
@@ -693,6 +724,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.tagsInput.View(),
+		)
+	}
+	if m.filterEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.filterInput.View(),
 		)
 	}
 	if m.searching {
@@ -980,7 +1017,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing {
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.filterEditing {
 		h--
 	}
 	if h < 1 {
