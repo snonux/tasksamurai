@@ -628,12 +628,25 @@ func (m Model) priorityView() string {
 	return "priority: " + strings.Join(parts, " ")
 }
 
-func highlightCell(rendered string, re *regexp.Regexp, raw string, width int) string {
+func highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	if re == nil || !re.MatchString(raw) {
-		return rendered
+		return base.Render(raw)
 	}
-	style := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21")).Width(width)
-	return style.Render(rendered)
+
+	highlight := lipgloss.NewStyle().Background(lipgloss.Color("226")).Foreground(lipgloss.Color("21"))
+	var b strings.Builder
+	last := 0
+	for _, loc := range re.FindAllStringIndex(raw, -1) {
+		if loc[0] > last {
+			b.WriteString(base.Render(raw[last:loc[0]]))
+		}
+		b.WriteString(base.Copy().Inherit(highlight).Render(raw[loc[0]:loc[1]]))
+		last = loc[1]
+	}
+	if last < len(raw) {
+		b.WriteString(base.Render(raw[last:]))
+	}
+	return b.String()
 }
 
 func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
@@ -661,14 +674,11 @@ func taskToRowSearch(t task.Task, re *regexp.Regexp) atable.Row {
 	ageStr := style.Render(age)
 	dueStr := formatDue(t.Due, dueWidth)
 	urgStr := style.Render(urg)
-	tagStr := style.Render(tags)
-	descStr := style.Render(t.Description)
-	annRaw := strings.Join(anns, "; ")
-	annStr := style.Render(annRaw)
 
-	tagStr = highlightCell(tagStr, re, tags, tagsWidth)
-	descStr = highlightCell(descStr, re, t.Description, descWidth)
-	annStr = highlightCell(annStr, re, annRaw, annWidth)
+	tagStr := highlightCell(style, re, tags)
+	descStr := highlightCell(style, re, t.Description)
+	annRaw := strings.Join(anns, "; ")
+	annStr := highlightCell(style, re, annRaw)
 
 	return atable.Row{
 		idStr,
