@@ -589,6 +589,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "c":
+			m.theme = RandomTheme()
+			m.applyTheme()
+			return m, nil
+		case "C":
+			m.theme = m.defaultTheme
+			m.applyTheme()
+			return m, nil
 		case "/", "?":
 			m.searching = true
 			m.searchInput.SetValue("")
@@ -714,6 +722,8 @@ func (m Model) View() string {
 			"p: set priority",
 			"f: change filter",
 			"t: edit tags",
+			"c: random theme",
+			"C: reset theme",
 			"/, ?: search",
 			"n/N: next/prev search match",
 			"esc: close help/search",

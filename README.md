@@ -49,6 +49,8 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 ### Misc
 
 - `f`: change filter
+- `c`: random theme
+- `C`: reset theme
 - `H`: toggle help
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
 
