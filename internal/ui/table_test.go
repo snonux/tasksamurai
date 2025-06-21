@@ -164,6 +164,10 @@ func TestDoneHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
+	for i := 0; i < blinkCycles; i++ {
+		mv, _ = m.Update(blinkMsg{})
+		m = mv.(Model)
+	}
 
 	data, err := os.ReadFile(doneFile)
 	if err != nil {
@@ -209,6 +213,10 @@ func TestUndoHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
+	for i := 0; i < blinkCycles; i++ {
+		mv, _ = m.Update(blinkMsg{})
+		m = mv.(Model)
+	}
 	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
 	m = mv.(Model)
 

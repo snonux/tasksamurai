@@ -72,6 +72,11 @@ type Model struct {
 
 	undoStack []string
 
+	blinkID    int
+	blinkRow   int
+	blinkOn    bool
+	blinkCount int
+
 	cellExpanded bool
 
 	windowHeight int
@@ -96,11 +101,20 @@ type Model struct {
 // editDoneMsg is emitted when the external editor process finishes.
 type editDoneMsg struct{ err error }
 
+type blinkMsg struct{}
+
+const blinkInterval = 250 * time.Millisecond
+const blinkCycles = 8
+
 // editCmd returns a command that edits the task and sends an
 // editDoneMsg once the process is complete.
 func editCmd(id int) tea.Cmd {
 	c := task.EditCmd(id)
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
+}
+
+func blinkCmd() tea.Cmd {
+	return tea.Tick(blinkInterval, func(time.Time) tea.Msg { return blinkMsg{} })
 }
 
 // New creates a new UI model with the provided rows.
@@ -222,6 +236,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Ignore any error and reload tasks once editing completes.
 		_ = msg.err
 		m.reload()
+		return m, nil
+	case blinkMsg:
+		if m.blinkID != 0 {
+			m.blinkOn = !m.blinkOn
+			m.blinkCount++
+			m.updateBlinkRow()
+			if m.blinkCount >= blinkCycles {
+				id := m.blinkID
+				m.blinkID = 0
+				m.blinkOn = false
+				m.blinkCount = 0
+				for _, tsk := range m.tasks {
+					if tsk.ID == id {
+						m.undoStack = append(m.undoStack, tsk.UUID)
+						break
+					}
+				}
+				task.Done(id)
+				m.reload()
+				return m, nil
+			}
+			return m, blinkCmd()
+		}
 		return m, nil
 	case tea.KeyMsg:
 		if m.annotating {
@@ -460,14 +497,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[0])
 				if id, err := strconv.Atoi(idStr); err == nil {
-					task.Done(id)
-					for _, tsk := range m.tasks {
-						if tsk.ID == id {
-							m.undoStack = append(m.undoStack, tsk.UUID)
-							break
-						}
-					}
-					m.reload()
+					m.blinkID = id
+					m.blinkRow = m.tbl.Cursor()
+					m.blinkOn = true
+					m.blinkCount = 0
+					m.updateBlinkRow()
+					return m, blinkCmd()
 				}
 			}
 		case "U":
@@ -542,14 +577,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateTableHeight()
 			return m, nil
 		case "t":
-			m.theme = RandomTheme()
-			m.applyTheme()
-			m.reload()
-			return m, nil
-		case "T":
-			m.theme = m.defaultTheme
-			m.applyTheme()
-			m.reload()
+			if row := m.tbl.SelectedRow(); row != nil {
+				idStr := ansi.Strip(row[0])
+				if id, err := strconv.Atoi(idStr); err == nil {
+					m.tagsID = id
+					m.tagsEditing = true
+					m.tagsInput.SetValue("")
+					m.tagsInput.Focus()
+					m.updateTableHeight()
+					return m, nil
+				}
+			}
 			return m, nil
 		case "/", "?":
 			m.searching = true
@@ -675,8 +713,7 @@ func (m Model) View() string {
 			"A: replace annotations",
 			"p: set priority",
 			"f: change filter",
-			"t: randomize theme",
-			"T: reset theme",
+			"t: edit tags",
 			"/, ?: search",
 			"n/N: next/prev search match",
 			"esc: close help/search",
@@ -763,6 +800,9 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 	style := lipgloss.NewStyle()
 	if t.Start != "" {
 		style = style.Background(lipgloss.Color(m.theme.StartBG))
+	}
+	if t.ID == m.blinkID && m.blinkOn {
+		style = style.Reverse(true)
 	}
 
 	age := ""
@@ -896,6 +936,9 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	if t.Start != "" {
 		rowStyle = rowStyle.Background(lipgloss.Color(m.theme.StartBG))
 	}
+	if t.ID == m.blinkID && m.blinkOn {
+		rowStyle = rowStyle.Reverse(true)
+	}
 
 	age := ""
 	if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
@@ -1004,6 +1047,15 @@ func (m *Model) updateSelectionHighlight(prevRow, newRow, prevCol, newCol int) {
 	if newRow >= 0 && newRow < len(rows) {
 		rows[newRow] = m.taskToRowSearch(m.tasks[newRow], m.searchRegex, m.tblStyles, newCol)
 	}
+	m.tbl.SetRows(rows)
+}
+
+func (m *Model) updateBlinkRow() {
+	if m.blinkRow < 0 || m.blinkRow >= len(m.tasks) || m.tbl.Rows() == nil {
+		return
+	}
+	rows := m.tbl.Rows()
+	rows[m.blinkRow] = m.taskToRowSearch(m.tasks[m.blinkRow], m.searchRegex, m.tblStyles, -1)
 	m.tbl.SetRows(rows)
 }
 

@@ -39,8 +39,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `a`: annotate task
 - `A`: replace annotations
 - `p`: set priority
-- `t`: randomize theme
-- `T`: reset theme
+- `t`: edit tags
 
 ### Search
 
