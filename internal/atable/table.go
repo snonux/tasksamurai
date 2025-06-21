@@ -482,6 +482,12 @@ func (m *Model) renderRow(r int) string {
 			continue
 		}
 		style := m.styles.Cell
+		if r == m.cursor {
+			style = style.
+				Background(lipgloss.Color("57")).
+				Foreground(lipgloss.Color("0")).
+				Bold(false)
+		}
 		if r == m.cursor && i == m.colCursor {
 			style = m.styles.Selected
 		}
