@@ -35,7 +35,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `D`: mark task done
 - `U`: undo last done
 - `d`: set due date
-- `r`: random due date
+- `r`: edit recurrence
 - `a`: annotate task
 - `A`: replace annotations
 - `p`: set priority
