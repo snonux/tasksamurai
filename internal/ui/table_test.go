@@ -442,6 +442,57 @@ func TestPriorityHotkey(t *testing.T) {
 	}
 }
 
+func TestAddHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	addFile := filepath.Join(tmp, "add.txt")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo \"$@\" > " + addFile + "\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
+	m = mv.(Model)
+	for _, r := range "task" {
+		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mv.(Model)
+	}
+	mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(addFile)
+	if err != nil {
+		t.Fatalf("read add: %v", err)
+	}
+
+	if strings.TrimSpace(string(data)) != "add task" {
+		t.Fatalf("add not called: %q", data)
+	}
+}
+
 func TestNavigationHotkeys(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
