@@ -1,6 +1,6 @@
 # Task Samurai
 
-![tasksamurai logo](logo.png)
+<img src="logo.png" alt="tasksamurai logo" width="150" />
 
 Task Samurai is a fast terminal interface for [Taskwarrior](https://taskwarrior.org/) written in Go using the [Bubble Tea](https://github.com/charmbracelet/bubbletea) framework. It shows your tasks in a table and lets you manage them without leaving your keyboard.
 
@@ -57,4 +57,8 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
 
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
+
+## Screenshot
+
+![Task Samurai screenshot](screenshot.png)
 
