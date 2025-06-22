@@ -1,11 +1,7 @@
 # Task Samurai
 
-<span style="display: inline-block; vertical-align: middle;">
-<img src="logo.png" alt="tasksamurai logo" width="150" />
-</span>
-<span style="display: inline-block; vertical-align: middle;">
-<img src="logo_realistic.webp" alt="tasksamurai reaalistic logo" width="150" />
-</span>
+<img src="logo.png" alt="tasksamurai logo" width="250" />
+<img src="logo_realistic.webp" alt="tasksamurai reaalistic logo" width="250" />
 
 Task Samurai is a fast terminal interface for [Taskwarrior](https://taskwarrior.org/) written in Go using the [Bubble Tea](https://github.com/charmbracelet/bubbletea) framework. It shows your tasks in a table and lets you manage them without leaving your keyboard.
 
