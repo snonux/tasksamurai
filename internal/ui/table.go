@@ -849,7 +849,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the table UI.
 func (m Model) View() string {
 	if m.showHelp {
-		return lipgloss.JoinVertical(lipgloss.Left,
+		lines := []string{
 			m.tbl.HelpView(),
 			"enter/i: edit or expand cell",
 			"E: edit task",
@@ -872,7 +872,11 @@ func (m Model) View() string {
 			"esc: close help/search",
 			"q: quit",
 			"H: help", // show help toggle line
-		)
+		}
+		for i, l := range lines {
+			lines[i] = centerLines(l, m.tbl.Width())
+		}
+		return lipgloss.JoinVertical(lipgloss.Top, lines...)
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.topStatusLine(),
@@ -1362,4 +1366,13 @@ func (m *Model) applyTheme() {
 	m.tblStyles.Selected = m.tblStyles.Selected.Foreground(lipgloss.Color(m.theme.SelectedFG)).Background(lipgloss.Color(m.theme.SelectedBG))
 	m.tblStyles.Highlight = m.tblStyles.Highlight.Background(lipgloss.Color(m.theme.RowBG)).Foreground(lipgloss.Color(m.theme.RowFG))
 	m.tbl.SetStyles(m.tblStyles)
+}
+
+func centerLines(s string, width int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	style := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
+	for i, l := range lines {
+		lines[i] = style.Render(l)
+	}
+	return strings.Join(lines, "\n")
 }
