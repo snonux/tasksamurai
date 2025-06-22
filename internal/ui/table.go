@@ -304,13 +304,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, blinkCmd()
 		}
 		return m, nil
-       case tea.KeyMsg:
-                // Ignore all key presses while a task is blinking to avoid
-                // accidentally modifying another task.
-                if m.blinkID != 0 {
-                        return m, nil
-                }
-                if m.annotating {
+	case tea.KeyMsg:
+		// Ignore all key presses while a task is blinking to avoid
+		// accidentally modifying another task.
+		if m.blinkID != 0 {
+			return m, nil
+		}
+		if m.annotating {
 			switch msg.Type {
 			case tea.KeyEnter:
 				if m.replaceAnnotations {
@@ -738,6 +738,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.theme = m.defaultTheme
 			m.applyTheme()
 			return m, nil
+		case " ":
+			m.reload()
+			return m, nil
 		case "/", "?":
 			m.searching = true
 			m.searchInput.SetValue("")
@@ -874,6 +877,7 @@ func (m Model) View() string {
 			"t: edit tags",
 			"c: random theme",
 			"C: reset theme",
+			"space: refresh tasks",
 			"/, ?: search",
 			"n/N: next/prev search match",
 			"esc: close help/search",
