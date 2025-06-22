@@ -62,3 +62,19 @@ Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy 
 
 ![Task Samurai screenshot](screenshot.png)
 
+## Installation
+
+There are two ways to install the `tasksamurai` command:
+
+```bash
+go install codeberg.org/snonux/tasksamurai/cmd/tasksamurai@latest
+```
+
+Alternatively, clone this repository and run:
+
+```bash
+go-task install
+```
+
+The second method requires [go-task](https://taskfile.dev/) to be installed.
+

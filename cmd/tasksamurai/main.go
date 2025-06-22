@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"tasksamurai/internal/task"
-	"tasksamurai/internal/ui"
+	"codeberg.org/snonux/tasksamurai/internal/task"
+	"codeberg.org/snonux/tasksamurai/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

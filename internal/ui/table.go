@@ -14,9 +14,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"tasksamurai/internal"
-	atable "tasksamurai/internal/atable"
-	"tasksamurai/internal/task"
+	"codeberg.org/snonux/tasksamurai/internal"
+	atable "codeberg.org/snonux/tasksamurai/internal/atable"
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 var priorityOptions = []string{"H", "M", "L", ""}
