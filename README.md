@@ -21,7 +21,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `↑/k` and `↓/j`: move up and down
 - `←/h` and `→/l`: move left and right
 - `b/pgup`: page up
-- `pgdn/space`: page down
+- `pgdn`: page down
 - `u` or `ctrl+u`: half page up
 - `ctrl+d`: half page down
 - `g/home/0`: go to start
@@ -53,6 +53,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `f`: change filter
 - `c`: random theme
 - `C`: reset theme
+- `space`: refresh tasks
 - `H`: toggle help
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
 
