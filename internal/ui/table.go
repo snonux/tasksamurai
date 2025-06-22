@@ -484,7 +484,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for _, tsk := range m.tasks {
 					oldIDs[tsk.ID] = struct{}{}
 				}
-				task.Add(m.addInput.Value(), nil)
+				task.AddLine(m.addInput.Value())
 				m.addingTask = false
 				m.addInput.Blur()
 				m.reload()

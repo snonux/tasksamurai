@@ -476,7 +476,7 @@ func TestAddHotkey(t *testing.T) {
 
 	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
 	m = mv.(Model)
-	for _, r := range "task" {
+	for _, r := range "foo due:today" {
 		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = mv.(Model)
 	}
@@ -488,7 +488,7 @@ func TestAddHotkey(t *testing.T) {
 		t.Fatalf("read add: %v", err)
 	}
 
-	if strings.TrimSpace(string(data)) != "add task" {
+	if strings.TrimSpace(string(data)) != "add foo due:today" {
 		t.Fatalf("add not called: %q", data)
 	}
 }
