@@ -86,6 +86,24 @@ func AddLine(line string) error {
 	return AddArgs(fields)
 }
 
+// RunArgs executes "task" with the given arguments. Each item in args is
+// passed as a separate command-line argument.
+func RunArgs(args []string) error {
+	cmd := exec.Command("task", args...)
+	return cmd.Run()
+}
+
+// RunLine splits the provided line into shell words and executes "task" with
+// the resulting arguments. This allows callers to run arbitrary Taskwarrior
+// commands directly.
+func RunLine(line string) error {
+	fields, err := shlex.Split(line)
+	if err != nil {
+		return err
+	}
+	return RunArgs(fields)
+}
+
 // Export retrieves all tasks using `task export rc.json.array=off` and parses
 // the JSON output into a slice of Task structs.
 // Export retrieves tasks using `task <filter> export rc.json.array=off` and parses

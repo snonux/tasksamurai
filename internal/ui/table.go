@@ -64,6 +64,9 @@ type Model struct {
 	addingTask bool
 	addInput   textinput.Model
 
+	runningTask bool
+	taskInput   textinput.Model
+
 	searching     bool
 	searchInput   textinput.Model
 	searchRegex   *regexp.Regexp
@@ -166,6 +169,9 @@ func New(filters []string) (Model, error) {
 
 	m.addInput = textinput.New()
 	m.addInput.Prompt = "add: "
+
+	m.taskInput = textinput.New()
+	m.taskInput.Prompt = "task: "
 
 	m.defaultTheme = DefaultTheme()
 	m.theme = m.defaultTheme
@@ -517,6 +523,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addInput, cmd = m.addInput.Update(msg)
 			return m, cmd
 		}
+		if m.runningTask {
+			switch msg.Type {
+			case tea.KeyEnter:
+				oldIDs := make(map[int]struct{})
+				for _, tsk := range m.tasks {
+					oldIDs[tsk.ID] = struct{}{}
+				}
+				task.RunLine(m.taskInput.Value())
+				m.runningTask = false
+				m.taskInput.Blur()
+				m.reload()
+				var newID int
+				row := -1
+				for i, tsk := range m.tasks {
+					if _, ok := oldIDs[tsk.ID]; !ok {
+						newID = tsk.ID
+						row = i
+						break
+					}
+				}
+				m.updateTableHeight()
+				if row >= 0 {
+					prevRow := m.tbl.Cursor()
+					prevCol := m.tbl.ColumnCursor()
+					m.tbl.SetCursor(row)
+					m.tbl.SetColumnCursor(7)
+					m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+					return m, m.startBlink(newID, false)
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.runningTask = false
+				m.taskInput.Blur()
+				m.updateTableHeight()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.taskInput, cmd = m.taskInput.Update(msg)
+			return m, cmd
+		}
 		if m.searching {
 			switch msg.Type {
 			case tea.KeyEnter:
@@ -710,6 +756,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addInput.Focus()
 			m.updateTableHeight()
 			return m, nil
+		case "T":
+			m.runningTask = true
+			m.taskInput.SetValue("")
+			m.taskInput.Focus()
+			m.updateTableHeight()
+			return m, nil
 		case "t":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
@@ -853,6 +905,7 @@ func (m Model) View() string {
 			m.tbl.HelpView(),
 			"enter/i: edit or expand cell",
 			"E: edit task",
+			"T: run task command",
 			"+: add task",
 			"s: toggle start/stop",
 			"d: mark task done",
@@ -932,6 +985,12 @@ func (m Model) View() string {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
 			m.addInput.View(),
+		)
+	}
+	if m.runningTask {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.taskInput.View(),
 		)
 	}
 	if m.searching {
@@ -1247,7 +1306,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.filterEditing || m.addingTask {
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.filterEditing || m.addingTask || m.runningTask {
 		h--
 	}
 	if h < 1 {
