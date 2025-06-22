@@ -76,6 +76,8 @@ type Model struct {
 
 	undoStack []string
 
+	editID int
+
 	blinkID    int
 	blinkRow   int
 	blinkOn    bool
@@ -120,6 +122,24 @@ func editCmd(id int) tea.Cmd {
 
 func blinkCmd() tea.Cmd {
 	return tea.Tick(blinkInterval, func(time.Time) tea.Msg { return blinkMsg{} })
+}
+
+func (m *Model) startBlink(id int) tea.Cmd {
+	m.blinkID = id
+	m.blinkRow = -1
+	for i, tsk := range m.tasks {
+		if tsk.ID == id {
+			m.blinkRow = i
+			break
+		}
+	}
+	if m.blinkRow == -1 {
+		return nil
+	}
+	m.blinkOn = true
+	m.blinkCount = 0
+	m.updateBlinkRow()
+	return blinkCmd()
 }
 
 // New creates a new UI model with the provided rows.
@@ -244,7 +264,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Ignore any error and reload tasks once editing completes.
 		_ = msg.err
 		m.reload()
-		return m, nil
+		cmd := m.startBlink(m.editID)
+		m.editID = 0
+		return m, cmd
 	case blinkMsg:
 		if m.blinkID != 0 {
 			m.blinkOn = !m.blinkOn
@@ -281,8 +303,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.annotating = false
 				m.annotateInput.Blur()
 				m.reload()
+				cmd := m.startBlink(m.annotateID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.annotating = false
 				m.replaceAnnotations = false
@@ -301,8 +324,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.descEditing = false
 				m.descInput.Blur()
 				m.reload()
+				cmd := m.startBlink(m.descID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.descEditing = false
 				m.descInput.Blur()
@@ -341,8 +365,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tagsEditing = false
 				m.tagsInput.Blur()
 				m.reload()
+				cmd := m.startBlink(m.tagsID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.tagsEditing = false
 				m.tagsInput.Blur()
@@ -359,8 +384,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02"))
 				m.dueEditing = false
 				m.reload()
+				cmd := m.startBlink(m.dueID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.dueEditing = false
 				m.updateTableHeight()
@@ -385,8 +411,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.recurEditing = false
 				m.recurInput.Blur()
 				m.reload()
+				cmd := m.startBlink(m.recurID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.recurEditing = false
 				m.recurInput.Blur()
@@ -403,8 +430,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.SetPriority(m.priorityID, priorityOptions[m.priorityIndex])
 				m.prioritySelecting = false
 				m.reload()
+				cmd := m.startBlink(m.priorityID)
 				m.updateTableHeight()
-				return m, nil
+				return m, cmd
 			case tea.KeyEsc:
 				m.prioritySelecting = false
 				m.updateTableHeight()
@@ -498,6 +526,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.editID = id
 					return m, editCmd(id)
 				}
 			}
@@ -518,6 +547,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						task.Start(id)
 					}
 					m.reload()
+					cmd := m.startBlink(id)
+					return m, cmd
 				}
 			}
 		case "D":
@@ -538,6 +569,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.undoStack = m.undoStack[:n-1]
 				task.SetStatusUUID(uuid, "pending")
 				m.reload()
+				var id int
+				for _, tsk := range m.tasks {
+					if tsk.UUID == uuid {
+						id = tsk.ID
+						break
+					}
+				}
+				cmd := m.startBlink(id)
+				return m, cmd
 			}
 		case "d":
 			if row := m.tbl.SelectedRow(); row != nil {
@@ -558,6 +598,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 					task.SetDueDate(id, due)
 					m.reload()
+					cmd := m.startBlink(id)
+					return m, cmd
 				}
 			}
 		case "R":
@@ -897,7 +939,7 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 		style.Render(tags),
 		style.Render(annStr),
 		style.Render(t.Description),
-		style.Render(urg),
+		style.Render(m.formatUrgency(urg, m.urgWidth)),
 	}
 }
 
@@ -945,6 +987,13 @@ func (m Model) formatPriority(p string, width int) string {
 		return p
 	}
 	return style.Render(p)
+}
+
+func (m Model) formatUrgency(u string, width int) string {
+	if w := width - len(u); w > 0 {
+		u = strings.Repeat(" ", w) + u
+	}
+	return u
 }
 
 func (m Model) dueView() string {
@@ -1043,7 +1092,7 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	}
 	annStr := m.highlightCellMatch(getStyle(6), re, annRaw, annCount)
 	descStr := m.highlightCell(getStyle(7), re, t.Description)
-	urgStr := getStyle(8).Render(urg)
+	urgStr := getStyle(8).Render(m.formatUrgency(urg, m.urgWidth))
 
 	return atable.Row{
 		priStr,
