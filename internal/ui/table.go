@@ -114,7 +114,9 @@ type editDoneMsg struct{ err error }
 
 type blinkMsg struct{}
 
-const blinkInterval = 250 * time.Millisecond
+// blinkInterval controls how quickly the row flashes when a task changes.
+// A shorter interval results in a faster blink.
+const blinkInterval = 150 * time.Millisecond
 const blinkCycles = 8
 
 // editCmd returns a command that edits the task and sends an
@@ -302,8 +304,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, blinkCmd()
 		}
 		return m, nil
-	case tea.KeyMsg:
-		if m.annotating {
+       case tea.KeyMsg:
+                // Ignore all key presses while a task is blinking to avoid
+                // accidentally modifying another task.
+                if m.blinkID != 0 {
+                        return m, nil
+                }
+                if m.annotating {
 			switch msg.Type {
 			case tea.KeyEnter:
 				if m.replaceAnnotations {
