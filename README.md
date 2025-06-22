@@ -35,7 +35,6 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `d`: mark task done
 - `U`: undo last done
 - `D`: set due date
-- `T`: run task command
 - `+`: add task
 - `r`: random due date
 - `R`: edit recurrence
@@ -58,5 +57,4 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
 
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
-Example: press `T`, type `+bg modify +huhu` to tag all `+bg` tasks with `+huhu`.
 
