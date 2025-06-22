@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/shlex"
 )
 
 // Task represents a taskwarrior task as returned by `task export`.
@@ -54,7 +56,7 @@ func SetDebugLog(path string) error {
 
 // Add creates a new task with the given description and tags.
 func Add(description string, tags []string) error {
-	args := []string{"add"}
+	var args []string
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '+' {
 			t = "+" + t
@@ -62,9 +64,26 @@ func Add(description string, tags []string) error {
 		args = append(args, t)
 	}
 	args = append(args, description)
+	return AddArgs(args)
+}
 
-	cmd := exec.Command("task", args...)
+// AddArgs runs "task add" with the provided arguments. Each element in args
+// is passed as a separate command-line argument, allowing the caller to
+// specify additional modifiers like due dates or tags.
+func AddArgs(args []string) error {
+	cmd := exec.Command("task", append([]string{"add"}, args...)...)
 	return cmd.Run()
+}
+
+// AddLine splits the given line into shell words and runs "task add" with the
+// resulting arguments. This allows users to pass raw Taskwarrior parameters
+// such as "due:today" directly.
+func AddLine(line string) error {
+	fields, err := shlex.Split(line)
+	if err != nil {
+		return err
+	}
+	return AddArgs(fields)
 }
 
 // Export retrieves all tasks using `task export rc.json.array=off` and parses
