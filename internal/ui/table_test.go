@@ -162,7 +162,7 @@ func TestDoneHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	m = mv.(Model)
 	for i := 0; i < blinkCycles; i++ {
 		mv, _ = m.Update(blinkMsg{})
@@ -211,7 +211,7 @@ func TestUndoHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	m = mv.(Model)
 	for i := 0; i < blinkCycles; i++ {
 		mv, _ = m.Update(blinkMsg{})
@@ -269,7 +269,7 @@ func TestDueDateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
 	m = mv.(Model)
 	for i := 0; i < 3; i++ {
 		mv, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})

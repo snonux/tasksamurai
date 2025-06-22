@@ -76,10 +76,11 @@ type Model struct {
 
 	undoStack []string
 
-	blinkID    int
-	blinkRow   int
-	blinkOn    bool
-	blinkCount int
+	blinkID        int
+	blinkRow       int
+	blinkOn        bool
+	blinkCount     int
+	doneAfterBlink bool
 
 	cellExpanded bool
 
@@ -255,14 +256,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.blinkID = 0
 				m.blinkOn = false
 				m.blinkCount = 0
-				for _, tsk := range m.tasks {
-					if tsk.ID == id {
-						m.undoStack = append(m.undoStack, tsk.UUID)
-						break
+				if m.doneAfterBlink {
+					for _, tsk := range m.tasks {
+						if tsk.ID == id {
+							m.undoStack = append(m.undoStack, tsk.UUID)
+							break
+						}
 					}
+					task.Done(id)
+					m.reload()
+					m.doneAfterBlink = false
+					return m, nil
 				}
-				task.Done(id)
-				m.reload()
+				m.doneAfterBlink = false
 				return m, nil
 			}
 			return m, blinkCmd()
@@ -520,7 +526,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 				}
 			}
-		case "D":
+		case "d":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
@@ -528,6 +534,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.blinkRow = m.tbl.Cursor()
 					m.blinkOn = true
 					m.blinkCount = 0
+					m.doneAfterBlink = true
 					m.updateBlinkRow()
 					return m, blinkCmd()
 				}
@@ -539,7 +546,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				task.SetStatusUUID(uuid, "pending")
 				m.reload()
 			}
-		case "d":
+		case "D":
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
@@ -759,9 +766,9 @@ func (m Model) View() string {
 			"enter/i: edit or expand cell",
 			"E: edit task",
 			"s: toggle start/stop",
-			"D: mark task done",
+			"d: mark task done",
 			"U: undo done",
-			"d: set due date",
+			"D: set due date",
 			"r: random due date",
 			"R: edit recurrence",
 			"a: annotate task",
