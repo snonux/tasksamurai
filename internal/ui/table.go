@@ -305,10 +305,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		// Ignore all key presses while a task is blinking to avoid
-		// accidentally modifying another task.
+		// Only allow navigation while a task row is blinking. This
+		// prevents accidental modifications to other tasks but still
+		// lets the user move around the table.
 		if m.blinkID != 0 {
-			return m, nil
+			prevRow := m.tbl.Cursor()
+			prevCol := m.tbl.ColumnCursor()
+			var cmd tea.Cmd
+			m.tbl, cmd = m.tbl.Update(msg)
+			if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
+				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+			}
+			return m, cmd
 		}
 		if m.annotating {
 			switch msg.Type {
