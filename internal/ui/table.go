@@ -112,6 +112,7 @@ type Model struct {
 
 	theme        Theme
 	defaultTheme Theme
+	disco        bool
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -147,6 +148,10 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 	}
 	if m.blinkRow == -1 {
 		return nil
+	}
+	if m.disco {
+		m.theme = RandomTheme()
+		m.applyTheme()
 	}
 	m.blinkOn = true
 	m.blinkCount = 0
@@ -764,6 +769,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.theme = m.defaultTheme
 			m.applyTheme()
 			return m, nil
+		case "x":
+			m.disco = !m.disco
+			return m, nil
 		case " ":
 			m.reload()
 			return m, nil
@@ -904,6 +912,7 @@ func (m Model) View() string {
 			"t: edit tags",
 			"c: random theme",
 			"C: reset theme",
+			"x: toggle disco mode",
 			"space: refresh tasks",
 			"/, ?: search",
 			"n/N: next/prev search match",
@@ -1404,6 +1413,11 @@ func (m *Model) applyTheme() {
 	m.tblStyles.Selected = m.tblStyles.Selected.Foreground(lipgloss.Color(m.theme.SelectedFG)).Background(lipgloss.Color(m.theme.SelectedBG))
 	m.tblStyles.Highlight = m.tblStyles.Highlight.Background(lipgloss.Color(m.theme.RowBG)).Foreground(lipgloss.Color(m.theme.RowFG))
 	m.tbl.SetStyles(m.tblStyles)
+}
+
+// SetDisco enables or disables disco mode.
+func (m *Model) SetDisco(d bool) {
+	m.disco = d
 }
 
 func centerLines(s string, width int) string {

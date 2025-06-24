@@ -14,6 +14,7 @@ import (
 func main() {
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	browserCmd := flag.String("browser-cmd", "firefox", "command used to open URLs")
+	disco := flag.Bool("disco", false, "enable disco mode")
 	flag.Parse()
 
 	if err := task.SetDebugLog(*debugLog); err != nil {
@@ -26,6 +27,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "failed to load tasks:", err)
 		os.Exit(1)
 	}
+
+	m.SetDisco(*disco)
 
 	// Clear the screen before starting the TUI to avoid leaving any
 	// previous command line artefacts behind.
