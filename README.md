@@ -33,6 +33,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `e` or `E`: edit task
 - `s`: toggle start/stop
 - `d`: mark task done
+- `o`: open URL from description
 - `U`: undo last done
 - `D`: set due date
 - `+`: add task

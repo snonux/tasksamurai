@@ -41,7 +41,7 @@ func TestAnnotateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestDoneHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestUndoHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -237,6 +237,55 @@ func TestUndoHotkey(t *testing.T) {
 	}
 }
 
+func TestOpenURLHotkey(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	openFile := filepath.Join(tmp, "open.txt")
+	browserPath := filepath.Join(tmp, "browser")
+
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"see https://example.com\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	browserScript := "#!/bin/sh\n" +
+		"echo $1 > " + openFile + "\n"
+	if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, browserPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	m = mv.(Model)
+
+	data, err := os.ReadFile(openFile)
+	if err != nil {
+		t.Fatalf("read open: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "https://example.com" {
+		t.Fatalf("browser not called with url: %q", data)
+	}
+}
+
 func TestDueDateHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
@@ -264,7 +313,7 @@ func TestDueDateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -316,7 +365,7 @@ func TestRandomDueDateHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -371,7 +420,7 @@ func TestRecurrenceHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -422,7 +471,7 @@ func TestPriorityHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -469,7 +518,7 @@ func TestAddHotkey(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -519,7 +568,7 @@ func TestNavigationHotkeys(t *testing.T) {
 		os.Unsetenv("TASKRC")
 	})
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -576,7 +625,7 @@ func TestEscClosesHelp(t *testing.T) {
 	taskPath := setupBasicTask(t, tmp)
 	setupEnv(t, taskPath)
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -599,7 +648,7 @@ func TestSearchExitHotkeys(t *testing.T) {
 	taskPath := setupBasicTask(t, tmp)
 	setupEnv(t, taskPath)
 
-	m, err := New(nil)
+	m, err := New(nil, "firefox")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
