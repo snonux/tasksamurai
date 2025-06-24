@@ -54,6 +54,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 - `f`: change filter
 - `c`: random theme
 - `C`: reset theme
+- `x`: toggle disco mode
 - `space`: refresh tasks
 - `H`: toggle help
 - `q` or `esc`: close search/help or quit (press `q` when nothing is open)
@@ -79,3 +80,7 @@ go-task install
 ```
 
 The second method requires [go-task](https://taskfile.dev/) to be installed.
+
+### Flags
+
+- `--disco`: start Task Samurai in disco mode, changing the theme every time a task is modified.
