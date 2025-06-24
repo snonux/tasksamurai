@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math/rand"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ import (
 )
 
 var priorityOptions = []string{"H", "M", "L", ""}
+
+var urlRegex = regexp.MustCompile(`https?://\S+`)
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -78,6 +81,8 @@ type Model struct {
 	tasks   []task.Task
 
 	undoStack []string
+
+	browserCmd string
 
 	editID int
 
@@ -150,8 +155,8 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 }
 
 // New creates a new UI model with the provided rows.
-func New(filters []string) (Model, error) {
-	m := Model{filters: filters}
+func New(filters []string, browserCmd string) (Model, error) {
+	m := Model{filters: filters, browserCmd: browserCmd}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
@@ -625,6 +630,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.startBlink(id, true)
 				}
 			}
+		case "o":
+			if row := m.tbl.SelectedRow(); row != nil {
+				desc := m.tasks[m.tbl.Cursor()].Description
+				re := regexp.MustCompile(`https?://\S+`)
+				url := re.FindString(desc)
+				if url != "" {
+					_ = exec.Command(m.browserCmd, url).Run()
+					idStr := ansi.Strip(row[1])
+					if id, err := strconv.Atoi(idStr); err == nil {
+						return m, m.startBlink(id, false)
+					}
+				}
+			}
 		case "U":
 			if n := len(m.undoStack); n > 0 {
 				uuid := m.undoStack[n-1]
@@ -874,6 +892,7 @@ func (m Model) View() string {
 			"+: add task",
 			"s: toggle start/stop",
 			"d: mark task done",
+			"o: open URL",
 			"U: undo done",
 			"D: set due date",
 			"r: random due date",
