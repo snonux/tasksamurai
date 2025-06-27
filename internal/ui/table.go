@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,11 +24,8 @@ var priorityOptions = []string{"H", "M", "L", ""}
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
 	searchRegexCache = make(map[string]*regexp.Regexp)
+	rng              = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 type cellMatch struct {
 	row int
@@ -115,9 +111,9 @@ type Model struct {
 
 	theme        Theme
 	defaultTheme Theme
-	disco        bool
+	disco        bool   // disco mode changes theme on every task modification
 
-	statusMsg string
+	statusMsg string // temporary status message shown in status bar
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -128,6 +124,9 @@ type blinkMsg struct{}
 // blinkInterval controls how quickly the row flashes when a task changes.
 // A shorter interval results in a faster blink.
 const blinkInterval = 150 * time.Millisecond
+
+// blinkCycles is the number of times to blink before stopping.
+// The total blink duration is blinkInterval * blinkCycles.
 const blinkCycles = 8
 
 // editCmd returns a command that edits the task and sends an
@@ -290,663 +289,97 @@ func (m *Model) reload() error {
 func (m Model) Init() tea.Cmd { return nil }
 
 // Update handles key and window events.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.tbl.SetWidth(msg.Width)
-		m.windowHeight = msg.Height
-		m.computeColumnWidths()
-		m.updateTableHeight()
-		return m, nil
+		// Handle resize in all modes, including during input
+		return m.handleWindowResize(msg)
 	case editDoneMsg:
-		// Ignore any error and reload tasks once editing completes.
-		_ = msg.err
-		m.reload()
-		cmd := m.startBlink(m.editID, false)
-		m.editID = 0
-		return m, cmd
+		return m.handleEditDone(msg)
 	case blinkMsg:
-		if m.blinkID != 0 {
-			m.blinkOn = !m.blinkOn
-			m.blinkCount++
-			m.updateBlinkRow()
-			if m.blinkCount >= blinkCycles {
-				id := m.blinkID
-				mark := m.blinkMarkDone
-				m.blinkID = 0
-				m.blinkOn = false
-				m.blinkCount = 0
-				m.blinkMarkDone = false
-				if mark {
-					for _, tsk := range m.tasks {
-						if tsk.ID == id {
-							m.undoStack = append(m.undoStack, tsk.UUID)
-							break
-						}
-					}
-					task.Done(id)
-				}
-				m.reload()
-				return m, nil
-			}
-			return m, blinkCmd()
-		}
-		return m, nil
+		return m.handleBlinkMsg()
 	case struct{ clearStatus bool }:
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyMsg:
-		// Only allow navigation while a task row is blinking. This
-		// prevents accidental modifications to other tasks but still
-		// lets the user move around the table.
+		// Handle blinking state first
 		if m.blinkID != 0 {
-			prevRow := m.tbl.Cursor()
-			prevCol := m.tbl.ColumnCursor()
-			var cmd tea.Cmd
-			m.tbl, cmd = m.tbl.Update(msg)
-			if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
-				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-			}
-			return m, cmd
+			return m.handleBlinkingState(msg)
 		}
-		if m.annotating {
-			switch msg.Type {
-			case tea.KeyEnter:
-				if m.replaceAnnotations {
-					task.ReplaceAnnotations(m.annotateID, m.annotateInput.Value())
-					m.replaceAnnotations = false
-				} else {
-					task.Annotate(m.annotateID, m.annotateInput.Value())
-				}
-				m.annotating = false
-				m.annotateInput.Blur()
-				m.reload()
-				cmd := m.startBlink(m.annotateID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.annotating = false
-				m.replaceAnnotations = false
-				m.annotateInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.annotateInput, cmd = m.annotateInput.Update(msg)
-			return m, cmd
+		
+		// Check if we're in any editing mode
+		if handled, model, cmd := m.handleEditingModes(msg); handled {
+			return model, cmd
 		}
-		if m.descEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				task.SetDescription(m.descID, m.descInput.Value())
-				m.descEditing = false
-				m.descInput.Blur()
-				m.reload()
-				cmd := m.startBlink(m.descID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.descEditing = false
-				m.descInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.descInput, cmd = m.descInput.Update(msg)
-			return m, cmd
-		}
-		if m.tagsEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				words := strings.Fields(m.tagsInput.Value())
-				var adds, removes []string
-				for _, w := range words {
-					if strings.HasPrefix(w, "-") {
-						if len(w) > 1 {
-							removes = append(removes, w[1:])
-						}
-					} else {
-						if strings.HasPrefix(w, "+") {
-							w = w[1:]
-						}
-						if w != "" {
-							adds = append(adds, w)
-						}
-					}
-				}
-				if len(adds) > 0 {
-					task.AddTags(m.tagsID, adds)
-				}
-				if len(removes) > 0 {
-					task.RemoveTags(m.tagsID, removes)
-				}
-				m.tagsEditing = false
-				m.tagsInput.Blur()
-				m.reload()
-				cmd := m.startBlink(m.tagsID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.tagsEditing = false
-				m.tagsInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.tagsInput, cmd = m.tagsInput.Update(msg)
-			return m, cmd
-		}
-		if m.dueEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02"))
-				m.dueEditing = false
-				m.reload()
-				cmd := m.startBlink(m.dueID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.dueEditing = false
-				m.updateTableHeight()
-				return m, nil
-			}
-			switch msg.String() {
-			case "h", "left":
-				m.dueDate = m.dueDate.AddDate(0, 0, -1)
-			case "l", "right":
-				m.dueDate = m.dueDate.AddDate(0, 0, 1)
-			case "k", "up":
-				m.dueDate = m.dueDate.AddDate(0, 0, -7)
-			case "j", "down":
-				m.dueDate = m.dueDate.AddDate(0, 0, 7)
-			}
-			return m, nil
-		}
-		if m.recurEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				task.SetRecurrence(m.recurID, m.recurInput.Value())
-				m.recurEditing = false
-				m.recurInput.Blur()
-				m.reload()
-				cmd := m.startBlink(m.recurID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.recurEditing = false
-				m.recurInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.recurInput, cmd = m.recurInput.Update(msg)
-			return m, cmd
-		}
-		if m.prioritySelecting {
-			switch msg.Type {
-			case tea.KeyEnter:
-				task.SetPriority(m.priorityID, priorityOptions[m.priorityIndex])
-				m.prioritySelecting = false
-				m.reload()
-				cmd := m.startBlink(m.priorityID, false)
-				m.updateTableHeight()
-				return m, cmd
-			case tea.KeyEsc:
-				m.prioritySelecting = false
-				m.updateTableHeight()
-				return m, nil
-			}
-			switch msg.String() {
-			case "h", "left":
-				m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
-			case "l", "right":
-				m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
-			}
-			return m, nil
-		}
-		if m.filterEditing {
-			switch msg.Type {
-			case tea.KeyEnter:
-				m.filters = strings.Fields(m.filterInput.Value())
-				m.filterEditing = false
-				m.filterInput.Blur()
-				m.reload()
-				m.updateTableHeight()
-				return m, nil
-			case tea.KeyEsc:
-				m.filterEditing = false
-				m.filterInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.filterInput, cmd = m.filterInput.Update(msg)
-			return m, cmd
-		}
-		if m.addingTask {
-			switch msg.Type {
-			case tea.KeyEnter:
-				oldIDs := make(map[int]struct{})
-				for _, tsk := range m.tasks {
-					oldIDs[tsk.ID] = struct{}{}
-				}
-				task.AddLine(m.addInput.Value())
-				m.addingTask = false
-				m.addInput.Blur()
-				m.reload()
-				var newID int
-				row := -1
-				for i, tsk := range m.tasks {
-					if _, ok := oldIDs[tsk.ID]; !ok {
-						newID = tsk.ID
-						row = i
-						break
-					}
-				}
-				m.updateTableHeight()
-				if row >= 0 {
-					prevRow := m.tbl.Cursor()
-					prevCol := m.tbl.ColumnCursor()
-					m.tbl.SetCursor(row)
-					m.tbl.SetColumnCursor(7)
-					m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-					return m, m.startBlink(newID, false)
-				}
-				return m, nil
-			case tea.KeyEsc:
-				m.addingTask = false
-				m.addInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.addInput, cmd = m.addInput.Update(msg)
-			return m, cmd
-		}
-		if m.searching {
-			switch msg.Type {
-			case tea.KeyEnter:
-				pattern := m.searchInput.Value()
-				if pattern != "" {
-					// Check cache first
-					if cached, ok := searchRegexCache[pattern]; ok {
-						m.searchRegex = cached
-					} else {
-						// Compile and cache if not found
-						re, err := regexp.Compile(pattern)
-						if err == nil {
-							m.searchRegex = re
-							// Limit cache size to prevent memory leak
-							if len(searchRegexCache) > 100 {
-								// Clear cache when it gets too large
-								searchRegexCache = make(map[string]*regexp.Regexp)
-							}
-							searchRegexCache[pattern] = re
-						} else {
-							m.searchRegex = nil
-						}
-					}
-				} else {
-					m.searchRegex = nil
-				}
-				m.searching = false
-				m.searchInput.Blur()
-				m.reload()
-				m.updateTableHeight()
-				if len(m.searchMatches) > 0 {
-					match := m.searchMatches[m.searchIndex]
-					prevRow := m.tbl.Cursor()
-					prevCol := m.tbl.ColumnCursor()
-					m.tbl.SetCursor(match.row)
-					m.tbl.SetColumnCursor(match.col)
-					m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-				}
-				return m, nil
-			case tea.KeyEsc:
-				m.searching = false
-				m.searchInput.Blur()
-				m.updateTableHeight()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.searchInput, cmd = m.searchInput.Update(msg)
-			return m, cmd
-		}
-		switch msg.String() {
-		case "H":
-			m.showHelp = true
-			return m, nil
-		case "q", "esc":
-			if m.cellExpanded {
-				m.cellExpanded = false
-				m.updateTableHeight()
-				return m, nil
-			}
-			if m.showHelp {
-				m.showHelp = false
-				return m, nil
-			}
-			if m.searchRegex != nil {
-				m.searchRegex = nil
-				m.searchMatches = nil
-				m.searchIndex = 0
-				m.reload()
-				return m, nil
-			}
-			if msg.String() == "q" {
-				return m, tea.Quit
-			}
-			return m, nil
-		case "e", "E":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.editID = id
-					return m, editCmd(id)
-				}
-			}
-		case "s":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					started := false
-					for _, tsk := range m.tasks {
-						if tsk.ID == id {
-							started = tsk.Start != ""
-							break
-						}
-					}
-					if started {
-						task.Stop(id)
-					} else {
-						task.Start(id)
-					}
-					m.reload()
-					cmd := m.startBlink(id, false)
-					return m, cmd
-				}
-			}
-		case "d":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					return m, m.startBlink(id, true)
-				}
-			}
-		case "o":
-			if row := m.tbl.SelectedRow(); row != nil {
-				desc := m.tasks[m.tbl.Cursor()].Description
-				url := urlRegex.FindString(desc)
-				if url != "" {
-					if err := exec.Command(m.browserCmd, url).Run(); err != nil {
-						// Show error in status bar
-						m.statusMsg = fmt.Sprintf("Error opening browser: %v", err)
-						// Clear status message after delay
-						cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
-							return struct{ clearStatus bool }{true}
-						})
-						return m, cmd
-					} else {
-						idStr := ansi.Strip(row[1])
-						if id, err := strconv.Atoi(idStr); err == nil {
-							return m, m.startBlink(id, false)
-						}
-					}
-				}
-			}
-		case "U":
-			if n := len(m.undoStack); n > 0 {
-				uuid := m.undoStack[n-1]
-				m.undoStack = m.undoStack[:n-1]
-				task.SetStatusUUID(uuid, "pending")
-				m.reload()
-				var id int
-				for _, tsk := range m.tasks {
-					if tsk.UUID == uuid {
-						id = tsk.ID
-						break
-					}
-				}
-				cmd := m.startBlink(id, false)
-				return m, cmd
-			}
-		case "D":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.dueID = id
-					m.dueEditing = true
-					m.dueDate = time.Now()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-		case "r":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					days := rand.Intn(31) + 7
-					due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
-					task.SetDueDate(id, due)
-					m.reload()
-					cmd := m.startBlink(id, false)
-					return m, cmd
-				}
-			}
-		case "R":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.recurID = id
-					m.recurEditing = true
-					m.recurInput.SetValue(m.tasks[m.tbl.Cursor()].Recur)
-					m.recurInput.Focus()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-		case "p":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.priorityID = id
-					m.prioritySelecting = true
-					m.priorityIndex = 0
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-		case "a":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.annotateID = id
-					m.annotating = true
-					m.replaceAnnotations = false
-					m.annotateInput.SetValue("")
-					m.annotateInput.Focus()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-		case "A":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.annotateID = id
-					m.annotating = true
-					m.replaceAnnotations = true
-					m.annotateInput.SetValue("")
-					m.annotateInput.Focus()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-		case "f":
-			m.clearEditingModes()
-			m.filterEditing = true
-			m.filterInput.SetValue(strings.Join(m.filters, " "))
-			m.filterInput.Focus()
-			m.updateTableHeight()
-			return m, nil
-		case "+":
-			m.clearEditingModes()
-			m.addingTask = true
-			m.addInput.SetValue("")
-			m.addInput.Focus()
-			m.updateTableHeight()
-			return m, nil
-		case "t":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					m.clearEditingModes()
-					m.tagsID = id
-					m.tagsEditing = true
-					m.tagsInput.SetValue("")
-					m.tagsInput.Focus()
-					m.updateTableHeight()
-					return m, nil
-				}
-			}
-			return m, nil
-		case "c":
-			m.theme = RandomTheme()
-			m.applyTheme()
-			return m, nil
-		case "C":
-			m.theme = m.defaultTheme
-			m.applyTheme()
-			return m, nil
-		case "x":
-			m.disco = !m.disco
-			return m, nil
-		case " ":
-			m.reload()
-			return m, nil
-		case "/", "?":
-			m.clearEditingModes()
-			m.searching = true
-			m.searchInput.SetValue("")
-			m.searchInput.Focus()
-			m.updateTableHeight()
-			return m, nil
-		case "n":
-			if len(m.searchMatches) > 0 {
-				m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
-				match := m.searchMatches[m.searchIndex]
-				prevRow := m.tbl.Cursor()
-				prevCol := m.tbl.ColumnCursor()
-				m.tbl.SetCursor(match.row)
-				m.tbl.SetColumnCursor(match.col)
-				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-				return m, nil
-			}
-		case "N":
-			if len(m.searchMatches) > 0 {
-				m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
-				match := m.searchMatches[m.searchIndex]
-				prevRow := m.tbl.Cursor()
-				prevCol := m.tbl.ColumnCursor()
-				m.tbl.SetCursor(match.row)
-				m.tbl.SetColumnCursor(match.col)
-				m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-				return m, nil
-			}
-		case "enter", "i":
-			if row := m.tbl.SelectedRow(); row != nil {
-				idStr := ansi.Strip(row[1])
-				if id, err := strconv.Atoi(idStr); err == nil {
-					col := m.tbl.ColumnCursor()
-					switch col {
-					case 0:
-						m.clearEditingModes()
-						m.priorityID = id
-						m.prioritySelecting = true
-						switch m.tasks[m.tbl.Cursor()].Priority {
-						case "H":
-							m.priorityIndex = 0
-						case "M":
-							m.priorityIndex = 1
-						case "L":
-							m.priorityIndex = 2
-						default:
-							m.priorityIndex = 3
-						}
-						m.updateTableHeight()
-						return m, nil
-					case 3:
-						m.dueID = id
-						if ts, err := time.Parse("20060102T150405Z", m.tasks[m.tbl.Cursor()].Due); err == nil {
-							m.dueDate = ts
-						} else {
-							m.dueDate = time.Now()
-						}
-						m.clearEditingModes()
-						m.dueEditing = true
-						m.updateTableHeight()
-						return m, nil
-					case 4:
-						m.clearEditingModes()
-						m.recurID = id
-						m.recurEditing = true
-						m.recurInput.SetValue(m.tasks[m.tbl.Cursor()].Recur)
-						m.recurInput.Focus()
-						m.updateTableHeight()
-						return m, nil
-					case 5:
-						m.tagsID = id
-						m.tagsEditing = true
-						m.tagsInput.SetValue("")
-						m.tagsInput.Focus()
-						m.updateTableHeight()
-						return m, nil
-					case 6:
-						m.annotateID = id
-						m.annotating = true
-						m.replaceAnnotations = true
-						var anns []string
-						for _, a := range m.tasks[m.tbl.Cursor()].Annotations {
-							anns = append(anns, a.Description)
-						}
-						m.annotateInput.SetValue(strings.Join(anns, "; "))
-						m.annotateInput.Focus()
-						m.updateTableHeight()
-						return m, nil
-					case 7:
-						m.clearEditingModes()
-						m.descID = id
-						m.descEditing = true
-						m.descInput.SetValue(m.tasks[m.tbl.Cursor()].Description)
-						m.descInput.Focus()
-						m.updateTableHeight()
-						return m, nil
-					}
-				}
-			}
-			m.cellExpanded = !m.cellExpanded
-			m.updateTableHeight()
-			return m, nil
-		}
+		
+		// Otherwise handle normal mode
+		return m.handleNormalMode(msg)
 	}
-
+	
+	// Default case - pass through to table
 	if m.showHelp {
 		return m, nil
 	}
-
+	
 	var cmd tea.Cmd
-	prevRow := m.tbl.Cursor()
-	prevCol := m.tbl.ColumnCursor()
 	m.tbl, cmd = m.tbl.Update(msg)
-	if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
-		m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-	}
 	return m, cmd
+}
+
+// handleWindowResize handles window resize events
+func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	m.tbl.SetWidth(msg.Width)
+	m.windowHeight = msg.Height
+	m.computeColumnWidths()
+	m.updateTableHeight()
+	return m, nil
+}
+
+// handleEditDone handles completion of external editor
+func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.showError(fmt.Errorf("editor: %w", msg.err))
+	}
+	m.reload()
+	cmd := m.startBlink(m.editID, false)
+	m.editID = 0
+	return m, cmd
+}
+
+// handleBlinkMsg handles the blinking animation timer
+func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
+	if m.blinkID == 0 {
+		return m, nil
+	}
+	
+	m.blinkOn = !m.blinkOn
+	m.blinkCount++
+	m.updateBlinkRow()
+	
+	if m.blinkCount >= blinkCycles {
+		id := m.blinkID
+		mark := m.blinkMarkDone
+		m.blinkID = 0
+		m.blinkOn = false
+		m.blinkCount = 0
+		m.blinkMarkDone = false
+		
+		if mark {
+			for _, tsk := range m.tasks {
+				if tsk.ID == id {
+					m.undoStack = append(m.undoStack, tsk.UUID)
+					break
+				}
+			}
+			if err := task.Done(id); err != nil {
+				m.showError(err)
+			}
+		}
+		m.reload()
+		return m, nil
+	}
+	
+	return m, blinkCmd()
 }
 
 // View renders the table UI.

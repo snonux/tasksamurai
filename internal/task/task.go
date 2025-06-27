@@ -155,12 +155,25 @@ func run(args ...string) error {
 	return nil
 }
 
-// SetStatus changes the status of the task with the given id.
-func SetStatus(id int, status string) error {
+// modifyTask runs a modify command with validation
+func modifyTask(id int, args ...string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	return run(strconv.Itoa(id), "modify", "status:"+status)
+	return run(append([]string{strconv.Itoa(id), "modify"}, args...)...)
+}
+
+// simpleTaskCommand runs a simple command on a task with validation
+func simpleTaskCommand(id int, command string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
+	return run(strconv.Itoa(id), command)
+}
+
+// SetStatus changes the status of the task with the given id.
+func SetStatus(id int, status string) error {
+	return modifyTask(id, "status:"+status)
 }
 
 // SetStatusUUID changes the status of the task with the given UUID.
@@ -170,42 +183,27 @@ func SetStatusUUID(uuid, status string) error {
 
 // Start begins the task with the given id.
 func Start(id int) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "start")
+	return simpleTaskCommand(id, "start")
 }
 
 // Stop stops the task with the given id.
 func Stop(id int) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "stop")
+	return simpleTaskCommand(id, "stop")
 }
 
 // Done marks the task with the given id as completed.
 func Done(id int) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "done")
+	return simpleTaskCommand(id, "done")
 }
 
 // Delete removes the task with the given id.
 func Delete(id int) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "delete")
+	return simpleTaskCommand(id, "delete")
 }
 
 // SetPriority changes the priority of the task with the given id.
 func SetPriority(id int, priority string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "modify", "priority:"+priority)
+	return modifyTask(id, "priority:"+priority)
 }
 
 // AddTags adds tags to the task with the given id.
@@ -287,26 +285,17 @@ func SetTags(id int, tags []string) error {
 
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "modify", "recur:"+rec)
+	return modifyTask(id, "recur:"+rec)
 }
 
 // SetDueDate sets the due date for the task with the given id.
 func SetDueDate(id int, due string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "modify", "due:"+due)
+	return modifyTask(id, "due:"+due)
 }
 
 // SetDescription changes the description of the task with the given id.
 func SetDescription(id int, desc string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), "modify", "description:"+desc)
+	return modifyTask(id, "description:"+desc)
 }
 
 // Annotate adds an annotation to the task with the given id.
@@ -388,7 +377,16 @@ func Edit(id int) error {
 // Started tasks are always placed before non-started ones. Tasks without a due
 // date are placed after tasks with a due date. Overdue tasks are placed at the
 // very top regardless of other properties.
+//
+// The sort order is:
+// 1. Overdue tasks (oldest due date first)
+// 2. Started tasks (not completed)
+// 3. High priority tasks
+// 4. Tasks with earlier due dates
+// 5. Tasks sorted alphabetically by tags
+// 6. Tasks sorted by ID (oldest first)
 func SortTasks(tasks []Task) {
+	// Helper to join tags in a consistent order for comparison
 	joinTags := func(tags []string) string {
 		if len(tags) == 0 {
 			return ""
@@ -398,6 +396,7 @@ func SortTasks(tasks []Task) {
 		return strings.Join(cpy, " ")
 	}
 
+	// Convert priority to numeric value for comparison (higher = more important)
 	priVal := func(p string) int {
 		switch p {
 		case "H":
@@ -411,6 +410,7 @@ func SortTasks(tasks []Task) {
 		}
 	}
 
+	// Parse due date string into time.Time
 	parseDue := func(s string) (time.Time, bool) {
 		if s == "" {
 			return time.Time{}, false
@@ -422,6 +422,7 @@ func SortTasks(tasks []Task) {
 		return t, true
 	}
 
+	// Check if a task is overdue
 	overdue := func(t Task) bool {
 		du, ok := parseDue(t.Due)
 		return ok && time.Now().After(du)

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"math/rand"
 	"strconv"
 )
 
@@ -64,7 +63,7 @@ func RandomTheme() Theme {
 }
 
 func randColor() string {
-	return strconv.Itoa(rand.Intn(256))
+	return strconv.Itoa(rng.Intn(256))
 }
 
 func contrastColor(bg string) string {
