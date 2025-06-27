@@ -22,7 +22,10 @@ import (
 
 var priorityOptions = []string{"H", "M", "L", ""}
 
-var urlRegex = regexp.MustCompile(`https?://\S+`)
+var (
+	urlRegex         = regexp.MustCompile(`https?://\S+`)
+	searchRegexCache = make(map[string]*regexp.Regexp)
+)
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -113,6 +116,8 @@ type Model struct {
 	theme        Theme
 	defaultTheme Theme
 	disco        bool
+
+	statusMsg string
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -134,6 +139,19 @@ func editCmd(id int) tea.Cmd {
 
 func blinkCmd() tea.Cmd {
 	return tea.Tick(blinkInterval, func(time.Time) tea.Msg { return blinkMsg{} })
+}
+
+// clearEditingModes ensures only one editing mode is active at a time
+func (m *Model) clearEditingModes() {
+	m.annotating = false
+	m.descEditing = false
+	m.tagsEditing = false
+	m.dueEditing = false
+	m.recurEditing = false
+	m.filterEditing = false
+	m.addingTask = false
+	m.searching = false
+	m.prioritySelecting = false
 }
 
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
@@ -313,6 +331,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, blinkCmd()
 		}
+		return m, nil
+	case struct{ clearStatus bool }:
+		m.statusMsg = ""
 		return m, nil
 	case tea.KeyMsg:
 		// Only allow navigation while a task row is blinking. This
@@ -545,9 +566,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.searching {
 			switch msg.Type {
 			case tea.KeyEnter:
-				re, err := regexp.Compile(m.searchInput.Value())
-				if err == nil {
-					m.searchRegex = re
+				pattern := m.searchInput.Value()
+				if pattern != "" {
+					// Check cache first
+					if cached, ok := searchRegexCache[pattern]; ok {
+						m.searchRegex = cached
+					} else {
+						// Compile and cache if not found
+						re, err := regexp.Compile(pattern)
+						if err == nil {
+							m.searchRegex = re
+							// Limit cache size to prevent memory leak
+							if len(searchRegexCache) > 100 {
+								// Clear cache when it gets too large
+								searchRegexCache = make(map[string]*regexp.Regexp)
+							}
+							searchRegexCache[pattern] = re
+						} else {
+							m.searchRegex = nil
+						}
+					}
 				} else {
 					m.searchRegex = nil
 				}
@@ -638,13 +676,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "o":
 			if row := m.tbl.SelectedRow(); row != nil {
 				desc := m.tasks[m.tbl.Cursor()].Description
-				re := regexp.MustCompile(`https?://\S+`)
-				url := re.FindString(desc)
+				url := urlRegex.FindString(desc)
 				if url != "" {
-					_ = exec.Command(m.browserCmd, url).Run()
-					idStr := ansi.Strip(row[1])
-					if id, err := strconv.Atoi(idStr); err == nil {
-						return m, m.startBlink(id, false)
+					if err := exec.Command(m.browserCmd, url).Run(); err != nil {
+						// Show error in status bar
+						m.statusMsg = fmt.Sprintf("Error opening browser: %v", err)
+						// Clear status message after delay
+						cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+							return struct{ clearStatus bool }{true}
+						})
+						return m, cmd
+					} else {
+						idStr := ansi.Strip(row[1])
+						if id, err := strconv.Atoi(idStr); err == nil {
+							return m, m.startBlink(id, false)
+						}
 					}
 				}
 			}
@@ -668,6 +714,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.dueID = id
 					m.dueEditing = true
 					m.dueDate = time.Now()
@@ -691,6 +738,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.recurID = id
 					m.recurEditing = true
 					m.recurInput.SetValue(m.tasks[m.tbl.Cursor()].Recur)
@@ -703,6 +751,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.priorityID = id
 					m.prioritySelecting = true
 					m.priorityIndex = 0
@@ -714,6 +763,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.annotateID = id
 					m.annotating = true
 					m.replaceAnnotations = false
@@ -727,6 +777,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.annotateID = id
 					m.annotating = true
 					m.replaceAnnotations = true
@@ -737,12 +788,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "f":
+			m.clearEditingModes()
 			m.filterEditing = true
 			m.filterInput.SetValue(strings.Join(m.filters, " "))
 			m.filterInput.Focus()
 			m.updateTableHeight()
 			return m, nil
 		case "+":
+			m.clearEditingModes()
 			m.addingTask = true
 			m.addInput.SetValue("")
 			m.addInput.Focus()
@@ -752,6 +805,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if row := m.tbl.SelectedRow(); row != nil {
 				idStr := ansi.Strip(row[1])
 				if id, err := strconv.Atoi(idStr); err == nil {
+					m.clearEditingModes()
 					m.tagsID = id
 					m.tagsEditing = true
 					m.tagsInput.SetValue("")
@@ -776,6 +830,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reload()
 			return m, nil
 		case "/", "?":
+			m.clearEditingModes()
 			m.searching = true
 			m.searchInput.SetValue("")
 			m.searchInput.Focus()
@@ -810,6 +865,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					col := m.tbl.ColumnCursor()
 					switch col {
 					case 0:
+						m.clearEditingModes()
 						m.priorityID = id
 						m.prioritySelecting = true
 						switch m.tasks[m.tbl.Cursor()].Priority {
@@ -831,10 +887,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						} else {
 							m.dueDate = time.Now()
 						}
+						m.clearEditingModes()
 						m.dueEditing = true
 						m.updateTableHeight()
 						return m, nil
 					case 4:
+						m.clearEditingModes()
 						m.recurID = id
 						m.recurEditing = true
 						m.recurInput.SetValue(m.tasks[m.tbl.Cursor()].Recur)
@@ -861,6 +919,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.updateTableHeight()
 						return m, nil
 					case 7:
+						m.clearEditingModes()
 						m.descID = id
 						m.descEditing = true
 						m.descInput.SetValue(m.tasks[m.tbl.Cursor()].Description)
@@ -996,6 +1055,9 @@ func (m Model) View() string {
 
 func (m Model) statusLine() string {
 	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d | press H for help", m.total, m.inProgress, m.due)
+	if m.statusMsg != "" {
+		status = m.statusMsg
+	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).
 		Background(lipgloss.Color(m.theme.StatusBG)).
@@ -1221,7 +1283,7 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 func (m Model) expandedCellView() string {
 	row := m.tbl.Cursor()
 	col := m.tbl.ColumnCursor()
-	if row < 0 || row >= len(m.tasks) || col < 0 {
+	if row < 0 || row >= len(m.tasks) || col < 0 || col > 8 {
 		return ""
 	}
 	t := m.tasks[row]

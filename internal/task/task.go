@@ -38,18 +38,27 @@ type Task struct {
 }
 
 var debugWriter io.Writer
+var debugFile *os.File // Track the file handle to close it properly
 
 // SetDebugLog enables logging of executed commands to the given file.
 // Passing an empty path disables logging.
 func SetDebugLog(path string) error {
-	if path == "" {
+	// Close existing debug file if open
+	if debugFile != nil {
+		debugFile.Close()
+		debugFile = nil
 		debugWriter = nil
+	}
+
+	if path == "" {
 		return nil
 	}
+
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
+	debugFile = f
 	debugWriter = f
 	return nil
 }
@@ -71,8 +80,7 @@ func Add(description string, tags []string) error {
 // is passed as a separate command-line argument, allowing the caller to
 // specify additional modifiers like due dates or tags.
 func AddArgs(args []string) error {
-	cmd := exec.Command("task", append([]string{"add"}, args...)...)
-	return cmd.Run()
+	return run(append([]string{"add"}, args...)...)
 }
 
 // AddLine splits the given line into shell words and runs "task add" with the
@@ -94,8 +102,16 @@ func AddLine(line string) error {
 func Export(filters ...string) ([]Task, error) {
 	args := append(filters, "export", "rc.json.array=off")
 	cmd := exec.Command("task", args...)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	out, err := cmd.Output()
 	if err != nil {
+		// Include stderr output in the error message
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+		}
 		return nil, err
 	}
 
@@ -124,11 +140,26 @@ func run(args ...string) error {
 		fmt.Fprintln(debugWriter, "task "+strings.Join(args, " "))
 	}
 	cmd := exec.Command("task", args...)
-	return cmd.Run()
+
+	// Capture stderr to provide better error messages
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		// Include stderr output in the error message
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return err
+	}
+	return nil
 }
 
 // SetStatus changes the status of the task with the given id.
 func SetStatus(id int, status string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "modify", "status:"+status)
 }
 
@@ -139,31 +170,49 @@ func SetStatusUUID(uuid, status string) error {
 
 // Start begins the task with the given id.
 func Start(id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "start")
 }
 
 // Stop stops the task with the given id.
 func Stop(id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "stop")
 }
 
 // Done marks the task with the given id as completed.
 func Done(id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "done")
 }
 
 // Delete removes the task with the given id.
 func Delete(id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "delete")
 }
 
 // SetPriority changes the priority of the task with the given id.
 func SetPriority(id int, priority string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "modify", "priority:"+priority)
 }
 
 // AddTags adds tags to the task with the given id.
 func AddTags(id int, tags []string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	args := []string{strconv.Itoa(id), "modify"}
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '+' {
@@ -176,6 +225,9 @@ func AddTags(id int, tags []string) error {
 
 // RemoveTags removes tags from the task with the given id.
 func RemoveTags(id int, tags []string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	args := []string{strconv.Itoa(id), "modify"}
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '-' {
@@ -189,6 +241,9 @@ func RemoveTags(id int, tags []string) error {
 // SetTags sets the tags of the task with the given id to exactly the provided set.
 // Tags not present will be removed and new tags added as needed.
 func SetTags(id int, tags []string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	tasks, err := Export(strconv.Itoa(id))
 	if err != nil {
 		return err
@@ -232,21 +287,33 @@ func SetTags(id int, tags []string) error {
 
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "modify", "recur:"+rec)
 }
 
 // SetDueDate sets the due date for the task with the given id.
 func SetDueDate(id int, due string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "modify", "due:"+due)
 }
 
 // SetDescription changes the description of the task with the given id.
 func SetDescription(id int, desc string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "modify", "description:"+desc)
 }
 
 // Annotate adds an annotation to the task with the given id.
 func Annotate(id int, text string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return run(strconv.Itoa(id), "annotate", text)
 }
 
@@ -255,6 +322,9 @@ func Annotate(id int, text string) error {
 // annotation text is matched exactly when provided. If text is empty, the
 // oldest annotation is removed.
 func Denotate(id int, text string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	args := []string{strconv.Itoa(id), "denotate"}
 	if text != "" {
 		args = append(args, text)
@@ -266,6 +336,9 @@ func Denotate(id int, text string) error {
 // given id and sets a single annotation with the provided text. If text is
 // empty, all annotations are simply removed.
 func ReplaceAnnotations(id int, text string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	tasks, err := Export(strconv.Itoa(id))
 	if err != nil {
 		return err
@@ -290,6 +363,11 @@ func ReplaceAnnotations(id int, text string) error {
 // The caller is responsible for running the command, typically via
 // tea.ExecProcess so that the terminal state is properly managed.
 func EditCmd(id int) *exec.Cmd {
+	if id <= 0 {
+		// Return a command that will fail with an appropriate error
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("echo 'invalid task ID: %d' >&2; exit 1", id))
+		return cmd
+	}
 	cmd := exec.Command("task", strconv.Itoa(id), "edit")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -300,6 +378,9 @@ func EditCmd(id int) *exec.Cmd {
 // Edit opens the task in an editor for manual modification.
 // This is a convenience wrapper around EditCmd.
 func Edit(id int) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
 	return EditCmd(id).Run()
 }
 
