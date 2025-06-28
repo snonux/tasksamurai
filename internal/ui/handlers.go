@@ -540,6 +540,23 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "N":
 		// Previous search match - not implemented yet but could be added
 		return m, nil
+	case "up", "k":
+		if m.detailFieldIndex > 0 {
+			m.detailFieldIndex--
+		}
+		return m, nil
+	case "down", "j":
+		maxFields := m.getDetailFieldCount()
+		if m.detailFieldIndex < maxFields-1 {
+			m.detailFieldIndex++
+		}
+		return m, nil
+	case "g", "home":
+		m.detailFieldIndex = 0
+		return m, nil
+	case "G", "end":
+		m.detailFieldIndex = m.getDetailFieldCount() - 1
+		return m, nil
 	}
 	
 	return m, nil

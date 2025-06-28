@@ -127,6 +127,7 @@ type Model struct {
 	detailSearching   bool
 	detailSearchInput textinput.Model
 	detailSearchRegex *regexp.Regexp
+	detailFieldIndex  int  // Current selected field in detail view
 }
 
 // editDoneMsg is emitted when the external editor process finishes.

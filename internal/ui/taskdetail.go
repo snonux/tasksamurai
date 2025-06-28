@@ -9,6 +9,22 @@ import (
 
 )
 
+// Define field indices for navigation
+const (
+	fieldID = iota
+	fieldUUID
+	fieldStatus
+	fieldPriority
+	fieldTags
+	fieldDue
+	fieldStart
+	fieldEntry
+	fieldRecur
+	fieldDescription
+	fieldAnnotations
+	fieldCount // Total number of fields
+)
+
 // renderTaskDetail renders the detailed view of a single task
 func (m *Model) renderTaskDetail() string {
 	if m.currentTaskDetail == nil {
@@ -44,9 +60,13 @@ func (m *Model) renderTaskDetail() string {
 	lines = append(lines, "")
 	
 	// Task fields
-	lines = append(lines, m.renderTaskField("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle))
-	lines = append(lines, m.renderTaskField("UUID", t.UUID, labelStyle, valueStyle))
-	lines = append(lines, m.renderTaskField("Status", t.Status, labelStyle, valueStyle))
+	currentField := 0
+	lines = append(lines, m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, currentField))
+	currentField++
+	lines = append(lines, m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, currentField))
+	currentField++
+	lines = append(lines, m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, currentField))
+	currentField++
 	
 	// Priority with color
 	priorityValue := t.Priority
@@ -65,52 +85,69 @@ func (m *Model) renderTaskDetail() string {
 		priorityStyle = priorityStyle.Background(lipgloss.Color(m.theme.PrioLowBG))
 		priorityValue = "L (Low)"
 	}
-	lines = append(lines, m.renderTaskField("Priority", priorityValue, labelStyle, priorityStyle))
+	lines = append(lines, m.renderTaskFieldWithIndex("Priority", priorityValue, labelStyle, priorityStyle, currentField))
+	currentField++
 	
 	// Tags
 	tagStr := strings.Join(t.Tags, ", ")
 	if tagStr == "" {
 		tagStr = "-"
 	}
-	lines = append(lines, m.renderTaskField("Tags", tagStr, labelStyle, valueStyle))
+	lines = append(lines, m.renderTaskFieldWithIndex("Tags", tagStr, labelStyle, valueStyle, currentField))
+	currentField++
 	
 	// Dates
-	lines = append(lines, m.renderTaskField("Due", m.formatTaskDate(t.Due), labelStyle, valueStyle))
-	lines = append(lines, m.renderTaskField("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle))
-	// End field doesn't exist in Task struct, removed
-	lines = append(lines, m.renderTaskField("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle))
-	// Modified field doesn't exist in Task struct, removed
+	lines = append(lines, m.renderTaskFieldWithIndex("Due", m.formatTaskDate(t.Due), labelStyle, valueStyle, currentField))
+	currentField++
+	lines = append(lines, m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, currentField))
+	currentField++
+	lines = append(lines, m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, currentField))
+	currentField++
 	
 	// Recurrence
 	if t.Recur != "" {
-		lines = append(lines, m.renderTaskField("Recurrence", t.Recur, labelStyle, valueStyle))
+		lines = append(lines, m.renderTaskFieldWithIndex("Recurrence", t.Recur, labelStyle, valueStyle, currentField))
+		currentField++
 	}
 	
 	// Description - with full space
 	lines = append(lines, "")
-	lines = append(lines, labelStyle.Render("Description:"))
+	descLabelStyle := labelStyle.Copy()
+	descValueStyle := descStyle.Copy()
+	if m.detailFieldIndex == currentField {
+		descLabelStyle = descLabelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+		descValueStyle = descValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+	}
+	lines = append(lines, descLabelStyle.Render("Description:"))
 	if t.Description != "" {
 		// Highlight search matches if searching
 		desc := t.Description
 		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(desc) {
 			desc = m.highlightMatches(desc, m.detailSearchRegex)
 		}
-		lines = append(lines, descStyle.Render(desc))
+		lines = append(lines, descValueStyle.Render(desc))
 	} else {
-		lines = append(lines, descStyle.Render("-"))
+		lines = append(lines, descValueStyle.Render("-"))
 	}
+	currentField++
 	
 	// Annotations
 	if len(t.Annotations) > 0 {
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render("Annotations:"))
+		annLabelStyle := labelStyle.Copy()
+		annValueStyle := descStyle.Copy()
+		if m.detailFieldIndex == currentField {
+			annLabelStyle = annLabelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+			annValueStyle = annValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+		}
+		lines = append(lines, annLabelStyle.Render("Annotations:"))
 		for _, ann := range t.Annotations {
 			annText := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ann.Description)
 			// Highlight search matches
 			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(annText) {
 				annText = m.highlightMatches(annText, m.detailSearchRegex)
 			}
-			lines = append(lines, descStyle.Render(annText))
+			lines = append(lines, annValueStyle.Render(annText))
 		}
 	}
 	
@@ -121,10 +158,11 @@ func (m *Model) renderTaskDetail() string {
 		Foreground(lipgloss.Color("245")).
 		Italic(true)
 	lines = append(lines, instructionStyle.Render("Press ESC or Q to return to table view"))
+	lines = append(lines, instructionStyle.Render("Use ↑/k and ↓/j to navigate fields"))
 	if m.detailSearching {
 		lines = append(lines, instructionStyle.Render("Type to search, Enter to confirm"))
 	} else {
-		lines = append(lines, instructionStyle.Render("Press / to search, N/n to navigate matches"))
+		lines = append(lines, instructionStyle.Render("Press / to search"))
 	}
 	
 	// Add search input if searching
@@ -138,11 +176,18 @@ func (m *Model) renderTaskDetail() string {
 	return strings.Join(lines, "\n")
 }
 
-// renderTaskField renders a single field in the task detail view
-func (m *Model) renderTaskField(label, value string, labelStyle, valueStyle lipgloss.Style) string {
+// renderTaskFieldWithIndex renders a single field with highlighting based on index
+func (m *Model) renderTaskFieldWithIndex(label, value string, labelStyle, valueStyle lipgloss.Style, fieldIndex int) string {
 	if value == "" {
 		value = "-"
 	}
+	
+	// Apply selection highlighting if this field is selected
+	if m.detailFieldIndex == fieldIndex {
+		labelStyle = labelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+		valueStyle = valueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+	}
+	
 	// Highlight search matches
 	if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(value) {
 		value = m.highlightMatches(value, m.detailSearchRegex)
@@ -160,6 +205,28 @@ func (m *Model) formatTaskDate(dateStr string) string {
 		return ts.Format("2006-01-02 15:04")
 	}
 	return dateStr
+}
+
+// getDetailFieldCount returns the actual number of navigable fields for the current task
+func (m *Model) getDetailFieldCount() int {
+	if m.currentTaskDetail == nil {
+		return 0
+	}
+	
+	// Basic fields that are always present: ID, UUID, Status, Priority, Tags, Due, Start, Entry, Description
+	count := 9
+	
+	// Add recurrence if present
+	if m.currentTaskDetail.Recur != "" {
+		count++
+	}
+	
+	// Add annotations if present
+	if len(m.currentTaskDetail.Annotations) > 0 {
+		count++
+	}
+	
+	return count
 }
 
 // highlightMatches highlights regex matches in a string
