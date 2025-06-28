@@ -87,6 +87,8 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEditTags()
 	case "J":
 		return m.handleEditProject()
+	case "T":
+		return m.handleTagToProject()
 	case "c":
 		return m.handleRandomTheme()
 	case "C":
@@ -409,6 +411,38 @@ func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
 	m.projInput.Focus()
 	m.updateTableHeight()
 	return m, nil
+}
+
+func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
+	id, err := m.getSelectedTaskID()
+	if err != nil {
+		return m, nil
+	}
+	
+	// Get the task at cursor
+	currentTask := m.getTaskAtCursor()
+	if currentTask == nil || len(currentTask.Tags) == 0 {
+		// No tags to convert
+		return m, nil
+	}
+	
+	// Get the first tag
+	firstTag := currentTask.Tags[0]
+	
+	// Set the tag as project
+	if err := task.SetProject(id, firstTag); err != nil {
+		m.showError(err)
+		return m, nil
+	}
+	
+	// Remove the tag from the task
+	if err := task.RemoveTags(id, []string{firstTag}); err != nil {
+		m.showError(err)
+		return m, nil
+	}
+	
+	m.reload()
+	return m, m.startBlink(id, false)
 }
 
 func (m *Model) handleRandomTheme() (tea.Model, tea.Cmd) {

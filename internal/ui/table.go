@@ -707,6 +707,7 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("R", "edit recurrence", keyStyle, descStyle),
 		m.formatHelpLine("t", "edit tags", keyStyle, descStyle),
 		m.formatHelpLine("J", "edit project", keyStyle, descStyle),
+		m.formatHelpLine("T", "convert first tag to project", keyStyle, descStyle),
 		m.formatHelpLine("a, A", "add/replace annotations", keyStyle, descStyle),
 		m.formatHelpLine("o", "open URL from description", keyStyle, descStyle),
 		"")
