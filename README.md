@@ -40,6 +40,20 @@ go-task install
 
 The second method requires [go-task](https://taskfile.dev/) to be installed.
 
+### Usage
+
+```bash
+# Start with default pending tasks
+tasksamurai
+
+# Start with a Taskwarrior filter
+tasksamurai +tag status:pending
+tasksamurai project:work due:today
+tasksamurai pri:H
+
+# Any valid Taskwarrior filter can be passed as arguments
+```
+
 ### Flags
 
 - `--disco`: start Task Samurai in disco mode, changing the theme every time a task is modified.
