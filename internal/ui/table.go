@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -135,6 +136,9 @@ type Model struct {
 	detailBlinkCount  int    // Number of blinks remaining
 	detailDescEditing bool   // Whether we're editing description in detail view
 	detailDescTempFile string // Temp file path for description editing
+	
+	// Help view fields
+	helpViewport viewport.Model
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -432,6 +436,17 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.windowHeight = msg.Height
 	m.computeColumnWidths()
 	m.updateTableHeight()
+	
+	// Update help viewport if active
+	if m.showHelp && m.helpViewport.Width > 0 {
+		width := msg.Width - 4
+		height := msg.Height - 6
+		if width > 0 && height > 0 {
+			m.helpViewport.Width = width
+			m.helpViewport.Height = height
+		}
+	}
+	
 	return m, nil
 }
 
@@ -543,6 +558,8 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 // View renders the table UI.
 func (m Model) View() string {
 	if m.showHelp {
+		// Update help content before rendering
+		m.updateHelpContent()
 		return m.renderHelpScreen()
 	}
 	if m.showTaskDetail {
@@ -617,79 +634,192 @@ func (m Model) View() string {
 	return view
 }
 
-// renderHelpScreen renders the help screen with optional search highlighting
-func (m Model) renderHelpScreen() string {
-	helpLines := m.getHelpLines()
+// updateHelpContent updates the help viewport content
+func (m *Model) updateHelpContent() {
+	content := m.buildHelpContent()
+	m.helpViewport.SetContent(content)
+}
 
+// buildHelpContent builds the help content
+func (m Model) buildHelpContent() string {
+	// Create styles using theme colors
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.theme.HeaderFG)).
+		Background(lipgloss.Color(m.theme.SelectedBG)).
+		Padding(0, 1)
+		
+	keyStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.theme.SelectedFG))
+		
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("250")) // Light gray for readability
+
+	// Build help content with styled headers
+	var sections []string
+	
+	// Navigation section
+	sections = append(sections, headerStyle.Render("Navigation"),
+		m.formatHelpLine("↑/k, ↓/j", "move up/down", keyStyle, descStyle),
+		m.formatHelpLine("←/h, →/l", "move left/right", keyStyle, descStyle),
+		m.formatHelpLine("g/Home, G/End", "go to start/end", keyStyle, descStyle),
+		m.formatHelpLine("pgup/pgdn, b", "page up/down", keyStyle, descStyle),
+		"")
+	
+	// Task Management section
+	sections = append(sections, headerStyle.Render("Task Management"),
+		m.formatHelpLine("Enter", "view task details", keyStyle, descStyle),
+		m.formatHelpLine("+", "add new task", keyStyle, descStyle),
+		m.formatHelpLine("E", "edit entire task", keyStyle, descStyle),
+		m.formatHelpLine("d", "mark task done", keyStyle, descStyle),
+		m.formatHelpLine("U", "undo last done", keyStyle, descStyle),
+		m.formatHelpLine("s", "start/stop task", keyStyle, descStyle),
+		"")
+	
+	// Task Fields section
+	sections = append(sections, headerStyle.Render("Task Fields"),
+		m.formatHelpLine("i", "edit current field", keyStyle, descStyle),
+		m.formatHelpLine("p", "set priority", keyStyle, descStyle),
+		m.formatHelpLine("w, W", "set/remove due date", keyStyle, descStyle),
+		m.formatHelpLine("r", "set random due date", keyStyle, descStyle),
+		m.formatHelpLine("R", "edit recurrence", keyStyle, descStyle),
+		m.formatHelpLine("t", "edit tags", keyStyle, descStyle),
+		m.formatHelpLine("a, A", "add/replace annotations", keyStyle, descStyle),
+		m.formatHelpLine("o", "open URL from description", keyStyle, descStyle),
+		"")
+	
+	// View & Search section
+	sections = append(sections, headerStyle.Render("View & Search"),
+		m.formatHelpLine("f", "change filter", keyStyle, descStyle),
+		m.formatHelpLine("/", "search", keyStyle, descStyle),
+		m.formatHelpLine("n, N", "next/previous match", keyStyle, descStyle),
+		m.formatHelpLine("space", "refresh tasks", keyStyle, descStyle),
+		"")
+	
+	// Appearance section
+	sections = append(sections, headerStyle.Render("Appearance"),
+		m.formatHelpLine("c, C", "random/reset theme", keyStyle, descStyle),
+		m.formatHelpLine("x", "toggle disco mode", keyStyle, descStyle),
+		"")
+	
+	// General section
+	sections = append(sections, headerStyle.Render("General"),
+		m.formatHelpLine("H", "toggle help", keyStyle, descStyle),
+		m.formatHelpLine("ESC", "close dialogs/cancel", keyStyle, descStyle),
+		m.formatHelpLine("q", "quit", keyStyle, descStyle))
+	
 	// Apply search highlighting if active
 	if m.helpSearchRegex != nil {
-		for i, line := range helpLines {
+		for i, line := range sections {
 			if m.helpSearchRegex.MatchString(line) {
-				// Highlight matching lines
-				matches := m.helpSearchRegex.FindAllStringIndex(line, -1)
-				highlighted := line
-				offset := 0
-				for _, match := range matches {
-					start := match[0] + offset
-					end := match[1] + offset
-					style := lipgloss.NewStyle().
-						Background(lipgloss.Color(m.theme.SearchBG)).
-						Foreground(lipgloss.Color(m.theme.SearchFG))
-					highlighted = highlighted[:start] + style.Render(highlighted[start:end]) + highlighted[end:]
-					offset += len(style.Render(highlighted[start:end])) - (end - start)
-				}
-				helpLines[i] = highlighted
+				sections[i] = m.highlightHelpLine(line)
 			}
 		}
 	}
+	
+	// Join all sections
+	return strings.Join(sections, "\n")
+}
 
-	// Center all lines
-	for i, l := range helpLines {
-		helpLines[i] = centerLines(l, m.tbl.Width())
-	}
-
-	result := lipgloss.JoinVertical(lipgloss.Top, helpLines...)
+// renderHelpScreen renders the help screen with optional search highlighting
+func (m Model) renderHelpScreen() string {
+	containerStyle := lipgloss.NewStyle().
+		Padding(1, 2)
+	
+	// Render viewport
+	viewportView := m.helpViewport.View()
+	
+	result := containerStyle.Render(viewportView)
 
 	// Add search input at the bottom if in help search mode
 	if m.helpSearching {
+		searchStyle := lipgloss.NewStyle().
+			Padding(0, 2)
 		result = lipgloss.JoinVertical(lipgloss.Left,
 			result,
-			m.helpSearchInput.View(),
+			searchStyle.Render(m.helpSearchInput.View()),
 		)
 	}
 
 	return result
 }
 
-// getHelpLines returns the help lines as a slice
+// formatHelpLine formats a help line with key and description styling
+func (m Model) formatHelpLine(key, desc string, keyStyle, descStyle lipgloss.Style) string {
+	// Pad key to consistent width for alignment
+	paddedKey := fmt.Sprintf("%-12s", key)
+	return keyStyle.Render(paddedKey) + " " + descStyle.Render(desc)
+}
+
+// highlightHelpLine applies search highlighting to a help line
+func (m Model) highlightHelpLine(line string) string {
+	if m.helpSearchRegex == nil {
+		return line
+	}
+	
+	matches := m.helpSearchRegex.FindAllStringIndex(line, -1)
+	if len(matches) == 0 {
+		return line
+	}
+	
+	highlighted := line
+	offset := 0
+	highlightStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(m.theme.SearchBG)).
+		Foreground(lipgloss.Color(m.theme.SearchFG))
+		
+	for _, match := range matches {
+		start := match[0] + offset
+		end := match[1] + offset
+		highlighted = highlighted[:start] + highlightStyle.Render(highlighted[start:end]) + highlighted[end:]
+		offset += len(highlightStyle.Render(highlighted[start:end])) - (end - start)
+	}
+	
+	return highlighted
+}
+
+// getHelpLines returns searchable help content as plain text lines
 func (m Model) getHelpLines() []string {
 	return []string{
-		m.tbl.HelpView(),
-		"enter/i: edit or expand cell",
-		"E: edit task",
-		"+: add task",
-		"s: toggle start/stop",
+		"Navigation",
+		"↑/k, ↓/j: move up/down",
+		"←/h, →/l: move left/right", 
+		"g/Home, G/End: go to start/end",
+		"pgup/pgdn, b: page up/down",
+		"",
+		"Task Management",
+		"Enter: view task details",
+		"+: add new task",
+		"E: edit entire task",
 		"d: mark task done",
-		"o: open URL",
-		"U: undo done",
-		"w: set due date (when)",
-		"W: remove due date",
-		"r: random due date",
-		"R: edit recurrence",
-		"a: annotate task",
-		"A: replace annotations",
+		"U: undo last done",
+		"s: start/stop task",
+		"",
+		"Task Fields",
+		"i: edit current field",
 		"p: set priority",
-		"f: change filter",
+		"w, W: set/remove due date",
+		"r: set random due date",
+		"R: edit recurrence",
 		"t: edit tags",
-		"c: random theme",
-		"C: reset theme",
-		"x: toggle disco mode",
+		"a, A: add/replace annotations",
+		"o: open URL from description",
+		"",
+		"View & Search",
+		"f: change filter",
+		"/: search",
+		"n, N: next/previous match",
 		"space: refresh tasks",
-		"/, ?: search",
-		"n/N: next/prev search match",
-		"esc: close help/search",
+		"",
+		"Appearance",
+		"c, C: random/reset theme",
+		"x: toggle disco mode",
+		"",
+		"General",
+		"H: toggle help",
+		"ESC: close dialogs/cancel",
 		"q: quit",
-		"H: help",
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
@@ -25,6 +26,24 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.handleNextHelpSearchMatch()
 		case "N":
 			return m.handlePrevHelpSearchMatch()
+		case "up", "k":
+			m.helpViewport.LineUp(1)
+			return m, nil
+		case "down", "j":
+			m.helpViewport.LineDown(1)
+			return m, nil
+		case "pgup", "b":
+			m.helpViewport.ViewUp()
+			return m, nil
+		case "pgdown", " ":
+			m.helpViewport.ViewDown()
+			return m, nil
+		case "g", "home":
+			m.helpViewport.GotoTop()
+			return m, nil
+		case "G", "end":
+			m.helpViewport.GotoBottom()
+			return m, nil
 		default:
 			// Ignore other keys in help mode
 			return m, nil
@@ -92,6 +111,17 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 	m.showHelp = true
+	// Initialize help viewport with proper dimensions
+	width := m.tbl.Width() - 4 // Account for padding
+	height := m.windowHeight - 6 // Leave room for status bars and search input
+	if width <= 0 {
+		width = 80 // Default width
+	}
+	if height <= 0 {
+		height = 20 // Default height
+	}
+	m.helpViewport = viewport.New(width, height)
+	m.helpViewport.SetContent("") // Content will be set in renderHelpScreen
 	return m, nil
 }
 
@@ -116,6 +146,8 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 		m.helpSearchMatches = nil
 		m.helpSearchIndex = 0
 		m.helpSearchInput.SetValue("")
+		// Reset help viewport
+		m.helpViewport = viewport.Model{}
 		return m, nil
 	}
 	if m.searchRegex != nil {
