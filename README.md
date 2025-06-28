@@ -16,48 +16,7 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 
 ## Hotkeys
 
-### Navigation
-
-- `↑/k` and `↓/j`: move up and down
-- `←/h` and `→/l`: move left and right
-- `b/pgup`: page up
-- `pgdn`: page down
-- `u` or `ctrl+u`: half page up
-- `ctrl+d`: half page down
-- `g/home/0`: go to start
-- `G/end`: go to end
-- `enter` or `i`: expand/collapse or edit the current cell depending on the column
-
-### Task actions
-
-- `e` or `E`: edit task
-- `s`: toggle start/stop
-- `d`: mark task done
-- `o`: open URL from description
-- `U`: undo last done
-- `D`: set due date
-- `+`: add task
-- `r`: random due date
-- `R`: edit recurrence
-- `a`: annotate task
-- `A`: replace annotations
-- `p`: set priority
-- `t`: edit tags
-
-### Search
-
-- `/` or `?`: start search
-- `n` and `N`: next/previous search match
-
-### Misc
-
-- `f`: change filter
-- `c`: random theme
-- `C`: reset theme
-- `x`: toggle disco mode
-- `space`: refresh tasks
-- `H`: toggle help
-- `q` or `esc`: close search/help or quit (press `q` when nothing is open)
+Press `H` to view all available hotkeys.
 
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
 

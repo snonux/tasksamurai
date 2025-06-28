@@ -72,6 +72,12 @@ type Model struct {
 	searchMatches []cellMatch
 	searchIndex   int
 
+	helpSearching     bool
+	helpSearchInput   textinput.Model
+	helpSearchRegex   *regexp.Regexp
+	helpSearchMatches []int // line indices that match
+	helpSearchIndex   int
+
 	prioritySelecting bool
 	priorityID        int
 	priorityIndex     int
@@ -190,6 +196,8 @@ func New(filters []string, browserCmd string) (Model, error) {
 	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
+	m.helpSearchInput = textinput.New()
+	m.helpSearchInput.Prompt = "help search: "
 	m.filterInput = textinput.New()
 	m.filterInput.Prompt = "filter: "
 
@@ -385,37 +393,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 // View renders the table UI.
 func (m Model) View() string {
 	if m.showHelp {
-		lines := []string{
-			m.tbl.HelpView(),
-			"enter/i: edit or expand cell",
-			"E: edit task",
-			"+: add task",
-			"s: toggle start/stop",
-			"d: mark task done",
-			"o: open URL",
-			"U: undo done",
-			"D: set due date",
-			"r: random due date",
-			"R: edit recurrence",
-			"a: annotate task",
-			"A: replace annotations",
-			"p: set priority",
-			"f: change filter",
-			"t: edit tags",
-			"c: random theme",
-			"C: reset theme",
-			"x: toggle disco mode",
-			"space: refresh tasks",
-			"/, ?: search",
-			"n/N: next/prev search match",
-			"esc: close help/search",
-			"q: quit",
-			"H: help", // show help toggle line
-		}
-		for i, l := range lines {
-			lines[i] = centerLines(l, m.tbl.Width())
-		}
-		return lipgloss.JoinVertical(lipgloss.Top, lines...)
+		return m.renderHelpScreen()
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.topStatusLine(),
@@ -484,6 +462,82 @@ func (m Model) View() string {
 		)
 	}
 	return view
+}
+
+// renderHelpScreen renders the help screen with optional search highlighting
+func (m Model) renderHelpScreen() string {
+	helpLines := m.getHelpLines()
+
+	// Apply search highlighting if active
+	if m.helpSearchRegex != nil {
+		for i, line := range helpLines {
+			if m.helpSearchRegex.MatchString(line) {
+				// Highlight matching lines
+				matches := m.helpSearchRegex.FindAllStringIndex(line, -1)
+				highlighted := line
+				offset := 0
+				for _, match := range matches {
+					start := match[0] + offset
+					end := match[1] + offset
+					style := lipgloss.NewStyle().
+						Background(lipgloss.Color(m.theme.SearchBG)).
+						Foreground(lipgloss.Color(m.theme.SearchFG))
+					highlighted = highlighted[:start] + style.Render(highlighted[start:end]) + highlighted[end:]
+					offset += len(style.Render(highlighted[start:end])) - (end - start)
+				}
+				helpLines[i] = highlighted
+			}
+		}
+	}
+
+	// Center all lines
+	for i, l := range helpLines {
+		helpLines[i] = centerLines(l, m.tbl.Width())
+	}
+
+	result := lipgloss.JoinVertical(lipgloss.Top, helpLines...)
+
+	// Add search input at the bottom if in help search mode
+	if m.helpSearching {
+		result = lipgloss.JoinVertical(lipgloss.Left,
+			result,
+			m.helpSearchInput.View(),
+		)
+	}
+
+	return result
+}
+
+// getHelpLines returns the help lines as a slice
+func (m Model) getHelpLines() []string {
+	return []string{
+		m.tbl.HelpView(),
+		"enter/i: edit or expand cell",
+		"E: edit task",
+		"+: add task",
+		"s: toggle start/stop",
+		"d: mark task done",
+		"o: open URL",
+		"U: undo done",
+		"w: set due date (when)",
+		"W: remove due date",
+		"r: random due date",
+		"R: edit recurrence",
+		"a: annotate task",
+		"A: replace annotations",
+		"p: set priority",
+		"f: change filter",
+		"t: edit tags",
+		"c: random theme",
+		"C: reset theme",
+		"x: toggle disco mode",
+		"space: refresh tasks",
+		"/, ?: search",
+		"n/N: next/prev search match",
+		"esc: close help/search",
+		"q: quit",
+		"H: help",
+	}
 }
 
 func (m Model) statusLine() string {

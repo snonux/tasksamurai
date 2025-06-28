@@ -13,6 +13,23 @@ import (
 
 // handleNormalMode handles keyboard input in normal mode (not editing)
 func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// If help is shown, handle special cases
+	if m.showHelp {
+		switch msg.String() {
+		case "H", "esc", "q":
+			return m.handleQuitOrEscape()
+		case "/", "?":
+			return m.handleHelpSearch()
+		case "n":
+			return m.handleNextHelpSearchMatch()
+		case "N":
+			return m.handlePrevHelpSearchMatch()
+		default:
+			// Ignore other keys in help mode
+			return m, nil
+		}
+	}
+	
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()
@@ -28,8 +45,10 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenURL()
 	case "U":
 		return m.handleUndo()
-	case "D":
+	case "w":
 		return m.handleSetDueDate()
+	case "W":
+		return m.handleRemoveDueDate()
 	case "r":
 		return m.handleRandomDueDate()
 	case "R":
@@ -81,6 +100,11 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 	}
 	if m.showHelp {
 		m.showHelp = false
+		// Clear help search state
+		m.helpSearchRegex = nil
+		m.helpSearchMatches = nil
+		m.helpSearchIndex = 0
+		m.helpSearchInput.SetValue("")
 		return m, nil
 	}
 	if m.searchRegex != nil {
@@ -199,6 +223,22 @@ func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
 	m.dueDate = time.Now()
 	m.updateTableHeight()
 	return m, nil
+}
+
+func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
+	id, err := m.getSelectedTaskID()
+	if err != nil {
+		return m, nil
+	}
+	
+	// In Taskwarrior, passing an empty value to due: removes the due date
+	if err := task.SetDueDate(id, ""); err != nil {
+		m.showError(err)
+		return m, nil
+	}
+	
+	m.reload()
+	return m, m.startBlink(id, false)
 }
 
 func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
@@ -362,6 +402,35 @@ func (m *Model) handlePrevSearchMatch() (tea.Model, tea.Cmd) {
 	m.tbl.SetCursor(match.row)
 	m.tbl.SetColumnCursor(match.col)
 	m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+	return m, nil
+}
+
+func (m *Model) handleHelpSearch() (tea.Model, tea.Cmd) {
+	m.helpSearching = true
+	m.helpSearchIndex = 0
+	m.helpSearchMatches = nil
+	m.helpSearchInput.SetValue("")
+	m.helpSearchInput.Focus()
+	return m, nil
+}
+
+func (m *Model) handleNextHelpSearchMatch() (tea.Model, tea.Cmd) {
+	if len(m.helpSearchMatches) == 0 {
+		return m, nil
+	}
+	
+	m.helpSearchIndex = (m.helpSearchIndex + 1) % len(m.helpSearchMatches)
+	// In the future, we could add visual indication of current match
+	return m, nil
+}
+
+func (m *Model) handlePrevHelpSearchMatch() (tea.Model, tea.Cmd) {
+	if len(m.helpSearchMatches) == 0 {
+		return m, nil
+	}
+	
+	m.helpSearchIndex = (m.helpSearchIndex - 1 + len(m.helpSearchMatches)) % len(m.helpSearchMatches)
+	// In the future, we could add visual indication of current match
 	return m, nil
 }
 

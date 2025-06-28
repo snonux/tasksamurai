@@ -367,6 +367,58 @@ func (m *Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// handleHelpSearchMode handles search input in help mode
+func (m *Model) handleHelpSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		pattern := m.helpSearchInput.Value()
+		if pattern != "" {
+			// Check cache first
+			if cached, ok := searchRegexCache[pattern]; ok {
+				m.helpSearchRegex = cached
+			} else {
+				// Compile and cache if not found
+				re, err := compileAndCacheRegex(pattern)
+				if err == nil {
+					m.helpSearchRegex = re
+				} else {
+					m.helpSearchRegex = nil
+					m.statusMsg = fmt.Sprintf("Invalid regex: %v", err)
+				}
+			}
+		} else {
+			m.helpSearchRegex = nil
+		}
+		m.helpSearching = false
+		m.helpSearchInput.Blur()
+		
+		// Find matching help lines
+		m.helpSearchMatches = nil
+		if m.helpSearchRegex != nil {
+			helpLines := m.getHelpLines()
+			for i, line := range helpLines {
+				if m.helpSearchRegex.MatchString(line) {
+					m.helpSearchMatches = append(m.helpSearchMatches, i)
+				}
+			}
+			// Set to first match
+			if len(m.helpSearchMatches) > 0 {
+				m.helpSearchIndex = 0
+			}
+		}
+		return m, nil
+		
+	case tea.KeyEsc:
+		m.helpSearching = false
+		m.helpSearchInput.Blur()
+		return m, nil
+	}
+	
+	var cmd tea.Cmd
+	m.helpSearchInput, cmd = m.helpSearchInput.Update(msg)
+	return m, cmd
+}
+
 // handleBlinkingState handles input when a task is blinking
 func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tea.KeyMsg); ok {
@@ -412,6 +464,9 @@ func (m *Model) handleEditingModes(msg tea.KeyMsg) (handled bool, model tea.Mode
 		return true, model, cmd
 	case m.searching:
 		model, cmd = m.handleSearchMode(msg)
+		return true, model, cmd
+	case m.helpSearching:
+		model, cmd = m.handleHelpSearchMode(msg)
 		return true, model, cmd
 	}
 	return false, m, nil

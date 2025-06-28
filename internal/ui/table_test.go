@@ -319,7 +319,7 @@ func TestDueDateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	m = *mv.(*Model)
 	for i := 0; i < 3; i++ {
 		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRight})
