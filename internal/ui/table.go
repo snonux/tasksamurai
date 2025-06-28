@@ -420,9 +420,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleNormalMode(msg)
 	}
 	
-	// Default case - pass through to table
+	// Default case - pass through to appropriate component
 	if m.showHelp {
-		return m, nil
+		// Update help viewport for mouse wheel and other events
+		var cmd tea.Cmd
+		m.helpViewport, cmd = m.helpViewport.Update(msg)
+		return m, cmd
 	}
 	
 	var cmd tea.Cmd

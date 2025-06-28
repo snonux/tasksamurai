@@ -121,7 +121,9 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 		height = 20 // Default height
 	}
 	m.helpViewport = viewport.New(width, height)
-	m.helpViewport.SetContent("") // Content will be set in renderHelpScreen
+	// Set the content immediately
+	content := m.buildHelpContent()
+	m.helpViewport.SetContent(content)
 	return m, nil
 }
 
