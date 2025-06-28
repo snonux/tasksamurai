@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -127,14 +129,22 @@ type Model struct {
 	detailSearching   bool
 	detailSearchInput textinput.Model
 	detailSearchRegex *regexp.Regexp
-	detailFieldIndex  int  // Current selected field in detail view
-	detailBlinkField  int  // Field that is currently blinking (-1 for none)
-	detailBlinkOn     bool // Whether the blink is currently on
-	detailBlinkCount  int  // Number of blinks remaining
+	detailFieldIndex  int    // Current selected field in detail view
+	detailBlinkField  int    // Field that is currently blinking (-1 for none)
+	detailBlinkOn     bool   // Whether the blink is currently on
+	detailBlinkCount  int    // Number of blinks remaining
+	detailDescEditing bool   // Whether we're editing description in detail view
+	detailDescTempFile string // Temp file path for description editing
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
 type editDoneMsg struct{ err error }
+
+// descEditDoneMsg is emitted when the external editor for description finishes.
+type descEditDoneMsg struct{ 
+	err error
+	tempFile string
+}
 
 type blinkMsg struct{}
 
@@ -151,6 +161,43 @@ const blinkCycles = 8
 func editCmd(id int) tea.Cmd {
 	c := task.EditCmd(id)
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
+}
+
+// editDescriptionCmd returns a command that opens the description in external editor
+func editDescriptionCmd(description string) tea.Cmd {
+	return func() tea.Msg {
+		// Create temp file
+		tmpFile, err := os.CreateTemp("", "tasksamurai-desc-*.txt")
+		if err != nil {
+			return descEditDoneMsg{err: err, tempFile: ""}
+		}
+		tmpPath := tmpFile.Name()
+		
+		// Write current description to temp file
+		_, err = tmpFile.WriteString(description)
+		tmpFile.Close()
+		if err != nil {
+			os.Remove(tmpPath)
+			return descEditDoneMsg{err: err, tempFile: ""}
+		}
+		
+		// Get editor from environment
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi" // fallback to vi
+		}
+		
+		// Create the command
+		c := exec.Command(editor, tmpPath)
+		c.Stdin = os.Stdin
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		
+		// Use ExecProcess to properly handle the external TUI editor
+		return tea.ExecProcess(c, func(err error) tea.Msg {
+			return descEditDoneMsg{err: err, tempFile: tmpPath}
+		})()
+	}
 }
 
 func blinkCmd() tea.Cmd {
@@ -335,6 +382,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWindowResize(msg)
 	case editDoneMsg:
 		return m.handleEditDone(msg)
+	case descEditDoneMsg:
+		return m.handleDescEditDone(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
 	case struct{ clearStatus bool }:
@@ -395,6 +444,49 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 	cmd := m.startBlink(m.editID, false)
 	m.editID = 0
 	return m, cmd
+}
+
+// handleDescEditDone handles the completion of description editing
+func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
+	m.detailDescEditing = false
+	defer os.Remove(msg.tempFile) // Clean up temp file
+	
+	if msg.err != nil {
+		m.statusMsg = fmt.Sprintf("Edit error: %v", msg.err)
+		cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return struct{ clearStatus bool }{true}
+		})
+		return m, cmd
+	}
+	
+	// Read the edited content
+	content, err := os.ReadFile(msg.tempFile)
+	if err != nil {
+		m.statusMsg = fmt.Sprintf("Error reading file: %v", err)
+		cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return struct{ clearStatus bool }{true}
+		})
+		return m, cmd
+	}
+	
+	// Update the description
+	newDesc := strings.TrimSpace(string(content))
+	if m.currentTaskDetail != nil {
+		err = task.SetDescription(m.currentTaskDetail.ID, newDesc)
+		if err != nil {
+			m.statusMsg = fmt.Sprintf("Error updating description: %v", err)
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+				return struct{ clearStatus bool }{true}
+			})
+			return m, cmd
+		}
+		
+		// Reload and start blinking
+		m.reload()
+		return m, m.startDetailBlink(9) // Description field index
+	}
+	
+	return m, nil
 }
 
 // handleBlinkMsg handles the blinking animation timer

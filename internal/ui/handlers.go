@@ -686,6 +686,17 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 		fieldPos++
 	}
 	
-	// Description and Annotations are not in the editable list
+	// Description (9)
+	if m.detailFieldIndex == fieldPos {
+		// Launch external editor for description
+		m.detailDescEditing = true
+		desc := ""
+		if m.currentTaskDetail != nil {
+			desc = m.currentTaskDetail.Description
+		}
+		return m, editDescriptionCmd(desc)
+	}
+	
+	// Annotations are not editable in detail view
 	return m, nil
 }

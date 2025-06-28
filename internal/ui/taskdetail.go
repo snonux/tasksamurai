@@ -141,12 +141,23 @@ func (m *Model) renderTaskDetail() string {
 	lines = append(lines, "")
 	descLabelStyle := labelStyle.Copy()
 	descValueStyle := descStyle.Copy()
-	if m.detailFieldIndex == currentField {
+	// Apply blinking if this field is blinking
+	if m.detailBlinkField == currentField && m.detailBlinkOn {
+		blinkBG := lipgloss.Color("226") // Bright yellow
+		descLabelStyle = descLabelStyle.Background(blinkBG).Foreground(lipgloss.Color("0"))
+		descValueStyle = descValueStyle.Background(blinkBG).Foreground(lipgloss.Color("0"))
+	} else if m.detailFieldIndex == currentField {
 		descLabelStyle = descLabelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
 		descValueStyle = descValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
 	}
 	lines = append(lines, descLabelStyle.Render("Description:"))
-	if t.Description != "" {
+	if m.detailDescEditing {
+		// Show editing indicator
+		editingStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("226")).
+			Italic(true)
+		lines = append(lines, editingStyle.Render("  [Editing in external editor...]"))
+	} else if t.Description != "" {
 		// Highlight search matches if searching
 		desc := t.Description
 		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(desc) {
@@ -185,12 +196,12 @@ func (m *Model) renderTaskDetail() string {
 		Foreground(lipgloss.Color("245")).
 		Italic(true)
 	// Check if we're in any editing mode
-	if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing {
+	if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.detailDescEditing {
 		lines = append(lines, instructionStyle.Render("Editing mode - Follow on-screen prompts"))
 	} else {
 		lines = append(lines, instructionStyle.Render("Press ESC or q to return to table view"))
 		lines = append(lines, instructionStyle.Render("Use ↑/k and ↓/j to navigate fields"))
-		lines = append(lines, instructionStyle.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence)"))
+		lines = append(lines, instructionStyle.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence, Description)"))
 		if m.detailSearching {
 			lines = append(lines, instructionStyle.Render("Type to search, Enter to confirm"))
 		} else {
