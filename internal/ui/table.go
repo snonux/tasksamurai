@@ -128,6 +128,9 @@ type Model struct {
 	detailSearchInput textinput.Model
 	detailSearchRegex *regexp.Regexp
 	detailFieldIndex  int  // Current selected field in detail view
+	detailBlinkField  int  // Field that is currently blinking (-1 for none)
+	detailBlinkOn     bool // Whether the blink is currently on
+	detailBlinkCount  int  // Number of blinks remaining
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -165,6 +168,21 @@ func (m *Model) clearEditingModes() {
 	m.addingTask = false
 	m.searching = false
 	m.prioritySelecting = false
+}
+
+// startDetailBlink starts blinking a field in the detail view
+func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
+	if !m.showTaskDetail {
+		return nil
+	}
+	if m.disco {
+		m.theme = RandomTheme()
+		m.applyTheme()
+	}
+	m.detailBlinkField = fieldIndex
+	m.detailBlinkOn = true
+	m.detailBlinkCount = blinkCycles
+	return blinkCmd()
 }
 
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
@@ -264,6 +282,11 @@ func (m *Model) reload() error {
 	m.total = task.TotalTasks(tasks)
 	m.inProgress = task.InProgressTasks(tasks)
 	m.due = task.DueTasks(tasks, time.Now())
+	
+	// Refresh current task detail if in detail view
+	if m.showTaskDetail {
+		m.refreshCurrentTaskDetail()
+	}
 
 	m.computeColumnWidths()
 
@@ -323,6 +346,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleBlinkingState(msg)
 		}
 		
+		// Check if we're in detail view
+		if m.showTaskDetail {
+			// If we're editing in detail view, let editing modes handle it
+			if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing {
+				if handled, model, cmd := m.handleEditingModes(msg); handled {
+					return model, cmd
+				}
+			}
+			// Otherwise handle detail view navigation
+			return m.handleTaskDetailMode(msg)
+		}
+		
 		// Check if we're in any editing mode
 		if handled, model, cmd := m.handleEditingModes(msg); handled {
 			return model, cmd
@@ -364,6 +399,21 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 
 // handleBlinkMsg handles the blinking animation timer
 func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
+	// Handle detail view blinking
+	if m.showTaskDetail && m.detailBlinkField != -1 {
+		m.detailBlinkOn = !m.detailBlinkOn
+		m.detailBlinkCount++
+		
+		if m.detailBlinkCount >= blinkCycles {
+			m.detailBlinkField = -1
+			m.detailBlinkOn = false
+			m.detailBlinkCount = 0
+		} else {
+			return m, blinkCmd()
+		}
+		return m, nil
+	}
+	
 	if m.blinkID == 0 {
 		return m, nil
 	}
@@ -427,13 +477,13 @@ func (m Model) View() string {
 	if m.dueEditing {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
-			m.dueView(),
+			m.dueView(true),
 		)
 	}
 	if m.prioritySelecting {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
-			m.priorityView(),
+			m.priorityView(true),
 		)
 	}
 	if m.descEditing {
@@ -667,11 +717,14 @@ func (m Model) formatUrgency(u string, width int) string {
 	return u
 }
 
-func (m Model) dueView() string {
-	return fmt.Sprintf("due: %s", m.dueDate.Format("2006-01-02"))
+func (m Model) dueView(showLabel bool) string {
+	if showLabel {
+		return fmt.Sprintf("due: %s", m.dueDate.Format("2006-01-02"))
+	}
+	return m.dueDate.Format("2006-01-02")
 }
 
-func (m Model) priorityView() string {
+func (m Model) priorityView(showLabel bool) string {
 	var parts []string
 	for i, p := range priorityOptions {
 		label := p
@@ -684,7 +737,10 @@ func (m Model) priorityView() string {
 		}
 		parts = append(parts, style.Render(label))
 	}
-	return "priority: " + strings.Join(parts, " ")
+	if showLabel {
+		return "priority: " + strings.Join(parts, " ")
+	}
+	return strings.Join(parts, " ")
 }
 
 func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {

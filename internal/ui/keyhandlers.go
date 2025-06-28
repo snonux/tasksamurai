@@ -459,6 +459,9 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 			m.detailSearching = false
 			m.detailSearchRegex = nil
 			m.detailFieldIndex = 0
+			m.detailBlinkField = -1
+			m.detailBlinkOn = false
+			m.detailBlinkCount = 0
 			m.detailSearchInput = textinput.New()
 			m.detailSearchInput.Placeholder = "Search..."
 			m.detailSearchInput.Width = 30

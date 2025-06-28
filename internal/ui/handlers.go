@@ -20,7 +20,7 @@ func (m *Model) handleTextInput(msg tea.KeyMsg, input *textinput.Model, onEnter 
 		value := input.Value()
 		if err := onEnter(value); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
 			})
 			return m, cmd
@@ -145,6 +145,10 @@ func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	
 	model, cmd := m.handleTextInput(msg, &m.tagsInput, onEnter, onExit)
 	if msg.Type == tea.KeyEnter {
+		if m.showTaskDetail {
+			// In detail view, blink the tags field
+			return model, m.startDetailBlink(4) // Tags is field index 4
+		}
 		return model, m.startBlink(m.tagsID, false)
 	}
 	return model, cmd
@@ -156,14 +160,20 @@ func (m *Model) handleDueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		if err := task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02")); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
 			})
 			return m, cmd
 		}
 		m.dueEditing = false
 		m.reload()
-		cmd := m.startBlink(m.dueID, false)
+		var cmd tea.Cmd
+		if m.showTaskDetail {
+			// In detail view, blink the due field
+			cmd = m.startDetailBlink(5) // Due is field index 5
+		} else {
+			cmd = m.startBlink(m.dueID, false)
+		}
 		m.updateTableHeight()
 		return m, cmd
 	case tea.KeyEsc:
@@ -204,6 +214,14 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
 	if msg.Type == tea.KeyEnter {
+		if m.showTaskDetail {
+			// In detail view, blink the recurrence field (dynamic index)
+			// Need to calculate the index based on whether recurrence field exists
+			fieldIndex := 8 // Base index for recurrence
+			if m.currentTaskDetail != nil && m.currentTaskDetail.Recur != "" {
+				return model, m.startDetailBlink(fieldIndex)
+			}
+		}
 		return model, m.startBlink(m.recurID, false)
 	}
 	return model, cmd
@@ -216,21 +234,27 @@ func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		priority := priorityOptions[m.priorityIndex]
 		if err := validatePriority(priority); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
 			})
 			return m, cmd
 		}
 		if err := task.SetPriority(m.priorityID, priority); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
 			})
 			return m, cmd
 		}
 		m.prioritySelecting = false
 		m.reload()
-		cmd := m.startBlink(m.priorityID, false)
+		var cmd tea.Cmd
+		if m.showTaskDetail {
+			// In detail view, blink the priority field
+			cmd = m.startDetailBlink(3) // Priority is field index 3
+		} else {
+			cmd = m.startBlink(m.priorityID, false)
+		}
 		m.updateTableHeight()
 		return m, cmd
 	case tea.KeyEsc:
@@ -274,7 +298,7 @@ func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		
 		if err := task.AddLine(m.addInput.Value()); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
 			})
 			return m, cmd
@@ -438,9 +462,6 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleEditingModes checks if we're in any editing mode and handles it
 func (m *Model) handleEditingModes(msg tea.KeyMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
 	switch {
-	case m.showTaskDetail:
-		model, cmd = m.handleTaskDetailMode(msg)
-		return true, model, cmd
 	case m.annotating:
 		model, cmd = m.handleAnnotationMode(msg)
 		return true, model, cmd
@@ -557,7 +578,114 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		m.detailFieldIndex = m.getDetailFieldCount() - 1
 		return m, nil
+	case "i", "enter":
+		// Check if current field is editable
+		return m.handleDetailFieldEdit()
 	}
 	
+	return m, nil
+}
+
+// handleDetailFieldEdit starts editing for the current field in detail view
+func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
+	if m.currentTaskDetail == nil {
+		return m, nil
+	}
+	
+	id := m.currentTaskDetail.ID
+	
+	// Map detail field index to editable fields
+	// fieldPriority = 3, fieldTags = 4, fieldDue = 5, fieldStart = 6, fieldRecur = 8 or 9 (depending on if fields exist)
+	
+	// Count fields up to current position to handle dynamic fields
+	fieldPos := 0
+	
+	// ID, UUID, Status (0-2)
+	if m.detailFieldIndex <= 2 {
+		return m, nil // Not editable
+	}
+	fieldPos = 3
+	
+	// Priority (3)
+	if m.detailFieldIndex == fieldPos {
+		m.clearEditingModes()
+		m.priorityID = id
+		m.prioritySelecting = true
+		
+		// Set current priority index
+		switch m.currentTaskDetail.Priority {
+		case "H":
+			m.priorityIndex = 0
+		case "M":
+			m.priorityIndex = 1
+		case "L":
+			m.priorityIndex = 2
+		default:
+			m.priorityIndex = 3
+		}
+		m.updateTableHeight()
+		return m, nil
+	}
+	fieldPos++
+	
+	// Tags (4)
+	if m.detailFieldIndex == fieldPos {
+		m.clearEditingModes()
+		m.tagsID = id
+		m.tagsEditing = true
+		m.tagsInput.SetValue("")
+		m.tagsInput.Focus()
+		m.updateTableHeight()
+		return m, nil
+	}
+	fieldPos++
+	
+	// Due (5)
+	if m.detailFieldIndex == fieldPos {
+		m.dueID = id
+		if m.currentTaskDetail.Due != "" {
+			if ts, err := parseTaskDate(m.currentTaskDetail.Due); err == nil {
+				m.dueDate = ts
+			} else {
+				m.dueDate = time.Now()
+			}
+		} else {
+			m.dueDate = time.Now()
+		}
+		m.clearEditingModes()
+		m.dueEditing = true
+		m.updateTableHeight()
+		return m, nil
+	}
+	fieldPos++
+	
+	// Start (6)
+	if m.detailFieldIndex == fieldPos {
+		// Start date is not editable in the original code, only toggled via 's' key
+		return m, nil
+	}
+	fieldPos++
+	
+	// Entry (7)
+	if m.detailFieldIndex == fieldPos {
+		return m, nil // Not editable
+	}
+	fieldPos++
+	
+	// Recurrence (8) - only if it exists
+	if m.currentTaskDetail.Recur != "" {
+		if m.detailFieldIndex == fieldPos {
+			m.clearEditingModes()
+			m.recurID = id
+			m.recurEditing = true
+			m.recurInput.SetValue(m.currentTaskDetail.Recur)
+			m.recurInput.Focus()
+			m.updateTableHeight()
+			return m, nil
+		}
+		fieldPos++
+	}
+	
+	// Description and Annotations are not in the editable list
 	return m, nil
 }
