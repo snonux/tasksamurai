@@ -597,19 +597,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 3: // Project
-		m.clearEditingModes()
-		m.projID = id
-		m.projEditing = true
-		task := m.getTaskAtCursor()
-		if task != nil {
-			m.projInput.SetValue(task.Project)
-		}
-		m.projInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
-	case 4: // Due date
+	case 3: // Due date
 		m.dueID = id
 		task := m.getTaskAtCursor()
 		if task != nil && task.Due != "" {
@@ -626,7 +614,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 5: // Recurrence
+	case 4: // Recurrence
 		m.clearEditingModes()
 		m.recurID = id
 		m.recurEditing = true
@@ -635,6 +623,18 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 			m.recurInput.SetValue(task.Recur)
 		}
 		m.recurInput.Focus()
+		m.updateTableHeight()
+		return m, nil
+		
+	case 5: // Project
+		m.clearEditingModes()
+		m.projID = id
+		m.projEditing = true
+		task := m.getTaskAtCursor()
+		if task != nil {
+			m.projInput.SetValue(task.Project)
+		}
+		m.projInput.Focus()
 		m.updateTableHeight()
 		return m, nil
 		

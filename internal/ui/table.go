@@ -304,9 +304,9 @@ func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 		{Title: "Pri", Width: m.priWidth},
 		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
-		{Title: "Project", Width: m.projWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
+		{Title: "Project", Width: m.projWidth},
 		{Title: "Tags", Width: m.tagsWidth},
 		{Title: "Annotations", Width: m.annWidth},
 		{Title: "Description", Width: m.descWidth},
@@ -356,7 +356,7 @@ func (m *Model) reload() error {
 		rows = append(rows, m.taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
 		if m.searchRegex != nil {
 			if m.searchRegex.MatchString(tsk.Project) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 3})
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
 			}
 			tags := strings.Join(tsk.Tags, " ")
 			if m.searchRegex.MatchString(tags) {
@@ -900,9 +900,9 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 		m.formatPriority(t.Priority, m.priWidth),
 		style.Render(strconv.Itoa(t.ID)),
 		style.Render(age),
-		style.Render(t.Project),
 		m.formatDue(t.Due, m.dueWidth),
 		style.Render(recur),
+		style.Render(t.Project),
 		style.Render(tags),
 		style.Render(annStr),
 		style.Render(t.Description),
@@ -1055,9 +1055,9 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	priStr := m.formatPriority(t.Priority, m.priWidth)
 	idStr := getStyle(1).Render(strconv.Itoa(t.ID))
 	ageStr := getStyle(2).Render(age)
-	projStr := m.highlightCell(getStyle(3), re, t.Project)
 	dueStr := m.formatDue(t.Due, m.dueWidth)
-	recurStr := m.highlightCell(getStyle(5), re, recur)
+	recurStr := m.highlightCell(getStyle(4), re, recur)
+	projStr := m.highlightCell(getStyle(5), re, t.Project)
 	tagStr := m.highlightCell(getStyle(6), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
@@ -1072,9 +1072,9 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 		priStr,
 		idStr,
 		ageStr,
-		projStr,
 		dueStr,
 		recurStr,
+		projStr,
 		tagStr,
 		annStr,
 		descStr,
@@ -1101,11 +1101,11 @@ func (m Model) expandedCellView() string {
 			val = fmt.Sprintf("%dd", days)
 		}
 	case 3:
-		val = t.Project
-	case 4:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
-	case 5:
+	case 4:
 		val = t.Recur
+	case 5:
+		val = t.Project
 	case 6:
 		val = strings.Join(t.Tags, " ")
 	case 7:
@@ -1269,9 +1269,9 @@ func (m *Model) applyColumns() {
 		{Title: "Pri", Width: m.priWidth},
 		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
-		{Title: "Project", Width: m.projWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
+		{Title: "Project", Width: m.projWidth},
 		{Title: "Tags", Width: m.tagsWidth},
 		{Title: "Annotations", Width: m.annWidth},
 		{Title: "Description", Width: m.descWidth},
