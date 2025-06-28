@@ -120,6 +120,13 @@ type Model struct {
 	disco        bool   // disco mode changes theme on every task modification
 
 	statusMsg string // temporary status message shown in status bar
+
+	// Task detail view fields
+	showTaskDetail    bool
+	currentTaskDetail *task.Task
+	detailSearching   bool
+	detailSearchInput textinput.Model
+	detailSearchRegex *regexp.Regexp
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -394,6 +401,9 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.showHelp {
 		return m.renderHelpScreen()
+	}
+	if m.showTaskDetail {
+		return m.renderTaskDetail()
 	}
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.topStatusLine(),

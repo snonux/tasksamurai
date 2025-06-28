@@ -438,6 +438,9 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleEditingModes checks if we're in any editing mode and handles it
 func (m *Model) handleEditingModes(msg tea.KeyMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
 	switch {
+	case m.showTaskDetail:
+		model, cmd = m.handleTaskDetailMode(msg)
+		return true, model, cmd
 	case m.annotating:
 		model, cmd = m.handleAnnotationMode(msg)
 		return true, model, cmd
@@ -489,4 +492,55 @@ func (m *Model) getTaskAtCursor() *task.Task {
 		return nil
 	}
 	return &m.tasks[cursor]
+}
+
+// handleTaskDetailMode handles keyboard input in task detail view
+func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.detailSearching {
+		var cmd tea.Cmd
+		switch msg.Type {
+		case tea.KeyEnter:
+			pattern := m.detailSearchInput.Value()
+			if pattern != "" {
+				re, err := compileAndCacheRegex(pattern)
+				if err == nil {
+					m.detailSearchRegex = re
+				} else {
+					m.detailSearchRegex = nil
+					m.statusMsg = fmt.Sprintf("Invalid regex: %v", err)
+				}
+			} else {
+				m.detailSearchRegex = nil
+			}
+			m.detailSearching = false
+			m.detailSearchInput.Blur()
+			return m, nil
+		case tea.KeyEsc, tea.KeyCtrlC:
+			m.detailSearching = false
+			m.detailSearchInput.Blur()
+			return m, nil
+		default:
+			m.detailSearchInput, cmd = m.detailSearchInput.Update(msg)
+			return m, cmd
+		}
+	}
+	
+	// Normal task detail view mode
+	switch msg.String() {
+	case "q", "esc":
+		return m.handleQuitOrEscape()
+	case "/", "?":
+		m.detailSearching = true
+		m.detailSearchInput.SetValue("")
+		m.detailSearchInput.Focus()
+		return m, nil
+	case "n":
+		// Next search match - not implemented yet but could be added
+		return m, nil
+	case "N":
+		// Previous search match - not implemented yet but could be added
+		return m, nil
+	}
+	
+	return m, nil
 }

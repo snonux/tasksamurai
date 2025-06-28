@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
@@ -79,7 +80,9 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNextSearchMatch()
 	case "N":
 		return m.handlePrevSearchMatch()
-	case "enter", "i":
+	case "enter":
+		return m.handleShowTaskDetail()
+	case "i":
 		return m.handleEnterOrEdit()
 	default:
 		// Pass through to table for navigation
@@ -93,6 +96,14 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
+	if m.showTaskDetail {
+		m.showTaskDetail = false
+		m.currentTaskDetail = nil
+		m.detailSearching = false
+		m.detailSearchRegex = nil
+		m.detailSearchInput.SetValue("")
+		return m, nil
+	}
 	if m.cellExpanded {
 		m.cellExpanded = false
 		m.updateTableHeight()
@@ -431,6 +442,29 @@ func (m *Model) handlePrevHelpSearchMatch() (tea.Model, tea.Cmd) {
 	
 	m.helpSearchIndex = (m.helpSearchIndex - 1 + len(m.helpSearchMatches)) % len(m.helpSearchMatches)
 	// In the future, we could add visual indication of current match
+	return m, nil
+}
+
+func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
+	id, err := m.getSelectedTaskID()
+	if err != nil {
+		return m, nil
+	}
+	
+	// Find the task with this ID
+	for i := range m.tasks {
+		if m.tasks[i].ID == id {
+			m.showTaskDetail = true
+			m.currentTaskDetail = &m.tasks[i]
+			m.detailSearching = false
+			m.detailSearchRegex = nil
+			m.detailSearchInput = textinput.New()
+			m.detailSearchInput.Placeholder = "Search..."
+			m.detailSearchInput.Width = 30
+			break
+		}
+	}
+	
 	return m, nil
 }
 
