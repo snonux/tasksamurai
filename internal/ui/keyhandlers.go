@@ -85,6 +85,8 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAddTask()
 	case "t":
 		return m.handleEditTags()
+	case "J":
+		return m.handleEditProject()
 	case "c":
 		return m.handleRandomTheme()
 	case "C":
@@ -387,6 +389,28 @@ func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
+	id, err := m.getSelectedTaskID()
+	if err != nil {
+		return m, nil
+	}
+	
+	m.clearEditingModes()
+	m.projID = id
+	m.projEditing = true
+	
+	// Get current project value
+	task := m.getTaskAtCursor()
+	if task != nil {
+		m.projInput.SetValue(task.Project)
+	} else {
+		m.projInput.SetValue("")
+	}
+	m.projInput.Focus()
+	m.updateTableHeight()
+	return m, nil
+}
+
 func (m *Model) handleRandomTheme() (tea.Model, tea.Cmd) {
 	m.theme = RandomTheme()
 	m.applyTheme()
@@ -539,7 +563,19 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 3: // Due date
+	case 3: // Project
+		m.clearEditingModes()
+		m.projID = id
+		m.projEditing = true
+		task := m.getTaskAtCursor()
+		if task != nil {
+			m.projInput.SetValue(task.Project)
+		}
+		m.projInput.Focus()
+		m.updateTableHeight()
+		return m, nil
+		
+	case 4: // Due date
 		m.dueID = id
 		task := m.getTaskAtCursor()
 		if task != nil && task.Due != "" {
@@ -556,7 +592,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 4: // Recurrence
+	case 5: // Recurrence
 		m.clearEditingModes()
 		m.recurID = id
 		m.recurEditing = true
@@ -568,7 +604,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 5: // Tags
+	case 6: // Tags
 		m.clearEditingModes()
 		m.tagsID = id
 		m.tagsEditing = true
@@ -577,7 +613,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 6: // Annotations
+	case 7: // Annotations
 		m.clearEditingModes()
 		m.annotateID = id
 		m.annotating = true
@@ -596,7 +632,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.updateTableHeight()
 		return m, nil
 		
-	case 7: // Description
+	case 8: // Description
 		m.clearEditingModes()
 		m.descID = id
 		m.descEditing = true

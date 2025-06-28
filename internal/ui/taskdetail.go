@@ -17,6 +17,7 @@ const (
 	fieldTags
 	fieldDue
 	fieldStart
+	fieldProject
 	fieldEntry
 	fieldRecur
 	fieldDescription
@@ -119,6 +120,24 @@ func (m *Model) renderTaskDetail() string {
 	currentField++
 	lines = append(lines, m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, currentField))
 	currentField++
+	
+	// Project
+	if m.projEditing && m.projID == t.ID {
+		// Show project editing UI without prompt
+		originalPrompt := m.projInput.Prompt
+		m.projInput.Prompt = ""
+		projView := m.projInput.View()
+		m.projInput.Prompt = originalPrompt
+		lines = append(lines, m.renderEditingField("Project", projView, labelStyle, currentField))
+	} else {
+		projectValue := t.Project
+		if projectValue == "" {
+			projectValue = "-"
+		}
+		lines = append(lines, m.renderTaskFieldWithIndex("Project", projectValue, labelStyle, valueStyle, currentField))
+	}
+	currentField++
+	
 	lines = append(lines, m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, currentField))
 	currentField++
 

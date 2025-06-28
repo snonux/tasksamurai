@@ -26,6 +26,7 @@ type Task struct {
 	ID          int          `json:"id"`
 	UUID        string       `json:"uuid"`
 	Description string       `json:"description"`
+	Project     string       `json:"project"`
 	Tags        []string     `json:"tags"`
 	Status      string       `json:"status"`
 	Start       string       `json:"start"`
@@ -296,6 +297,11 @@ func SetDueDate(id int, due string) error {
 // SetDescription changes the description of the task with the given id.
 func SetDescription(id int, desc string) error {
 	return modifyTask(id, "description:"+desc)
+}
+
+// SetProject changes the project of the task with the given id.
+func SetProject(id int, project string) error {
+	return modifyTask(id, "project:"+project)
 }
 
 // Annotate adds an annotation to the task with the given id.

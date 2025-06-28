@@ -227,6 +227,28 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return model, cmd
 }
 
+// handleProjectMode handles project editing
+func (m *Model) handleProjectMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	onEnter := func(value string) error {
+		return task.SetProject(m.projID, value)
+	}
+	
+	onExit := func() {
+		m.projEditing = false
+		m.reload()
+	}
+	
+	model, cmd := m.handleTextInput(msg, &m.projInput, onEnter, onExit)
+	if msg.Type == tea.KeyEnter {
+		if m.showTaskDetail {
+			// In detail view, blink the project field
+			return model, m.startDetailBlink(fieldProject) // Project field index in detail view
+		}
+		return model, m.startBlink(m.projID, false)
+	}
+	return model, cmd
+}
+
 // handlePriorityMode handles priority selection
 func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
@@ -477,6 +499,9 @@ func (m *Model) handleEditingModes(msg tea.KeyMsg) (handled bool, model tea.Mode
 	case m.recurEditing:
 		model, cmd = m.handleRecurrenceMode(msg)
 		return true, model, cmd
+	case m.projEditing:
+		model, cmd = m.handleProjectMode(msg)
+		return true, model, cmd
 	case m.prioritySelecting:
 		model, cmd = m.handlePriorityMode(msg)
 		return true, model, cmd
@@ -595,7 +620,7 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 	id := m.currentTaskDetail.ID
 	
 	// Map detail field index to editable fields
-	// fieldPriority = 3, fieldTags = 4, fieldDue = 5, fieldStart = 6, fieldRecur = 8 or 9 (depending on if fields exist)
+	// fieldPriority = 3, fieldTags = 4, fieldDue = 5, fieldStart = 6, fieldProject = 7, fieldRecur = 9 or 10 (depending on if fields exist)
 	
 	// Count fields up to current position to handle dynamic fields
 	fieldPos := 0
@@ -666,13 +691,29 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 	}
 	fieldPos++
 	
-	// Entry (7)
+	// Project (7)
+	if m.detailFieldIndex == fieldPos {
+		m.clearEditingModes()
+		m.projID = id
+		m.projEditing = true
+		if m.currentTaskDetail.Project != "" {
+			m.projInput.SetValue(m.currentTaskDetail.Project)
+		} else {
+			m.projInput.SetValue("")
+		}
+		m.projInput.Focus()
+		m.updateTableHeight()
+		return m, nil
+	}
+	fieldPos++
+	
+	// Entry (8)
 	if m.detailFieldIndex == fieldPos {
 		return m, nil // Not editable
 	}
 	fieldPos++
 	
-	// Recurrence (8) - only if it exists
+	// Recurrence (9) - only if it exists
 	if m.currentTaskDetail.Recur != "" {
 		if m.detailFieldIndex == fieldPos {
 			m.clearEditingModes()
@@ -686,7 +727,7 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 		fieldPos++
 	}
 	
-	// Description (9)
+	// Description (10 or 11 depending on recurrence)
 	if m.detailFieldIndex == fieldPos {
 		// Launch external editor for description
 		m.detailDescEditing = true

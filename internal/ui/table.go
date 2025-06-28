@@ -63,6 +63,10 @@ type Model struct {
 	recurID      int
 	recurInput   textinput.Model
 
+	projEditing bool
+	projID      int
+	projInput   textinput.Model
+
 	filterEditing bool
 	filterInput   textinput.Model
 
@@ -113,6 +117,7 @@ type Model struct {
 	tagsWidth  int
 	descWidth  int
 	annWidth   int
+	projWidth  int
 
 	total      int
 	inProgress int
@@ -215,6 +220,7 @@ func (m *Model) clearEditingModes() {
 	m.tagsEditing = false
 	m.dueEditing = false
 	m.recurEditing = false
+	m.projEditing = false
 	m.filterEditing = false
 	m.addingTask = false
 	m.searching = false
@@ -270,6 +276,8 @@ func New(filters []string, browserCmd string) (Model, error) {
 	m.tagsInput.Prompt = "tags: "
 	m.recurInput = textinput.New()
 	m.recurInput.Prompt = "recur: "
+	m.projInput = textinput.New()
+	m.projInput.Prompt = "project: "
 	m.dueDate = time.Now()
 	m.searchInput = textinput.New()
 	m.searchInput.Prompt = "search: "
@@ -296,6 +304,7 @@ func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 		{Title: "Pri", Width: m.priWidth},
 		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
+		{Title: "Project", Width: m.projWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
 		{Title: "Tags", Width: m.tagsWidth},
@@ -346,16 +355,19 @@ func (m *Model) reload() error {
 	for i, tsk := range tasks {
 		rows = append(rows, m.taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
 		if m.searchRegex != nil {
+			if m.searchRegex.MatchString(tsk.Project) {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 3})
+			}
 			tags := strings.Join(tsk.Tags, " ")
 			if m.searchRegex.MatchString(tags) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
 			}
 			if m.searchRegex.MatchString(tsk.Description) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 8})
 			}
 			for _, a := range tsk.Annotations {
 				if m.searchRegex.MatchString(a.Description) {
-					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
+					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
 					break
 				}
 			}
@@ -616,6 +628,12 @@ func (m Model) View() string {
 			m.recurInput.View(),
 		)
 	}
+	if m.projEditing {
+		view = lipgloss.JoinVertical(lipgloss.Left,
+			view,
+			m.projInput.View(),
+		)
+	}
 	if m.filterEditing {
 		view = lipgloss.JoinVertical(lipgloss.Left,
 			view,
@@ -688,6 +706,7 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("r", "set random due date", keyStyle, descStyle),
 		m.formatHelpLine("R", "edit recurrence", keyStyle, descStyle),
 		m.formatHelpLine("t", "edit tags", keyStyle, descStyle),
+		m.formatHelpLine("J", "edit project", keyStyle, descStyle),
 		m.formatHelpLine("a, A", "add/replace annotations", keyStyle, descStyle),
 		m.formatHelpLine("o", "open URL from description", keyStyle, descStyle),
 		"")
@@ -880,6 +899,7 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 		m.formatPriority(t.Priority, m.priWidth),
 		style.Render(strconv.Itoa(t.ID)),
 		style.Render(age),
+		style.Render(t.Project),
 		m.formatDue(t.Due, m.dueWidth),
 		style.Render(recur),
 		style.Render(tags),
@@ -1034,22 +1054,24 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	priStr := m.formatPriority(t.Priority, m.priWidth)
 	idStr := getStyle(1).Render(strconv.Itoa(t.ID))
 	ageStr := getStyle(2).Render(age)
+	projStr := m.highlightCell(getStyle(3), re, t.Project)
 	dueStr := m.formatDue(t.Due, m.dueWidth)
-	recurStr := m.highlightCell(getStyle(4), re, recur)
-	tagStr := m.highlightCell(getStyle(5), re, tags)
+	recurStr := m.highlightCell(getStyle(5), re, recur)
+	tagStr := m.highlightCell(getStyle(6), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
 	if n := len(anns); n > 0 {
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
-	annStr := m.highlightCellMatch(getStyle(6), re, annRaw, annCount)
-	descStr := m.highlightCell(getStyle(7), re, t.Description)
-	urgStr := getStyle(8).Render(m.formatUrgency(urg, m.urgWidth))
+	annStr := m.highlightCellMatch(getStyle(7), re, annRaw, annCount)
+	descStr := m.highlightCell(getStyle(8), re, t.Description)
+	urgStr := getStyle(9).Render(m.formatUrgency(urg, m.urgWidth))
 
 	return atable.Row{
 		priStr,
 		idStr,
 		ageStr,
+		projStr,
 		dueStr,
 		recurStr,
 		tagStr,
@@ -1062,7 +1084,7 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 func (m Model) expandedCellView() string {
 	row := m.tbl.Cursor()
 	col := m.tbl.ColumnCursor()
-	if row < 0 || row >= len(m.tasks) || col < 0 || col > 8 {
+	if row < 0 || row >= len(m.tasks) || col < 0 || col > 9 {
 		return ""
 	}
 	t := m.tasks[row]
@@ -1078,20 +1100,22 @@ func (m Model) expandedCellView() string {
 			val = fmt.Sprintf("%dd", days)
 		}
 	case 3:
-		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
+		val = t.Project
 	case 4:
-		val = t.Recur
+		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case 5:
-		val = strings.Join(t.Tags, " ")
+		val = t.Recur
 	case 6:
+		val = strings.Join(t.Tags, " ")
+	case 7:
 		var anns []string
 		for _, a := range t.Annotations {
 			anns = append(anns, a.Description)
 		}
 		val = strings.Join(anns, "; ")
-	case 7:
-		val = t.Description
 	case 8:
+		val = t.Description
+	case 9:
 		val = fmt.Sprintf("%.1f", t.Urgency)
 	}
 	header := ""
@@ -1139,7 +1163,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.filterEditing || m.addingTask {
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask {
 		h--
 	}
 	if h < 1 {
@@ -1177,6 +1201,7 @@ func (m *Model) computeColumnWidths() {
 	maxRecur := 1
 	maxTags := 0
 	maxAnn := 1
+	maxProj := 1
 	for _, t := range m.tasks {
 		if l := len(strconv.Itoa(t.ID)); l > maxID {
 			maxID = l
@@ -1199,6 +1224,9 @@ func (m *Model) computeColumnWidths() {
 		if l := len(t.Recur); l > maxRecur {
 			maxRecur = l
 		}
+		if l := len(t.Project); l > maxProj {
+			maxProj = l
+		}
 		tags := strings.Join(t.Tags, " ")
 		if l := len(tags); l > maxTags {
 			maxTags = l
@@ -1217,13 +1245,14 @@ func (m *Model) computeColumnWidths() {
 	m.recurWidth = maxRecur
 	m.tagsWidth = maxTags
 	m.annWidth = maxAnn
+	m.projWidth = maxProj
 
 	total := m.tbl.Width()
 	if total == 0 {
 		total = 80
 	}
-	base := m.idWidth + m.priWidth + m.ageWidth + m.dueWidth + m.recurWidth + m.tagsWidth + m.annWidth + m.urgWidth
-	base += 8 // spaces between columns
+	base := m.idWidth + m.priWidth + m.ageWidth + m.dueWidth + m.recurWidth + m.tagsWidth + m.annWidth + m.urgWidth + m.projWidth
+	base += 9 // spaces between columns
 	m.descWidth = total - base
 	if m.descWidth < 1 {
 		m.descWidth = 1
@@ -1239,6 +1268,7 @@ func (m *Model) applyColumns() {
 		{Title: "Pri", Width: m.priWidth},
 		{Title: "ID", Width: m.idWidth},
 		{Title: "Age", Width: m.ageWidth},
+		{Title: "Project", Width: m.projWidth},
 		{Title: "Due", Width: m.dueWidth},
 		{Title: "Recur", Width: m.recurWidth},
 		{Title: "Tags", Width: m.tagsWidth},
