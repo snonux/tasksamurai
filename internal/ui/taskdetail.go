@@ -368,8 +368,8 @@ func (m *Model) getDetailFieldCount() int {
 		return 0
 	}
 
-	// Basic fields that are always present: ID, UUID, Status, Priority, Tags, Due, Start, Entry, Description
-	count := 9
+	// Basic fields that are always present: ID, UUID, Status, Priority, Tags, Due, Start, Project, Entry, Description
+	count := 10
 
 	// Add recurrence if present
 	if m.currentTaskDetail.Recur != "" {
