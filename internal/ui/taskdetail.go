@@ -8,6 +8,36 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// wordWrap wraps text to fit within the specified width, breaking at word boundaries
+func wordWrap(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+	
+	var lines []string
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	
+	currentLine := words[0]
+	for i := 1; i < len(words); i++ {
+		word := words[i]
+		testLine := currentLine + " " + word
+		if len(testLine) > width {
+			lines = append(lines, currentLine)
+			currentLine = word
+		} else {
+			currentLine = testLine
+		}
+	}
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+	
+	return lines
+}
+
 // Define field indices for navigation
 const (
 	fieldID = iota
@@ -177,12 +207,24 @@ func (m *Model) renderTaskDetail() string {
 			Italic(true)
 		lines = append(lines, editingStyle.Render("  [Editing in external editor...]"))
 	} else if t.Description != "" {
-		// Highlight search matches if searching
-		desc := t.Description
-		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(desc) {
-			desc = m.highlightMatches(desc, m.detailSearchRegex)
+		// Calculate available width for description (terminal width - margins)
+		availableWidth := m.tbl.Width() - 4
+		if availableWidth < 20 {
+			availableWidth = 20 // Minimum width
 		}
-		lines = append(lines, descValueStyle.Render(desc))
+		
+		// Wrap the description text
+		desc := t.Description
+		wrappedLines := wordWrap(desc, availableWidth)
+		
+		// Apply search highlighting and render each wrapped line
+		for _, line := range wrappedLines {
+			displayLine := line
+			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(line) {
+				displayLine = m.highlightMatches(line, m.detailSearchRegex)
+			}
+			lines = append(lines, descValueStyle.Render(displayLine))
+		}
 	} else {
 		lines = append(lines, descValueStyle.Render("-"))
 	}
@@ -198,13 +240,28 @@ func (m *Model) renderTaskDetail() string {
 			annValueStyle = annValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
 		}
 		lines = append(lines, annLabelStyle.Render("Annotations:"))
+		// Calculate available width for annotations
+		availableWidth := m.tbl.Width() - 4
+		if availableWidth < 20 {
+			availableWidth = 20 // Minimum width
+		}
+		
 		for _, ann := range t.Annotations {
 			annText := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ann.Description)
-			// Highlight search matches
-			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(annText) {
-				annText = m.highlightMatches(annText, m.detailSearchRegex)
+			wrappedAnnLines := wordWrap(annText, availableWidth)
+			
+			// Apply search highlighting and render each wrapped line
+			for i, line := range wrappedAnnLines {
+				displayLine := line
+				if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(line) {
+					displayLine = m.highlightMatches(line, m.detailSearchRegex)
+				}
+				// Add some indentation for continuation lines
+				if i > 0 {
+					displayLine = "  " + displayLine
+				}
+				lines = append(lines, annValueStyle.Render(displayLine))
 			}
-			lines = append(lines, annValueStyle.Render(annText))
 		}
 	}
 

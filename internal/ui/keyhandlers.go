@@ -246,15 +246,49 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	
-	m.reload()
+	// Reload the task list to get the updated task with its new ID
+	if err := m.reload(); err != nil {
+		m.showError(err)
+		return m, nil
+	}
 	
 	// Find the task ID for blinking
 	var id int
+	var found bool
 	for _, tsk := range m.tasks {
 		if tsk.UUID == uuid {
 			id = tsk.ID
+			found = true
 			break
 		}
+	}
+	
+	// If task not found or has ID 0, try to get it directly from Taskwarrior
+	if !found || id == 0 {
+		// Use task export with UUID filter to get the specific task
+		filters := []string{uuid}
+		if m.filters != nil {
+			filters = append(filters, m.filters...)
+		}
+		filters = append(filters, "status:pending")
+		
+		tasks, err := task.Export(filters...)
+		if err == nil && len(tasks) > 0 {
+			id = tasks[0].ID
+			// Also update our local task list
+			for i, tsk := range m.tasks {
+				if tsk.UUID == uuid {
+					m.tasks[i].ID = id
+					break
+				}
+			}
+		}
+	}
+	
+	// If we still don't have a valid ID, don't try to blink
+	if id == 0 {
+		m.statusMsg = "Task restored"
+		return m, nil
 	}
 	
 	return m, m.startBlink(id, false)
