@@ -684,8 +684,11 @@ func (m Model) buildHelpContent() string {
 	sections = append(sections, headerStyle.Render("Navigation"),
 		m.formatHelpLine("↑/k, ↓/j", "move up/down", keyStyle, descStyle),
 		m.formatHelpLine("←/h, →/l", "move left/right", keyStyle, descStyle),
-		m.formatHelpLine("g/Home, G/End", "go to start/end", keyStyle, descStyle),
+		m.formatHelpLine("0, g, Home", "go to start", keyStyle, descStyle),
+		m.formatHelpLine("G, End", "go to end", keyStyle, descStyle),
 		m.formatHelpLine("pgup/pgdn, b", "page up/down", keyStyle, descStyle),
+		m.formatHelpLine("1", "jump to random task", keyStyle, descStyle),
+		m.formatHelpLine("2", "jump to random task (no due date)", keyStyle, descStyle),
 		"")
 	
 	// Task Management section

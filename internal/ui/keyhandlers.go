@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"strings"
 	"time"
@@ -107,6 +108,10 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleShowTaskDetail()
 	case "i":
 		return m.handleEnterOrEdit()
+	case "1":
+		return m.handleJumpToRandomTask()
+	case "2":
+		return m.handleJumpToRandomTaskNoDue()
 	default:
 		// Pass through to table for navigation
 		return m.handleTableNavigation(msg)
@@ -735,4 +740,63 @@ func (m *Model) handleTableNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) showError(err error) {
 	m.statusMsg = fmt.Sprintf("Error: %v", err)
 	// Note: we can't return a Cmd from here, so the error will stay until next update
+}
+
+// handleJumpToRandomTask jumps to a random pending task
+func (m *Model) handleJumpToRandomTask() (tea.Model, tea.Cmd) {
+	if len(m.tasks) == 0 {
+		m.statusMsg = "No tasks to jump to"
+		return m, nil
+	}
+	
+	// Pick a random index
+	randomIndex := rand.Intn(len(m.tasks))
+	
+	// Update cursor position
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
+	m.tbl.SetCursor(randomIndex)
+	m.updateSelectionHighlight(prevRow, randomIndex, prevCol, m.tbl.ColumnCursor())
+	
+	// Blink the task to indicate jump
+	if randomIndex < len(m.tasks) {
+		taskID := m.tasks[randomIndex].ID
+		return m, m.startBlink(taskID, false)
+	}
+	
+	return m, nil
+}
+
+// handleJumpToRandomTaskNoDue jumps to a random pending task without a due date
+func (m *Model) handleJumpToRandomTaskNoDue() (tea.Model, tea.Cmd) {
+	// Find all tasks without due dates
+	var noDueTasks []int
+	for i, task := range m.tasks {
+		if task.Due == "" {
+			noDueTasks = append(noDueTasks, i)
+		}
+	}
+	
+	if len(noDueTasks) == 0 {
+		m.statusMsg = "No tasks without due date to jump to"
+		return m, nil
+	}
+	
+	// Pick a random task from the no-due list
+	randomChoice := rand.Intn(len(noDueTasks))
+	randomIndex := noDueTasks[randomChoice]
+	
+	// Update cursor position
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
+	m.tbl.SetCursor(randomIndex)
+	m.updateSelectionHighlight(prevRow, randomIndex, prevCol, m.tbl.ColumnCursor())
+	
+	// Blink the task to indicate jump
+	if randomIndex < len(m.tasks) {
+		taskID := m.tasks[randomIndex].ID
+		return m, m.startBlink(taskID, false)
+	}
+	
+	return m, nil
 }
