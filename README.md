@@ -6,7 +6,7 @@ Task Samurai is a fast terminal interface for [Taskwarrior](https://taskwarrior.
 
 ## Why does this exist?
 
-- I wanted to tinker with agentic coding.
+- I wanted to tinker with agentic coding (actually, it has been mainly vibe coded using OpenAI Codex and Claude Code CLI)
 - I wanted a faster UI for Taskwarrior than other options like vit which is Python based.
 - I wanted something built with Bubble Tea but never had time to deep dive into it.
 
