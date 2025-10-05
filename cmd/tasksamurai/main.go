@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"runtime"
+
 	"codeberg.org/snonux/tasksamurai/internal/task"
 	"codeberg.org/snonux/tasksamurai/internal/ui"
 
@@ -12,8 +14,14 @@ import (
 )
 
 func main() {
+	// Set default browser command depending on OS.
+	browserCmdDefault := "firefox"
+	if runtime.GOOS == "darwin" {
+		browserCmdDefault = "open"
+	}
+
 	debugLog := flag.String("debug-log", "", "path to debug log file")
-	browserCmd := flag.String("browser-cmd", "firefox", "command used to open URLs")
+	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	flag.Parse()
 
