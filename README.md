@@ -50,6 +50,8 @@ tasksamurai
 tasksamurai +tag status:pending
 tasksamurai project:work due:today
 tasksamurai pri:H
+tasksamurai -- -excludetag
+tasksamurai -- -excludetag +includetag
 
 # Any valid Taskwarrior filter can be passed as arguments
 ```
