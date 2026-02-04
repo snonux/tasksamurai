@@ -36,6 +36,10 @@ mage clean
 ./tasksamurai --disco
 ```
 
+## Coding best practices
+
+Follow the coding best practices for Go projects as per ~/git/conf/snippets/go/go-projects/gogios.md
+
 ## Architecture
 
 ### Core Components
