@@ -10,16 +10,21 @@ TaskSamurai is a fast Terminal User Interface (TUI) for Taskwarrior written in G
 
 ```bash
 # Build the application
-go-task
+mage build
+# or simply
+mage
 
 # Run the application
-go-task run
+mage run
 
 # Run all tests
-go-task test
+mage test
 
 # Install to $GOPATH/bin
-go-task install
+mage install
+
+# Clean build artifacts
+mage clean
 
 # Run with debug logging
 ./tasksamurai --debug-log debug.log

@@ -7,6 +7,7 @@ import (
 
 	"runtime"
 
+	"codeberg.org/snonux/tasksamurai/internal/debug"
 	"codeberg.org/snonux/tasksamurai/internal/task"
 	"codeberg.org/snonux/tasksamurai/internal/ui"
 
@@ -21,6 +22,7 @@ func main() {
 	}
 
 	debugLog := flag.String("debug-log", "", "path to debug log file")
+	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
 	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	flag.Parse()
@@ -29,6 +31,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "failed to enable debug log:", err)
 		os.Exit(1)
 	}
+
+	// Set up runtime debugging signal handlers
+	debug.SetDebugDir(*debugDir)
+	debug.InitSignalHandlers()
 
 	m, err := ui.New(flag.Args(), *browserCmd)
 	if err != nil {
