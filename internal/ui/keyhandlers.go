@@ -96,6 +96,8 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleResetTheme()
 	case "x":
 		return m.handleToggleDisco()
+	case "B":
+		return m.handleToggleBlink()
 	case " ":
 		return m.handleRefresh()
 	case "/", "?":
@@ -498,6 +500,16 @@ func (m *Model) handleResetTheme() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleToggleDisco() (tea.Model, tea.Cmd) {
 	m.disco = !m.disco
+	return m, nil
+}
+
+func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
+	m.blinkEnabled = !m.blinkEnabled
+	if m.blinkEnabled {
+		m.statusMsg = "Blinking enabled"
+	} else {
+		m.statusMsg = "Blinking disabled"
+	}
 	return m, nil
 }
 

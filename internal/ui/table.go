@@ -103,6 +103,7 @@ type Model struct {
 	blinkOn       bool
 	blinkCount    int
 	blinkMarkDone bool
+	blinkEnabled  bool
 
 	cellExpanded bool
 
@@ -245,6 +246,27 @@ func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 	m.blinkID = id
 	m.blinkMarkDone = markDone
+
+	if !m.blinkEnabled {
+		// If blinking is disabled, still complete the task immediately
+		// by simulating the end of the blink cycle
+		if markDone {
+			for _, tsk := range m.tasks {
+				if tsk.ID == id {
+					m.undoStack = append(m.undoStack, tsk.UUID)
+					break
+				}
+			}
+			if err := task.Done(id); err != nil {
+				m.showError(err)
+			}
+		}
+		m.blinkID = 0
+		m.blinkMarkDone = false
+		m.reload()
+		return nil
+	}
+
 	m.blinkRow = -1
 	for i, tsk := range m.tasks {
 		if tsk.ID == id {
@@ -267,7 +289,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 
 // New creates a new UI model with the provided rows.
 func New(filters []string, browserCmd string) (Model, error) {
-	m := Model{filters: filters, browserCmd: browserCmd}
+	m := Model{filters: filters, browserCmd: browserCmd, blinkEnabled: true}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
