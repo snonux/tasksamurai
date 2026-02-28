@@ -615,126 +615,50 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleEnterOrEdit dispatches to the appropriate inline editor based on the
+// column the cursor is on. Shared activation helpers (activatePriorityEdit,
+// activateDueEdit, etc.) are defined in handlers.go to avoid duplication with
+// the detail-view editing path.
 func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 	id, err := m.getSelectedTaskID()
 	if err != nil {
-		// No task selected, toggle cell expansion
+		// No task selected — toggle expanded-cell panel instead.
 		m.cellExpanded = !m.cellExpanded
 		m.updateTableHeight()
 		return m, nil
 	}
-	
-	col := m.tbl.ColumnCursor()
-	switch col {
+
+	tsk := m.getTaskAtCursor()
+	// taskStr extracts a string field from the cursor task, returning ""
+	// when no task is selected so activation helpers get a safe zero value.
+	taskStr := func(get func(*task.Task) string) string {
+		if tsk == nil {
+			return ""
+		}
+		return get(tsk)
+	}
+
+	switch m.tbl.ColumnCursor() {
 	case 0: // Priority
-		m.clearEditingModes()
-		m.priorityID = id
-		m.prioritySelecting = true
-		
-		// Set current priority index
-		task := m.getTaskAtCursor()
-		if task != nil {
-			switch task.Priority {
-			case "H":
-				m.priorityIndex = 0
-			case "M":
-				m.priorityIndex = 1
-			case "L":
-				m.priorityIndex = 2
-			default:
-				m.priorityIndex = 3
-			}
-		}
-		m.updateTableHeight()
-		return m, nil
-		
+		m.activatePriorityEdit(id, taskStr(func(t *task.Task) string { return t.Priority }))
 	case 3: // Due date
-		m.dueID = id
-		task := m.getTaskAtCursor()
-		if task != nil && task.Due != "" {
-			if ts, err := parseTaskDate(task.Due); err == nil {
-				m.dueDate = ts
-			} else {
-				m.dueDate = time.Now()
-			}
-		} else {
-			m.dueDate = time.Now()
-		}
-		m.clearEditingModes()
-		m.dueEditing = true
-		m.updateTableHeight()
-		return m, nil
-		
+		m.activateDueEdit(id, taskStr(func(t *task.Task) string { return t.Due }))
 	case 4: // Recurrence
-		m.clearEditingModes()
-		m.recurID = id
-		m.recurEditing = true
-		task := m.getTaskAtCursor()
-		if task != nil {
-			m.recurInput.SetValue(task.Recur)
-		}
-		m.recurInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
+		m.activateRecurEdit(id, taskStr(func(t *task.Task) string { return t.Recur }))
 	case 5: // Project
-		m.clearEditingModes()
-		m.projID = id
-		m.projEditing = true
-		task := m.getTaskAtCursor()
-		if task != nil {
-			m.projInput.SetValue(task.Project)
-		}
-		m.projInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
+		m.activateProjectEdit(id, taskStr(func(t *task.Task) string { return t.Project }))
 	case 6: // Tags
-		m.clearEditingModes()
-		m.tagsID = id
-		m.tagsEditing = true
-		m.tagsInput.SetValue("")
-		m.tagsInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
+		m.activateTagsEdit(id)
 	case 7: // Annotations
-		m.clearEditingModes()
-		m.annotateID = id
-		m.annotating = true
-		m.replaceAnnotations = true
-		
-		// Get current annotations
-		task := m.getTaskAtCursor()
-		if task != nil {
-			var anns []string
-			for _, a := range task.Annotations {
-				anns = append(anns, a.Description)
-			}
-			m.annotateInput.SetValue(strings.Join(anns, "; "))
-		}
-		m.annotateInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
+		return m.activateAnnotationsEdit(id, tsk)
 	case 8: // Description
-		m.clearEditingModes()
-		m.descID = id
-		m.descEditing = true
-		task := m.getTaskAtCursor()
-		if task != nil {
-			m.descInput.SetValue(task.Description)
-		}
-		m.descInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-		
+		return m.activateDescriptionEdit(id, tsk)
 	default:
-		// Toggle cell expansion for other columns
+		// Other columns: toggle expanded-cell panel.
 		m.cellExpanded = !m.cellExpanded
 		m.updateTableHeight()
-		return m, nil
 	}
+	return m, nil
 }
 
 func (m *Model) handleTableNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

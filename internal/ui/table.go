@@ -558,7 +558,7 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		
 		// Reload and start blinking
 		m.reload()
-		return m, m.startDetailBlink(9) // Description field index
+		return m, m.startDetailBlink(m.detailDescriptionFieldIndex())
 	}
 	
 	return m, nil
@@ -618,7 +618,6 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 // View renders the table UI.
 func (m Model) View() string {
 	if m.showHelp {
-		// Update help content before rendering
 		m.updateHelpContent()
 		return m.renderHelpScreen()
 	}
@@ -634,70 +633,35 @@ func (m Model) View() string {
 		m.statusLine(),
 	)
 	if m.cellExpanded {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.expandedCellView(),
-		)
+		view = lipgloss.JoinVertical(lipgloss.Left, view, m.expandedCellView())
 	}
-	if m.annotating {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.annotateInput.View(),
-		)
+	return m.appendInlineInputOverlay(view)
+}
+
+// appendInlineInputOverlay appends whichever active inline-editing widget
+// (annotate, due, priority, desc, tags, recur, project, filter, add, search)
+// should be displayed below the table. At most one is active at a time.
+func (m Model) appendInlineInputOverlay(view string) string {
+	type overlay struct {
+		active bool
+		widget string
 	}
-	if m.dueEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.dueView(true),
-		)
+	overlays := []overlay{
+		{m.annotating, m.annotateInput.View()},
+		{m.dueEditing, m.dueView(true)},
+		{m.prioritySelecting, m.priorityView(true)},
+		{m.descEditing, m.descInput.View()},
+		{m.tagsEditing, m.tagsInput.View()},
+		{m.recurEditing, m.recurInput.View()},
+		{m.projEditing, m.projInput.View()},
+		{m.filterEditing, m.filterInput.View()},
+		{m.addingTask, m.addInput.View()},
+		{m.searching, m.searchInput.View()},
 	}
-	if m.prioritySelecting {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.priorityView(true),
-		)
-	}
-	if m.descEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.descInput.View(),
-		)
-	}
-	if m.tagsEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.tagsInput.View(),
-		)
-	}
-	if m.recurEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.recurInput.View(),
-		)
-	}
-	if m.projEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.projInput.View(),
-		)
-	}
-	if m.filterEditing {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.filterInput.View(),
-		)
-	}
-	if m.addingTask {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.addInput.View(),
-		)
-	}
-	if m.searching {
-		view = lipgloss.JoinVertical(lipgloss.Left,
-			view,
-			m.searchInput.View(),
-		)
+	for _, o := range overlays {
+		if o.active {
+			view = lipgloss.JoinVertical(lipgloss.Left, view, o.widget)
+		}
 	}
 	return view
 }

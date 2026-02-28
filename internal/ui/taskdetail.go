@@ -55,245 +55,259 @@ const (
 	fieldCount // Total number of fields
 )
 
-// renderTaskDetail renders the detailed view of a single task
+// renderTaskDetail renders the detailed view of a single task.
+// It delegates each visual section to a focused helper so that the
+// overall structure is easy to follow at a glance.
 func (m *Model) renderTaskDetail() string {
 	if m.currentTaskDetail == nil {
 		return "No task selected"
 	}
-
 	t := m.currentTaskDetail
 
-	// Create styles based on theme
-	titleStyle := lipgloss.NewStyle().
+	titleStyle, labelStyle, valueStyle, descStyle := m.detailStyles()
+
+	var lines []string
+	lines = append(lines, titleStyle.Render(fmt.Sprintf("Task %d Details", t.ID)))
+	lines = append(lines, "")
+	lines, nextField := m.renderDetailFieldRows(lines, labelStyle, valueStyle)
+	lines = m.renderDetailDescription(lines, nextField, labelStyle, descStyle)
+	nextField++
+	lines = m.renderDetailAnnotations(lines, nextField, labelStyle, descStyle)
+	lines = m.renderDetailFooter(lines)
+	return strings.Join(lines, "\n")
+}
+
+// detailStyles returns the four lipgloss styles shared by the detail-view helpers.
+func (m *Model) detailStyles() (title, label, value, desc lipgloss.Style) {
+	title = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(m.theme.SelectedFG)).
 		Background(lipgloss.Color(m.theme.SelectedBG)).
 		Padding(0, 1)
-
-	labelStyle := lipgloss.NewStyle().
+	label = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(m.theme.HeaderFG))
-
-	valueStyle := lipgloss.NewStyle().
+	value = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("252"))
-
-	descStyle := lipgloss.NewStyle().
+	desc = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("250")).
 		PaddingLeft(2)
+	return
+}
 
-	// Build the detail view
-	var lines []string
+// renderDetailFieldRows appends the fixed and optional task fields (ID through
+// optional Recurrence) to lines and returns the updated slice together with the
+// field index of the next unrendered field (Description).
+func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lipgloss.Style) ([]string, int) {
+	t := m.currentTaskDetail
+	cf := 0 // current field counter
 
-	// Title bar
-	title := fmt.Sprintf("Task %d Details", t.ID)
-	lines = append(lines, titleStyle.Render(title))
-	lines = append(lines, "")
-
-	// Task fields
-	currentField := 0
-	lines = append(lines, m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, currentField))
-	currentField++
-	lines = append(lines, m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, currentField))
-	currentField++
-	lines = append(lines, m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, currentField))
-	currentField++
-
-	// Priority with color
-	if m.prioritySelecting && m.priorityID == t.ID {
-		// Show priority selection UI
-		lines = append(lines, m.renderEditingField("Priority", m.priorityView(false), labelStyle, currentField))
-	} else {
-		priorityValue := t.Priority
-		if priorityValue == "" {
-			priorityValue = "-"
-		}
-		priorityStyle := valueStyle.Copy()
-		switch t.Priority {
-		case "H":
-			priorityStyle = priorityStyle.Background(lipgloss.Color(m.theme.PrioHighBG))
-			priorityValue = "H (High)"
-		case "M":
-			priorityStyle = priorityStyle.Background(lipgloss.Color(m.theme.PrioMedBG))
-			priorityValue = "M (Medium)"
-		case "L":
-			priorityStyle = priorityStyle.Background(lipgloss.Color(m.theme.PrioLowBG))
-			priorityValue = "L (Low)"
-		}
-		lines = append(lines, m.renderTaskFieldWithIndex("Priority", priorityValue, labelStyle, priorityStyle, currentField))
-	}
-	currentField++
-
-	// Tags
-	if m.tagsEditing && m.tagsID == t.ID {
-		// Show tags editing UI without prompt
-		originalPrompt := m.tagsInput.Prompt
-		m.tagsInput.Prompt = ""
-		tagsView := m.tagsInput.View()
-		m.tagsInput.Prompt = originalPrompt
-		lines = append(lines, m.renderEditingField("Tags", tagsView, labelStyle, currentField))
-	} else {
-		tagStr := strings.Join(t.Tags, ", ")
-		if tagStr == "" {
-			tagStr = "-"
-		}
-		lines = append(lines, m.renderTaskFieldWithIndex("Tags", tagStr, labelStyle, valueStyle, currentField))
-	}
-	currentField++
-
-	// Dates
-	if m.dueEditing && m.dueID == t.ID {
-		// Show due date editing UI
-		lines = append(lines, m.renderEditingField("Due", m.dueView(false), labelStyle, currentField))
-	} else {
-		lines = append(lines, m.renderTaskFieldWithIndex("Due", m.formatTaskDate(t.Due), labelStyle, valueStyle, currentField))
-	}
-	currentField++
-	lines = append(lines, m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, currentField))
-	currentField++
-	
-	// Project
-	if m.projEditing && m.projID == t.ID {
-		// Show project editing UI without prompt
-		originalPrompt := m.projInput.Prompt
-		m.projInput.Prompt = ""
-		projView := m.projInput.View()
-		m.projInput.Prompt = originalPrompt
-		lines = append(lines, m.renderEditingField("Project", projView, labelStyle, currentField))
-	} else {
-		projectValue := t.Project
-		if projectValue == "" {
-			projectValue = "-"
-		}
-		lines = append(lines, m.renderTaskFieldWithIndex("Project", projectValue, labelStyle, valueStyle, currentField))
-	}
-	currentField++
-	
-	lines = append(lines, m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, currentField))
-	currentField++
-
-	// Recurrence
+	lines = append(lines, m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderDetailPriorityField(labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderDetailTagsField(labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderDetailDueField(labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderDetailProjectField(labelStyle, valueStyle, cf))
+	cf++
+	lines = append(lines, m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, cf))
+	cf++
 	if t.Recur != "" {
-		if m.recurEditing && m.recurID == t.ID {
-			// Show recurrence editing UI without prompt
-			originalPrompt := m.recurInput.Prompt
-			m.recurInput.Prompt = ""
-			recurView := m.recurInput.View()
-			m.recurInput.Prompt = originalPrompt
-			lines = append(lines, m.renderEditingField("Recurrence", recurView, labelStyle, currentField))
-		} else {
-			lines = append(lines, m.renderTaskFieldWithIndex("Recurrence", t.Recur, labelStyle, valueStyle, currentField))
-		}
-		currentField++
+		lines = append(lines, m.renderDetailRecurField(labelStyle, cf))
+		cf++
 	}
+	return lines, cf
+}
 
-	// Description - with full space
-	lines = append(lines, "")
-	descLabelStyle := labelStyle.Copy()
-	descValueStyle := descStyle.Copy()
-	// Apply blinking if this field is blinking
-	if m.detailBlinkField == currentField && m.detailBlinkOn {
-		blinkBG := lipgloss.Color("226") // Bright yellow
-		descLabelStyle = descLabelStyle.Background(blinkBG).Foreground(lipgloss.Color("0"))
-		descValueStyle = descValueStyle.Background(blinkBG).Foreground(lipgloss.Color("0"))
-	} else if m.detailFieldIndex == currentField {
-		descLabelStyle = descLabelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
-		descValueStyle = descValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
+// renderDetailPriorityField renders the Priority row, showing the selection
+// widget when the user is actively changing it.
+func (m *Model) renderDetailPriorityField(labelStyle, valueStyle lipgloss.Style, cf int) string {
+	t := m.currentTaskDetail
+	if m.prioritySelecting && m.priorityID == t.ID {
+		return m.renderEditingField("Priority", m.priorityView(false), labelStyle, cf)
 	}
-	lines = append(lines, descLabelStyle.Render("Description:"))
+	pv := t.Priority
+	if pv == "" {
+		pv = "-"
+	}
+	ps := valueStyle.Copy()
+	switch t.Priority {
+	case "H":
+		ps = ps.Background(lipgloss.Color(m.theme.PrioHighBG))
+		pv = "H (High)"
+	case "M":
+		ps = ps.Background(lipgloss.Color(m.theme.PrioMedBG))
+		pv = "M (Medium)"
+	case "L":
+		ps = ps.Background(lipgloss.Color(m.theme.PrioLowBG))
+		pv = "L (Low)"
+	}
+	return m.renderTaskFieldWithIndex("Priority", pv, labelStyle, ps, cf)
+}
+
+// renderDetailTagsField renders the Tags row, showing the text input when
+// the user is actively editing it.
+func (m *Model) renderDetailTagsField(labelStyle, valueStyle lipgloss.Style, cf int) string {
+	t := m.currentTaskDetail
+	if m.tagsEditing && m.tagsID == t.ID {
+		orig := m.tagsInput.Prompt
+		m.tagsInput.Prompt = ""
+		v := m.tagsInput.View()
+		m.tagsInput.Prompt = orig
+		return m.renderEditingField("Tags", v, labelStyle, cf)
+	}
+	tagStr := strings.Join(t.Tags, ", ")
+	if tagStr == "" {
+		tagStr = "-"
+	}
+	return m.renderTaskFieldWithIndex("Tags", tagStr, labelStyle, valueStyle, cf)
+}
+
+// renderDetailDueField renders the Due row, showing the date picker when
+// the user is actively editing it.
+func (m *Model) renderDetailDueField(labelStyle, valueStyle lipgloss.Style, cf int) string {
+	t := m.currentTaskDetail
+	if m.dueEditing && m.dueID == t.ID {
+		return m.renderEditingField("Due", m.dueView(false), labelStyle, cf)
+	}
+	return m.renderTaskFieldWithIndex("Due", m.formatTaskDate(t.Due), labelStyle, valueStyle, cf)
+}
+
+// renderDetailProjectField renders the Project row, showing the text input
+// when the user is actively editing it.
+func (m *Model) renderDetailProjectField(labelStyle, valueStyle lipgloss.Style, cf int) string {
+	t := m.currentTaskDetail
+	if m.projEditing && m.projID == t.ID {
+		orig := m.projInput.Prompt
+		m.projInput.Prompt = ""
+		v := m.projInput.View()
+		m.projInput.Prompt = orig
+		return m.renderEditingField("Project", v, labelStyle, cf)
+	}
+	pv := t.Project
+	if pv == "" {
+		pv = "-"
+	}
+	return m.renderTaskFieldWithIndex("Project", pv, labelStyle, valueStyle, cf)
+}
+
+// renderDetailRecurField renders the Recurrence row, showing the text input
+// when the user is actively editing it.
+func (m *Model) renderDetailRecurField(labelStyle lipgloss.Style, cf int) string {
+	t := m.currentTaskDetail
+	if m.recurEditing && m.recurID == t.ID {
+		orig := m.recurInput.Prompt
+		m.recurInput.Prompt = ""
+		v := m.recurInput.View()
+		m.recurInput.Prompt = orig
+		return m.renderEditingField("Recurrence", v, labelStyle, cf)
+	}
+	return m.renderTaskFieldWithIndex("Recurrence", t.Recur, labelStyle, lipgloss.NewStyle(), cf)
+}
+
+// renderDetailDescription appends the Description section (label + wrapped body)
+// to lines, applying selection/blink highlighting and search match colouring.
+func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
+	t := m.currentTaskDetail
+	lines = append(lines, "")
+
+	ls, vs := labelStyle.Copy(), descStyle.Copy()
+	if m.detailBlinkField == cf && m.detailBlinkOn {
+		bg := lipgloss.Color("226")
+		ls = ls.Background(bg).Foreground(lipgloss.Color("0"))
+		vs = vs.Background(bg).Foreground(lipgloss.Color("0"))
+	} else if m.detailFieldIndex == cf {
+		ls = ls.Background(lipgloss.Color(m.theme.SelectedBG))
+		vs = vs.Background(lipgloss.Color(m.theme.SelectedBG))
+	}
+	lines = append(lines, ls.Render("Description:"))
+
 	if m.detailDescEditing {
-		// Show editing indicator
-		editingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("226")).
-			Italic(true)
-		lines = append(lines, editingStyle.Render("  [Editing in external editor...]"))
-	} else if t.Description != "" {
-		// Calculate available width for description (terminal width - margins)
-		availableWidth := m.tbl.Width() - 4
-		if availableWidth < 20 {
-			availableWidth = 20 // Minimum width
-		}
-		
-		// Wrap the description text
-		desc := t.Description
-		wrappedLines := wordWrap(desc, availableWidth)
-		
-		// Apply search highlighting and render each wrapped line
-		for _, line := range wrappedLines {
-			displayLine := line
-			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(line) {
-				displayLine = m.highlightMatches(line, m.detailSearchRegex)
-			}
-			lines = append(lines, descValueStyle.Render(displayLine))
-		}
-	} else {
-		lines = append(lines, descValueStyle.Render("-"))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Italic(true).
+			Render("  [Editing in external editor...]"))
+		return lines
 	}
-	currentField++
+	if t.Description == "" {
+		return append(lines, vs.Render("-"))
+	}
+	w := m.tbl.Width() - 4
+	if w < 20 {
+		w = 20
+	}
+	for _, l := range wordWrap(t.Description, w) {
+		d := l
+		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(l) {
+			d = m.highlightMatches(l, m.detailSearchRegex)
+		}
+		lines = append(lines, vs.Render(d))
+	}
+	return lines
+}
 
-	// Annotations
-	if len(t.Annotations) > 0 {
-		lines = append(lines, "")
-		annLabelStyle := labelStyle.Copy()
-		annValueStyle := descStyle.Copy()
-		if m.detailFieldIndex == currentField {
-			annLabelStyle = annLabelStyle.Background(lipgloss.Color(m.theme.SelectedBG))
-			annValueStyle = annValueStyle.Background(lipgloss.Color(m.theme.SelectedBG))
-		}
-		lines = append(lines, annLabelStyle.Render("Annotations:"))
-		// Calculate available width for annotations
-		availableWidth := m.tbl.Width() - 4
-		if availableWidth < 20 {
-			availableWidth = 20 // Minimum width
-		}
-		
-		for _, ann := range t.Annotations {
-			annText := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ann.Description)
-			wrappedAnnLines := wordWrap(annText, availableWidth)
-			
-			// Apply search highlighting and render each wrapped line
-			for i, line := range wrappedAnnLines {
-				displayLine := line
-				if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(line) {
-					displayLine = m.highlightMatches(line, m.detailSearchRegex)
-				}
-				// Add some indentation for continuation lines
-				if i > 0 {
-					displayLine = "  " + displayLine
-				}
-				lines = append(lines, annValueStyle.Render(displayLine))
+// renderDetailAnnotations appends the Annotations section to lines when the
+// task has annotations, applying selection highlighting and search colouring.
+func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
+	t := m.currentTaskDetail
+	if len(t.Annotations) == 0 {
+		return lines
+	}
+	lines = append(lines, "")
+	ls, vs := labelStyle.Copy(), descStyle.Copy()
+	if m.detailFieldIndex == cf {
+		ls = ls.Background(lipgloss.Color(m.theme.SelectedBG))
+		vs = vs.Background(lipgloss.Color(m.theme.SelectedBG))
+	}
+	lines = append(lines, ls.Render("Annotations:"))
+	w := m.tbl.Width() - 4
+	if w < 20 {
+		w = 20
+	}
+	for _, ann := range t.Annotations {
+		text := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ann.Description)
+		for i, l := range wordWrap(text, w) {
+			d := l
+			if i > 0 {
+				d = "  " + d
 			}
+			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(l) {
+				d = m.highlightMatches(d, m.detailSearchRegex)
+			}
+			lines = append(lines, vs.Render(d))
 		}
 	}
+	return lines
+}
 
-	// Instructions at bottom
-	lines = append(lines, "")
-	lines = append(lines, "")
-	instructionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
-		Italic(true)
-	// Check if we're in any editing mode
+// renderDetailFooter appends the instruction lines and optional search input
+// at the bottom of the detail view.
+func (m *Model) renderDetailFooter(lines []string) []string {
+	lines = append(lines, "", "")
+	ist := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Italic(true)
 	if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.detailDescEditing {
-		lines = append(lines, instructionStyle.Render("Editing mode - Follow on-screen prompts"))
+		lines = append(lines, ist.Render("Editing mode - Follow on-screen prompts"))
 	} else {
-		lines = append(lines, instructionStyle.Render("Press ESC or q to return to table view"))
-		lines = append(lines, instructionStyle.Render("Use ↑/k and ↓/j to navigate fields"))
-		lines = append(lines, instructionStyle.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence, Description)"))
+		lines = append(lines, ist.Render("Press ESC or q to return to table view"))
+		lines = append(lines, ist.Render("Use ↑/k and ↓/j to navigate fields"))
+		lines = append(lines, ist.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence, Description)"))
 		if m.detailSearching {
-			lines = append(lines, instructionStyle.Render("Type to search, Enter to confirm"))
+			lines = append(lines, ist.Render("Type to search, Enter to confirm"))
 		} else {
-			lines = append(lines, instructionStyle.Render("Press / to search"))
+			lines = append(lines, ist.Render("Press / to search"))
 		}
 	}
-
-	// Add search input if searching
 	if m.detailSearching {
-		searchStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("248")).
-			PaddingTop(1)
-		lines = append(lines, searchStyle.Render("Search: "+m.detailSearchInput.View()))
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("248")).PaddingTop(1).
+			Render("Search: "+m.detailSearchInput.View()))
 	}
-
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 // renderEditingField renders a field that is currently being edited
@@ -360,6 +374,17 @@ func (m *Model) refreshCurrentTaskDetail() {
 	// Task no longer exists, clear detail view
 	m.showTaskDetail = false
 	m.currentTaskDetail = nil
+}
+
+// detailDescriptionFieldIndex returns the navigable field index for the
+// Description field.  When the task has a non-empty Recur the Recurrence row
+// occupies index fieldRecur (9), pushing Description to index 10.  Without
+// Recur, Description is at index 9.
+func (m *Model) detailDescriptionFieldIndex() int {
+	if m.currentTaskDetail != nil && m.currentTaskDetail.Recur != "" {
+		return fieldRecur + 1 // 10
+	}
+	return fieldRecur // 9
 }
 
 // getDetailFieldCount returns the actual number of navigable fields for the current task

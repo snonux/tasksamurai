@@ -611,133 +611,160 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleDetailFieldEdit starts editing for the current field in detail view
+// handleDetailFieldEdit starts editing for the currently-selected field in the
+// detail view. Fields 0-2 (ID, UUID, Status) and 6, 8 (Start, Entry) are
+// read-only; all others delegate to the appropriate activation helper.
 func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 	if m.currentTaskDetail == nil {
 		return m, nil
 	}
-	
-	id := m.currentTaskDetail.ID
-	
-	// Map detail field index to editable fields
-	// fieldPriority = 3, fieldTags = 4, fieldDue = 5, fieldStart = 6, fieldProject = 7, fieldRecur = 9 or 10 (depending on if fields exist)
-	
-	// Count fields up to current position to handle dynamic fields
-	fieldPos := 0
-	
-	// ID, UUID, Status (0-2)
-	if m.detailFieldIndex <= 2 {
-		return m, nil // Not editable
-	}
-	fieldPos = 3
-	
-	// Priority (3)
-	if m.detailFieldIndex == fieldPos {
-		m.clearEditingModes()
-		m.priorityID = id
-		m.prioritySelecting = true
-		
-		// Set current priority index
-		switch m.currentTaskDetail.Priority {
-		case "H":
-			m.priorityIndex = 0
-		case "M":
-			m.priorityIndex = 1
-		case "L":
-			m.priorityIndex = 2
-		default:
-			m.priorityIndex = 3
-		}
-		m.updateTableHeight()
+	t := m.currentTaskDetail
+	id := t.ID
+
+	// Fixed-position fields (indices always match the fieldXxx constants).
+	switch m.detailFieldIndex {
+	case fieldID, fieldUUID, fieldStatus, fieldStart, fieldEntry:
+		return m, nil // read-only fields
+	case fieldPriority:
+		m.activatePriorityEdit(id, t.Priority)
+		return m, nil
+	case fieldTags:
+		m.activateTagsEdit(id)
+		return m, nil
+	case fieldDue:
+		m.activateDueEdit(id, t.Due)
+		return m, nil
+	case fieldProject:
+		m.activateProjectEdit(id, t.Project)
 		return m, nil
 	}
-	fieldPos++
-	
-	// Tags (4)
-	if m.detailFieldIndex == fieldPos {
-		m.clearEditingModes()
-		m.tagsID = id
-		m.tagsEditing = true
-		m.tagsInput.SetValue("")
-		m.tagsInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-	}
-	fieldPos++
-	
-	// Due (5)
-	if m.detailFieldIndex == fieldPos {
-		m.dueID = id
-		if m.currentTaskDetail.Due != "" {
-			if ts, err := parseTaskDate(m.currentTaskDetail.Due); err == nil {
-				m.dueDate = ts
-			} else {
-				m.dueDate = time.Now()
-			}
-		} else {
-			m.dueDate = time.Now()
-		}
-		m.clearEditingModes()
-		m.dueEditing = true
-		m.updateTableHeight()
-		return m, nil
-	}
-	fieldPos++
-	
-	// Start (6)
-	if m.detailFieldIndex == fieldPos {
-		// Start date is not editable in the original code, only toggled via 's' key
-		return m, nil
-	}
-	fieldPos++
-	
-	// Project (7)
-	if m.detailFieldIndex == fieldPos {
-		m.clearEditingModes()
-		m.projID = id
-		m.projEditing = true
-		if m.currentTaskDetail.Project != "" {
-			m.projInput.SetValue(m.currentTaskDetail.Project)
-		} else {
-			m.projInput.SetValue("")
-		}
-		m.projInput.Focus()
-		m.updateTableHeight()
-		return m, nil
-	}
-	fieldPos++
-	
-	// Entry (8)
-	if m.detailFieldIndex == fieldPos {
-		return m, nil // Not editable
-	}
-	fieldPos++
-	
-	// Recurrence (9) - only if it exists
-	if m.currentTaskDetail.Recur != "" {
+
+	// Recurrence and Description occupy dynamic positions: recur is present
+	// only when t.Recur != "", shifting description one slot later.
+	return m.handleDetailDynamicFields(id, t)
+}
+
+// handleDetailDynamicFields handles editing activation for the task fields
+// whose index depends on whether the optional Recur field is present.
+func (m *Model) handleDetailDynamicFields(id int, t *task.Task) (tea.Model, tea.Cmd) {
+	// fieldEntry is 8; the next slot is 9, which holds Recur when present.
+	fieldPos := fieldEntry + 1
+	if t.Recur != "" {
 		if m.detailFieldIndex == fieldPos {
-			m.clearEditingModes()
-			m.recurID = id
-			m.recurEditing = true
-			m.recurInput.SetValue(m.currentTaskDetail.Recur)
-			m.recurInput.Focus()
-			m.updateTableHeight()
+			m.activateRecurEdit(id, t.Recur)
 			return m, nil
 		}
 		fieldPos++
 	}
-	
-	// Description (10 or 11 depending on recurrence)
 	if m.detailFieldIndex == fieldPos {
-		// Launch external editor for description
+		// Launch external editor for description editing.
 		m.detailDescEditing = true
-		desc := ""
-		if m.currentTaskDetail != nil {
-			desc = m.currentTaskDetail.Description
-		}
-		return m, editDescriptionCmd(desc)
+		return m, editDescriptionCmd(t.Description)
 	}
-	
-	// Annotations are not editable in detail view
+	// Annotations are read-only in the detail view.  They can be edited via
+	// the table view's Annotations column (activateAnnotationsEdit).
+	return m, nil
+}
+
+// activatePriorityEdit enables the priority-selector for task id,
+// pre-selecting the option that matches currentPriority.
+func (m *Model) activatePriorityEdit(id int, currentPriority string) {
+	m.clearEditingModes()
+	m.priorityID = id
+	m.prioritySelecting = true
+	switch currentPriority {
+	case "H":
+		m.priorityIndex = 0
+	case "M":
+		m.priorityIndex = 1
+	case "L":
+		m.priorityIndex = 2
+	default:
+		m.priorityIndex = 3
+	}
+	m.updateTableHeight()
+}
+
+// activateDueEdit enables due-date editing for task id, initialising the
+// date picker from currentDue (falls back to now if empty or unparseable).
+func (m *Model) activateDueEdit(id int, currentDue string) {
+	m.dueID = id
+	if currentDue != "" {
+		if ts, err := parseTaskDate(currentDue); err == nil {
+			m.dueDate = ts
+		} else {
+			m.dueDate = time.Now()
+		}
+	} else {
+		m.dueDate = time.Now()
+	}
+	m.clearEditingModes()
+	m.dueEditing = true
+	m.updateTableHeight()
+}
+
+// activateTagsEdit enables tags editing for task id with an empty input.
+func (m *Model) activateTagsEdit(id int) {
+	m.clearEditingModes()
+	m.tagsID = id
+	m.tagsEditing = true
+	m.tagsInput.SetValue("")
+	m.tagsInput.Focus()
+	m.updateTableHeight()
+}
+
+// activateProjectEdit enables project editing for task id,
+// pre-filling the input with currentProject.
+func (m *Model) activateProjectEdit(id int, currentProject string) {
+	m.clearEditingModes()
+	m.projID = id
+	m.projEditing = true
+	m.projInput.SetValue(currentProject)
+	m.projInput.Focus()
+	m.updateTableHeight()
+}
+
+// activateRecurEdit enables recurrence editing for task id,
+// pre-filling the input with currentRecur.
+func (m *Model) activateRecurEdit(id int, currentRecur string) {
+	m.clearEditingModes()
+	m.recurID = id
+	m.recurEditing = true
+	m.recurInput.SetValue(currentRecur)
+	m.recurInput.Focus()
+	m.updateTableHeight()
+}
+
+// activateAnnotationsEdit enables annotation editing for task id.
+// The current annotations are joined with "; " and pre-filled in the input
+// so the user can revise all annotations in one pass.
+func (m *Model) activateAnnotationsEdit(id int, tsk *task.Task) (tea.Model, tea.Cmd) {
+	m.clearEditingModes()
+	m.annotateID = id
+	m.annotating = true
+	m.replaceAnnotations = true
+	if tsk != nil {
+		var anns []string
+		for _, a := range tsk.Annotations {
+			anns = append(anns, a.Description)
+		}
+		m.annotateInput.SetValue(strings.Join(anns, "; "))
+	}
+	m.annotateInput.Focus()
+	m.updateTableHeight()
+	return m, nil
+}
+
+// activateDescriptionEdit enables inline description editing for task id,
+// pre-filling the input with the current description.
+func (m *Model) activateDescriptionEdit(id int, tsk *task.Task) (tea.Model, tea.Cmd) {
+	m.clearEditingModes()
+	m.descID = id
+	m.descEditing = true
+	if tsk != nil {
+		m.descInput.SetValue(tsk.Description)
+	}
+	m.descInput.Focus()
+	m.updateTableHeight()
 	return m, nil
 }
