@@ -43,17 +43,27 @@ type Task struct {
 	Annotations []Annotation `json:"annotations"`
 }
 
-var debugWriter io.Writer
-var debugFile *os.File // Track the file handle to close it properly
+// debugConfig groups the optional debug-logging state for the task package.
+// Collecting related vars into a struct makes the mutable state explicit and
+// allows the logger to be swapped or reset cleanly without touching unrelated
+// package globals.
+type debugConfig struct {
+	writer io.Writer
+	file   *os.File // tracked separately so it can be closed on reconfiguration
+}
+
+// dbg holds the active debug-logging configuration for this package.
+// It is written only via SetDebugLog and read only in run().
+var dbg debugConfig
 
 // SetDebugLog enables logging of executed commands to the given file.
-// Passing an empty path disables logging.
+// Passing an empty path disables logging and closes any previously opened file.
 func SetDebugLog(path string) error {
-	// Close existing debug file if open
-	if debugFile != nil {
-		debugFile.Close()
-		debugFile = nil
-		debugWriter = nil
+	// Close existing debug file if open before re-configuring.
+	if dbg.file != nil {
+		dbg.file.Close()
+		dbg.file = nil
+		dbg.writer = nil
 	}
 
 	if path == "" {
@@ -64,8 +74,8 @@ func SetDebugLog(path string) error {
 	if err != nil {
 		return err
 	}
-	debugFile = f
-	debugWriter = f
+	dbg.file = f
+	dbg.writer = f
 	return nil
 }
 
@@ -142,8 +152,8 @@ func Export(filters ...string) ([]Task, error) {
 }
 
 func run(args ...string) error {
-	if debugWriter != nil {
-		fmt.Fprintln(debugWriter, "task "+strings.Join(args, " "))
+	if dbg.writer != nil {
+		fmt.Fprintln(dbg.writer, "task "+strings.Join(args, " "))
 	}
 	cmd := exec.Command("task", args...)
 

@@ -1,10 +1,68 @@
 package task
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// TestSetDebugLog exercises the lifecycle of the debug logger: enable,
+// disable, and re-enable. It also covers the negative case where the
+// target directory does not exist.
+func TestSetDebugLog(t *testing.T) {
+	// Ensure the package-level state is clean before and after.
+	t.Cleanup(func() { SetDebugLog("") }) //nolint:errcheck
+
+	// Negative: directory does not exist — must return an error.
+	if err := SetDebugLog("/nonexistent-dir-xyz/debug.log"); err == nil {
+		t.Error("expected error for non-existent directory, got nil")
+	}
+	// After a failed open the package state must remain empty.
+	if dbg.writer != nil || dbg.file != nil {
+		t.Error("dbg fields must be nil after a failed SetDebugLog call")
+	}
+
+	// Positive: enable logging to a temp file.
+	tmp := t.TempDir()
+	logPath := filepath.Join(tmp, "debug.log")
+	if err := SetDebugLog(logPath); err != nil {
+		t.Fatalf("SetDebugLog failed: %v", err)
+	}
+	if dbg.writer == nil || dbg.file == nil {
+		t.Fatal("dbg fields must be set after a successful SetDebugLog call")
+	}
+
+	// The run helper uses dbg.writer — verify that a write actually reaches
+	// the log file. We fake a task invocation by writing directly.
+	fmt.Fprintln(dbg.writer, "test-entry")
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "test-entry") {
+		t.Errorf("expected log entry in file, got: %q", string(content))
+	}
+
+	// Re-enable with a different path — old file must be closed, new one opened.
+	logPath2 := filepath.Join(tmp, "debug2.log")
+	if err := SetDebugLog(logPath2); err != nil {
+		t.Fatalf("second SetDebugLog failed: %v", err)
+	}
+	if dbg.file == nil {
+		t.Error("dbg.file must be non-nil after re-enabling debug log")
+	}
+
+	// Disable — both fields must return to nil, no error expected.
+	if err := SetDebugLog(""); err != nil {
+		t.Fatalf("disable SetDebugLog failed: %v", err)
+	}
+	if dbg.writer != nil || dbg.file != nil {
+		t.Error("dbg fields must be nil after disabling SetDebugLog")
+	}
+}
 
 func TestAddAndExport(t *testing.T) {
 	if _, err := exec.LookPath("task"); err != nil {
