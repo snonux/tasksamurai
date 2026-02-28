@@ -35,13 +35,56 @@ type cellMatch struct {
 	col int
 }
 
-// Model wraps a Bubble Tea table.Model to display tasks.
+// blinkState holds row-level blink animation state for the task table.
+// A blink cycles the selected row's highlight on/off after a modification.
+type blinkState struct {
+	blinkID       int  // task ID currently being blinked (0 = none)
+	blinkRow      int  // row index in the table (-1 if not found)
+	blinkOn       bool // whether the highlight is currently inverted
+	blinkCount    int  // number of blink cycles completed so far
+	blinkMarkDone bool // whether to mark the task done after blinking
+	blinkEnabled  bool // when false, skip animation and complete immediately
+}
 
-type Model struct {
-	tbl       atable.Model
-	tblStyles atable.Styles
-	showHelp  bool
+// searchState holds task-table and help-screen search state.
+// Both search modes share this struct because only one is active at a time.
+type searchState struct {
+	searching     bool
+	searchInput   textinput.Model
+	searchRegex   *regexp.Regexp
+	searchMatches []cellMatch
+	searchIndex   int
 
+	helpSearching     bool
+	helpSearchInput   textinput.Model
+	helpSearchRegex   *regexp.Regexp
+	helpSearchMatches []int // line indices that match
+	helpSearchIndex   int
+}
+
+// detailViewState holds all state for the task detail overlay.
+// Blink fields here are separate from blinkState because they drive a
+// per-field highlight inside the detail view rather than a table row.
+type detailViewState struct {
+	showTaskDetail     bool
+	currentTaskDetail  *task.Task
+	detailSearching    bool
+	detailSearchInput  textinput.Model
+	detailSearchRegex  *regexp.Regexp
+	detailFieldIndex   int    // currently selected field (-1 = none)
+	detailBlinkField   int    // field currently blinking (-1 = none)
+	detailBlinkOn      bool   // whether the blink is currently on
+	detailBlinkCount   int    // number of blink cycles completed so far
+	// detailDescEditing lives here (not in editState) because it drives an
+	// external-editor launch from the detail overlay, not inline text input.
+	detailDescEditing  bool   // whether the description editor is open
+	detailDescTempFile string // temp file path for description editing
+}
+
+// editState holds inline field-editing state for the task table.
+// Each editing mode (annotate, desc, tags, …) is mutually exclusive;
+// clearEditingModes resets them all before activating a new one.
+type editState struct {
 	annotating         bool
 	annotateID         int
 	annotateInput      textinput.Model
@@ -73,37 +116,26 @@ type Model struct {
 	addingTask bool
 	addInput   textinput.Model
 
-	searching     bool
-	searchInput   textinput.Model
-	searchRegex   *regexp.Regexp
-	searchMatches []cellMatch
-	searchIndex   int
-
-	helpSearching     bool
-	helpSearchInput   textinput.Model
-	helpSearchRegex   *regexp.Regexp
-	helpSearchMatches []int // line indices that match
-	helpSearchIndex   int
-
 	prioritySelecting bool
 	priorityID        int
 	priorityIndex     int
 
-	filters []string
-	tasks   []task.Task
+	editID int // task ID being edited in an external editor
+}
 
-	undoStack []string
+// Model wraps a Bubble Tea table.Model to display tasks.
+// Related fields are grouped into anonymous embedded sub-structs so that
+// each concern can be reasoned about independently without changing the
+// existing field-access syntax throughout the package.
+type Model struct {
+	tbl       atable.Model
+	tblStyles atable.Styles
+	showHelp  bool
 
-	browserCmd string
-
-	editID int
-
-	blinkID       int
-	blinkRow      int
-	blinkOn       bool
-	blinkCount    int
-	blinkMarkDone bool
-	blinkEnabled  bool
+	blinkState      // row blink animation (see blinkState)
+	searchState     // task-table and help-screen search (see searchState)
+	detailViewState // task detail overlay (see detailViewState)
+	editState       // inline field editing (see editState)
 
 	cellExpanded bool
 
@@ -124,26 +156,17 @@ type Model struct {
 	inProgress int
 	due        int
 
+	filters   []string
+	tasks     []task.Task
+	undoStack []string
+	browserCmd string
+
 	theme        Theme
 	defaultTheme Theme
-	disco        bool   // disco mode changes theme on every task modification
+	disco        bool // disco mode changes theme on every task modification
 
 	statusMsg string // temporary status message shown in status bar
 
-	// Task detail view fields
-	showTaskDetail    bool
-	currentTaskDetail *task.Task
-	detailSearching   bool
-	detailSearchInput textinput.Model
-	detailSearchRegex *regexp.Regexp
-	detailFieldIndex  int    // Current selected field in detail view
-	detailBlinkField  int    // Field that is currently blinking (-1 for none)
-	detailBlinkOn     bool   // Whether the blink is currently on
-	detailBlinkCount  int    // Number of blinks remaining
-	detailDescEditing bool   // Whether we're editing description in detail view
-	detailDescTempFile string // Temp file path for description editing
-	
-	// Help view fields
 	helpViewport viewport.Model
 }
 
@@ -289,7 +312,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 
 // New creates a new UI model with the provided rows.
 func New(filters []string, browserCmd string) (Model, error) {
-	m := Model{filters: filters, browserCmd: browserCmd, blinkEnabled: true}
+	m := Model{filters: filters, browserCmd: browserCmd, blinkState: blinkState{blinkEnabled: true}}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
