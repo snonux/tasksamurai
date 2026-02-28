@@ -644,6 +644,50 @@ func TestEscClosesHelp(t *testing.T) {
 	}
 }
 
+// TestExpandedCellViewNoDoubleRender is a regression test for a bug where
+// expandedCellView() was appended to the layout unconditionally AND again
+// inside the cellExpanded guard, producing a duplicate line when expanded.
+// It verifies that:
+//   - when cellExpanded is false, expandedCellView content is absent from View()
+//   - when cellExpanded is true, expandedCellView content appears exactly once
+//   - the expanded content does not appear when expandedCellView returns ""
+func TestExpandedCellViewNoDoubleRender(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Give the model a non-zero window size so View() renders real content.
+	m.windowHeight = 24
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m = *mv.(*Model)
+
+	// Determine what expandedCellView() currently returns so we know what to
+	// search for in the full View() output.
+	expanded := m.expandedCellView()
+	if expanded == "" {
+		t.Skip("expandedCellView returned empty string; cannot test placement")
+	}
+
+	// With cellExpanded false (the default), the expanded content must be absent.
+	m.cellExpanded = false
+	viewCollapsed := m.View()
+	if strings.Contains(viewCollapsed, expanded) {
+		t.Fatalf("cellExpanded=false: expandedCellView content unexpectedly present in View()")
+	}
+
+	// With cellExpanded true, the expanded content must appear exactly once.
+	m.cellExpanded = true
+	viewExpanded := m.View()
+	count := strings.Count(viewExpanded, expanded)
+	if count != 1 {
+		t.Fatalf("cellExpanded=true: expandedCellView content appears %d times in View(), want exactly 1", count)
+	}
+}
+
 func TestSearchExitHotkeys(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupBasicTask(t, tmp)

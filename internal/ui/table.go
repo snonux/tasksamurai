@@ -625,10 +625,12 @@ func (m Model) View() string {
 	if m.showTaskDetail {
 		return m.renderTaskDetail()
 	}
+	// expandedCellView is only appended when the user has toggled the
+	// expanded-cell panel open; including it unconditionally caused a
+	// double-render whenever cellExpanded was true.
 	view := lipgloss.JoinVertical(lipgloss.Left,
 		m.topStatusLine(),
 		m.tbl.View(),
-		m.expandedCellView(),
 		m.statusLine(),
 	)
 	if m.cellExpanded {
@@ -1208,7 +1210,7 @@ func (m *Model) updateTableHeight() {
 	if m.windowHeight == 0 {
 		return
 	}
-	h := m.windowHeight - 3 // space for two status bars and base expanded line
+	h := m.windowHeight - 2 // space for top and bottom status bars
 	if m.cellExpanded {
 		h--
 	}
