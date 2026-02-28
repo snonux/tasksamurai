@@ -927,7 +927,7 @@ func (m Model) taskToRow(t task.Task) atable.Row {
 	}
 
 	age := ""
-	if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+	if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
 		days := int(time.Since(ts).Hours() / 24)
 		age = fmt.Sprintf("%dd", days)
 	}
@@ -967,7 +967,7 @@ func (m Model) formatDue(s string, width int) string {
 	if s == "" {
 		return ""
 	}
-	ts, err := time.Parse("20060102T150405Z", s)
+	ts, err := time.Parse(task.DateFormat, s)
 	if err != nil {
 		return s
 	}
@@ -1078,7 +1078,7 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	}
 
 	age := ""
-	if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+	if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
 		days := int(time.Since(ts).Hours() / 24)
 		age = fmt.Sprintf("%dd", days)
 	}
@@ -1146,7 +1146,7 @@ func (m Model) expandedCellView() string {
 	case 1:
 		val = strconv.Itoa(t.ID)
 	case 2:
-		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+		if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
 			days := int(time.Since(ts).Hours() / 24)
 			val = fmt.Sprintf("%dd", days)
 		}
@@ -1223,26 +1223,6 @@ func (m *Model) updateTableHeight() {
 	m.tbl.SetHeight(h)
 }
 
-func dueText(s string) string {
-	if s == "" {
-		return ""
-	}
-	ts, err := time.Parse("20060102T150405Z", s)
-	if err != nil {
-		return s
-	}
-	days := int(time.Until(ts).Hours() / 24)
-	switch days {
-	case 0:
-		return "today"
-	case 1:
-		return "tomorrow"
-	case -1:
-		return "yesterday"
-	default:
-		return fmt.Sprintf("%dd", days)
-	}
-}
 
 func (m *Model) computeColumnWidths() {
 	maxID := 1
@@ -1258,7 +1238,7 @@ func (m *Model) computeColumnWidths() {
 			maxID = l
 		}
 		age := ""
-		if ts, err := time.Parse("20060102T150405Z", t.Entry); err == nil {
+		if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
 			age = fmt.Sprintf("%dd", int(time.Since(ts).Hours()/24))
 		}
 		if l := len(age); l > maxAge {
@@ -1268,7 +1248,7 @@ func (m *Model) computeColumnWidths() {
 		if l := len(urg); l > maxUrg {
 			maxUrg = l
 		}
-		due := dueText(t.Due)
+		due := formatDueText(t.Due)
 		if l := len(due); l > maxDue {
 			maxDue = l
 		}

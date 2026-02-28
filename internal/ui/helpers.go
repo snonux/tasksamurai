@@ -5,10 +5,14 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
-// Date format used by Taskwarrior
-const taskDateFormat = "20060102T150405Z"
+// taskDateFormat aliases task.DateFormat for use within this package.
+// It is kept as a package-level constant so internal helpers don't need
+// to qualify every parse/format call with the package name.
+const taskDateFormat = task.DateFormat
 
 // parseTaskDate parses a date string in Taskwarrior format
 func parseTaskDate(dateStr string) (time.Time, error) {

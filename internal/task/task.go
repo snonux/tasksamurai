@@ -16,6 +16,11 @@ import (
 	"github.com/google/shlex"
 )
 
+// DateFormat is the date format used by Taskwarrior in all date fields
+// (e.g. Entry, Due, Start). All date parsing and formatting in this
+// package uses this constant.
+const DateFormat = "20060102T150405Z"
+
 // Task represents a taskwarrior task as returned by `task export`.
 type Annotation struct {
 	Entry       string `json:"entry"`
@@ -421,7 +426,7 @@ func SortTasks(tasks []Task) {
 		if s == "" {
 			return time.Time{}, false
 		}
-		t, err := time.Parse("20060102T150405Z", s)
+		t, err := time.Parse(DateFormat, s)
 		if err != nil {
 			return time.Time{}, false
 		}

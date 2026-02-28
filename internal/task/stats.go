@@ -28,7 +28,7 @@ func DueTasks(tasks []Task, now time.Time) int {
 		if t.Status == "completed" || t.Due == "" {
 			continue
 		}
-		ts, err := time.Parse("20060102T150405Z", t.Due)
+		ts, err := time.Parse(DateFormat, t.Due)
 		if err != nil {
 			continue
 		}
