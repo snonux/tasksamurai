@@ -22,16 +22,6 @@ func parseTaskDate(dateStr string) (time.Time, error) {
 	return time.Parse(taskDateFormat, dateStr)
 }
 
-// formatTaskDate formats a time as a Taskwarrior date string
-func formatTaskDate(t time.Time) string {
-	return t.UTC().Format(taskDateFormat)
-}
-
-// daysSince returns the number of days since the given time
-func daysSince(t time.Time) int {
-	return int(time.Since(t).Hours() / 24)
-}
-
 // daysUntil returns the number of days until the given time
 func daysUntil(t time.Time) int {
 	now := time.Now()
@@ -98,16 +88,6 @@ func validateTagName(tag string) error {
 		return fmt.Errorf("tag cannot contain whitespace")
 	}
 	
-	return nil
-}
-
-// validateTags validates a list of tags
-func validateTags(tags []string) error {
-	for _, tag := range tags {
-		if err := validateTagName(tag); err != nil {
-			return fmt.Errorf("invalid tag '%s': %w", tag, err)
-		}
-	}
 	return nil
 }
 

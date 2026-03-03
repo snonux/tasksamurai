@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -27,7 +26,6 @@ var priorityOptions = []string{"H", "M", "L", ""}
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
 	searchRegexCache = make(map[string]*regexp.Regexp)
-	rng              = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type cellMatch struct {
@@ -78,7 +76,6 @@ type detailViewState struct {
 	// detailDescEditing lives here (not in editState) because it drives an
 	// external-editor launch from the detail overlay, not inline text input.
 	detailDescEditing  bool   // whether the description editor is open
-	detailDescTempFile string // temp file path for description editing
 }
 
 // editState holds inline field-editing state for the task table.
@@ -208,9 +205,9 @@ func editDescriptionCmd(description string) tea.Cmd {
 		
 		// Write current description to temp file
 		_, err = tmpFile.WriteString(description)
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		if err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return descEditDoneMsg{err: err, tempFile: ""}
 		}
 		
@@ -524,7 +521,7 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 // handleDescEditDone handles the completion of description editing
 func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	m.detailDescEditing = false
-	defer os.Remove(msg.tempFile) // Clean up temp file
+	_ = os.Remove(msg.tempFile) // Clean up temp file
 	
 	if msg.err != nil {
 		m.statusMsg = fmt.Sprintf("Edit error: %v", msg.err)
@@ -642,26 +639,32 @@ func (m Model) View() string {
 // (annotate, due, priority, desc, tags, recur, project, filter, add, search)
 // should be displayed below the table. At most one is active at a time.
 func (m Model) appendInlineInputOverlay(view string) string {
-	type overlay struct {
-		active bool
-		widget string
+	var overlay string
+	switch {
+	case m.annotating:
+		overlay = m.annotateInput.View()
+	case m.dueEditing:
+		overlay = m.dueView(true)
+	case m.prioritySelecting:
+		overlay = m.priorityView(true)
+	case m.descEditing:
+		overlay = m.descInput.View()
+	case m.tagsEditing:
+		overlay = m.tagsInput.View()
+	case m.recurEditing:
+		overlay = m.recurInput.View()
+	case m.projEditing:
+		overlay = m.projInput.View()
+	case m.filterEditing:
+		overlay = m.filterInput.View()
+	case m.addingTask:
+		overlay = m.addInput.View()
+	case m.searching:
+		overlay = m.searchInput.View()
 	}
-	overlays := []overlay{
-		{m.annotating, m.annotateInput.View()},
-		{m.dueEditing, m.dueView(true)},
-		{m.prioritySelecting, m.priorityView(true)},
-		{m.descEditing, m.descInput.View()},
-		{m.tagsEditing, m.tagsInput.View()},
-		{m.recurEditing, m.recurInput.View()},
-		{m.projEditing, m.projInput.View()},
-		{m.filterEditing, m.filterInput.View()},
-		{m.addingTask, m.addInput.View()},
-		{m.searching, m.searchInput.View()},
-	}
-	for _, o := range overlays {
-		if o.active {
-			view = lipgloss.JoinVertical(lipgloss.Left, view, o.widget)
-		}
+
+	if overlay != "" {
+		view = lipgloss.JoinVertical(lipgloss.Left, view, overlay)
 	}
 	return view
 }
@@ -886,49 +889,6 @@ func (m Model) topStatusLine() string {
 		Background(lipgloss.Color(m.theme.StatusBG)).
 		Width(m.tbl.Width()).
 		Render(line)
-}
-
-func (m Model) taskToRow(t task.Task) atable.Row {
-	style := lipgloss.NewStyle()
-	if t.Start != "" {
-		style = style.Background(lipgloss.Color(m.theme.StartBG))
-	}
-	if t.ID == m.blinkID && m.blinkOn {
-		style = style.Reverse(true)
-	}
-
-	age := ""
-	if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
-		days := int(time.Since(ts).Hours() / 24)
-		age = fmt.Sprintf("%dd", days)
-	}
-
-	tags := strings.Join(t.Tags, " ")
-	urg := fmt.Sprintf("%.1f", t.Urgency)
-	recur := t.Recur
-
-	var anns []string
-	for _, a := range t.Annotations {
-		anns = append(anns, a.Description)
-	}
-
-	annStr := ""
-	if n := len(anns); n > 0 {
-		annStr = strconv.FormatInt(int64(n), 16)
-	}
-
-	return atable.Row{
-		m.formatPriority(t.Priority, m.priWidth),
-		style.Render(strconv.Itoa(t.ID)),
-		style.Render(age),
-		m.formatDue(t.Due, m.dueWidth),
-		style.Render(recur),
-		style.Render(t.Project),
-		style.Render(tags),
-		style.Render(annStr),
-		style.Render(t.Description),
-		style.Render(m.formatUrgency(urg, m.urgWidth)),
-	}
 }
 
 // formatDue returns a formatted due date string. Dates due today or tomorrow
@@ -1291,13 +1251,4 @@ func (m *Model) applyTheme() {
 // SetDisco enables or disables disco mode.
 func (m *Model) SetDisco(d bool) {
 	m.disco = d
-}
-
-func centerLines(s string, width int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	style := lipgloss.NewStyle().Width(width).Align(lipgloss.Center)
-	for i, l := range lines {
-		lines[i] = style.Render(l)
-	}
-	return strings.Join(lines, "\n")
 }

@@ -28,16 +28,16 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "N":
 			return m.handlePrevHelpSearchMatch()
 		case "up", "k":
-			m.helpViewport.LineUp(1)
+			m.helpViewport.ScrollUp(1)
 			return m, nil
 		case "down", "j":
-			m.helpViewport.LineDown(1)
+			m.helpViewport.ScrollDown(1)
 			return m, nil
 		case "pgup", "b":
-			m.helpViewport.ViewUp()
+			m.helpViewport.PageUp()
 			return m, nil
 		case "pgdown", " ":
-			m.helpViewport.ViewDown()
+			m.helpViewport.PageDown()
 			return m, nil
 		case "g", "home":
 			m.helpViewport.GotoTop()
@@ -337,7 +337,7 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	
-	days := rng.Intn(31) + 7
+	days := rand.Intn(31) + 7
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 	
 	if err := task.SetDueDate(id, due); err != nil {

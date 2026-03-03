@@ -61,7 +61,7 @@ var dbg debugConfig
 func SetDebugLog(path string) error {
 	// Close existing debug file if open before re-configuring.
 	if dbg.file != nil {
-		dbg.file.Close()
+		_ = dbg.file.Close()
 		dbg.file = nil
 		dbg.writer = nil
 	}

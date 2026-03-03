@@ -58,7 +58,7 @@ func (m *Model) handleAnnotationMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return err
 			}
 		}
-		m.reload()
+		_ = m.reload()
 		return nil
 	}
 	
@@ -84,7 +84,7 @@ func (m *Model) handleDescriptionMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if err := task.SetDescription(m.descID, value); err != nil {
 			return err
 		}
-		m.reload()
+		_ = m.reload()
 		return nil
 	}
 	
@@ -114,9 +114,7 @@ func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					removes = append(removes, tagName)
 				}
 			} else {
-				if strings.HasPrefix(w, "+") {
-					w = w[1:]
-				}
+				w = strings.TrimPrefix(w, "+")
 				if w != "" {
 					if err := validateTagName(w); err != nil {
 						return fmt.Errorf("add tag '%s': %w", w, err)
@@ -135,7 +133,7 @@ func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return err
 			}
 		}
-		m.reload()
+		_ = m.reload()
 		return nil
 	}
 	
@@ -204,7 +202,7 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if err := task.SetRecurrence(m.recurID, value); err != nil {
 			return err
 		}
-		m.reload()
+		_ = m.reload()
 		return nil
 	}
 	
@@ -298,7 +296,7 @@ func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		m.filters = strings.Fields(value)
-		m.reload()
+		_ = m.reload()
 		return nil
 	}
 	
@@ -313,7 +311,7 @@ func (m *Model) handleFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		oldIDs := make(map[int]struct{})
+		oldIDs := make(map[int]struct{}, len(m.tasks))
 		for _, tsk := range m.tasks {
 			oldIDs[tsk.ID] = struct{}{}
 		}
