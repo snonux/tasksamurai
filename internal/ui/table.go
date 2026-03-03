@@ -738,6 +738,7 @@ func (m Model) buildHelpContent() string {
 	sections = append(sections, headerStyle.Render("Appearance"),
 		m.formatHelpLine("c, C", "random/reset theme", keyStyle, descStyle),
 		m.formatHelpLine("x", "toggle disco mode", keyStyle, descStyle),
+		m.formatHelpLine("B", "toggle blinking", keyStyle, descStyle),
 		"")
 	
 	// General section
@@ -852,6 +853,7 @@ func (m Model) getHelpLines() []string {
 		"Appearance",
 		"c, C: random/reset theme",
 		"x: toggle disco mode",
+		"B: toggle blinking",
 		"",
 		"General",
 		"H: toggle help",
