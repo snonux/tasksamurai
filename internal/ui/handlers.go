@@ -6,17 +6,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // handleTextInput provides generic text input handling for all input modes
-func (m *Model) handleTextInput(msg tea.KeyMsg, input *textinput.Model, onEnter func(string) error, onExit func()) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handleTextInput(msg tea.KeyPressMsg, input *textinput.Model, onEnter func(string) error, onExit func()) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		value := input.Value()
 		if err := onEnter(value); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
@@ -29,7 +29,7 @@ func (m *Model) handleTextInput(msg tea.KeyMsg, input *textinput.Model, onEnter 
 		onExit()
 		m.updateTableHeight()
 		return m, nil
-	case tea.KeyEsc:
+	case "esc":
 		input.Blur()
 		onExit()
 		m.updateTableHeight()
@@ -41,13 +41,13 @@ func (m *Model) handleTextInput(msg tea.KeyMsg, input *textinput.Model, onEnter 
 }
 
 // handleAnnotationMode handles keyboard input when in annotation mode
-func (m *Model) handleAnnotationMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		// Annotation can be empty when replacing (to remove all)
 		if !m.replaceAnnotations && strings.TrimSpace(value) == "" {
 			return fmt.Errorf("annotation cannot be empty")
 		}
-		
+
 		if m.replaceAnnotations {
 			if err := task.ReplaceAnnotations(m.annotateID, value); err != nil {
 				return err
@@ -61,14 +61,14 @@ func (m *Model) handleAnnotationMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.reload()
 		return nil
 	}
-	
+
 	onExit := func() {
 		m.annotating = false
 		m.replaceAnnotations = false
 	}
-	
+
 	model, cmd := m.handleTextInput(msg, &m.annotateInput, onEnter, onExit)
-	if msg.Type == tea.KeyEnter && m.annotateInput.Value() != "" {
+	if msg.String() == "enter" && m.annotateInput.Value() != "" {
 		// Start blink after successful annotation
 		return model, m.startBlink(m.annotateID, false)
 	}
@@ -76,7 +76,7 @@ func (m *Model) handleAnnotationMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleDescriptionMode handles keyboard input when editing description
-func (m *Model) handleDescriptionMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		if err := validateDescription(value); err != nil {
 			return err
@@ -87,20 +87,20 @@ func (m *Model) handleDescriptionMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.reload()
 		return nil
 	}
-	
+
 	onExit := func() {
 		m.descEditing = false
 	}
-	
+
 	model, cmd := m.handleTextInput(msg, &m.descInput, onEnter, onExit)
-	if msg.Type == tea.KeyEnter {
+	if msg.String() == "enter" {
 		return model, m.startBlink(m.descID, false)
 	}
 	return model, cmd
 }
 
 // handleTagsMode handles keyboard input when editing tags
-func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		words := strings.Fields(value)
 		var adds, removes []string
@@ -136,13 +136,13 @@ func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.reload()
 		return nil
 	}
-	
+
 	onExit := func() {
 		m.tagsEditing = false
 	}
-	
+
 	model, cmd := m.handleTextInput(msg, &m.tagsInput, onEnter, onExit)
-	if msg.Type == tea.KeyEnter {
+	if msg.String() == "enter" {
 		if m.showTaskDetail {
 			// In detail view, blink the tags field
 			return model, m.startDetailBlink(4) // Tags is field index 4
@@ -153,9 +153,9 @@ func (m *Model) handleTagsMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleDueEditMode handles due date editing
-func (m *Model) handleDueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		if err := task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02")); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
@@ -174,12 +174,12 @@ func (m *Model) handleDueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.updateTableHeight()
 		return m, cmd
-	case tea.KeyEsc:
+	case "esc":
 		m.dueEditing = false
 		m.updateTableHeight()
 		return m, nil
 	}
-	
+
 	switch msg.String() {
 	case "h", "left":
 		m.dueDate = m.dueDate.AddDate(0, 0, -1)
@@ -194,7 +194,7 @@ func (m *Model) handleDueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleRecurrenceMode handles recurrence editing
-func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		if err := validateRecurrence(value); err != nil {
 			return err
@@ -205,13 +205,13 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.reload()
 		return nil
 	}
-	
+
 	onExit := func() {
 		m.recurEditing = false
 	}
-	
+
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
-	if msg.Type == tea.KeyEnter {
+	if msg.String() == "enter" {
 		if m.showTaskDetail {
 			// In detail view, blink the recurrence field (dynamic index)
 			// Need to calculate the index based on whether recurrence field exists
@@ -226,18 +226,18 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleProjectMode handles project editing
-func (m *Model) handleProjectMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		return task.SetProject(m.projID, value)
 	}
-	
+
 	onExit := func() {
 		m.projEditing = false
 		m.reload()
 	}
-	
+
 	model, cmd := m.handleTextInput(msg, &m.projInput, onEnter, onExit)
-	if msg.Type == tea.KeyEnter {
+	if msg.String() == "enter" {
 		if m.showTaskDetail {
 			// In detail view, blink the project field
 			return model, m.startDetailBlink(fieldProject) // Project field index in detail view
@@ -248,9 +248,9 @@ func (m *Model) handleProjectMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handlePriorityMode handles priority selection
-func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		priority := priorityOptions[m.priorityIndex]
 		if err := validatePriority(priority); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
@@ -277,12 +277,12 @@ func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.updateTableHeight()
 		return m, cmd
-	case tea.KeyEsc:
+	case "esc":
 		m.prioritySelecting = false
 		m.updateTableHeight()
 		return m, nil
 	}
-	
+
 	switch msg.String() {
 	case "h", "left":
 		m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
@@ -293,29 +293,29 @@ func (m *Model) handlePriorityMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleFilterMode handles filter editing
-func (m *Model) handleFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		m.filters = strings.Fields(value)
 		_ = m.reload()
 		return nil
 	}
-	
+
 	onExit := func() {
 		m.filterEditing = false
 	}
-	
+
 	return m.handleTextInput(msg, &m.filterInput, onEnter, onExit)
 }
 
 // handleAddTaskMode handles adding a new task
-func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		oldIDs := make(map[int]struct{}, len(m.tasks))
 		for _, tsk := range m.tasks {
 			oldIDs[tsk.ID] = struct{}{}
 		}
-		
+
 		if err := task.AddLine(m.addInput.Value()); err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
@@ -323,11 +323,11 @@ func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			})
 			return m, cmd
 		}
-		
+
 		m.addingTask = false
 		m.addInput.Blur()
 		m.reload()
-		
+
 		// Find the newly added task
 		var newID int
 		row := -1
@@ -338,7 +338,7 @@ func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		
+
 		m.updateTableHeight()
 		if row >= 0 {
 			prevRow := m.tbl.Cursor()
@@ -349,23 +349,23 @@ func (m *Model) handleAddTaskMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.startBlink(newID, false)
 		}
 		return m, nil
-		
-	case tea.KeyEsc:
+
+	case "esc":
 		m.addingTask = false
 		m.addInput.Blur()
 		m.updateTableHeight()
 		return m, nil
 	}
-	
+
 	var cmd tea.Cmd
 	m.addInput, cmd = m.addInput.Update(msg)
 	return m, cmd
 }
 
 // handleSearchMode handles search input
-func (m *Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		pattern := m.searchInput.Value()
 		if pattern != "" {
 			// Check cache first
@@ -388,7 +388,7 @@ func (m *Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchInput.Blur()
 		m.reload()
 		m.updateTableHeight()
-		
+
 		if len(m.searchMatches) > 0 {
 			match := m.searchMatches[m.searchIndex]
 			prevRow := m.tbl.Cursor()
@@ -398,23 +398,23 @@ func (m *Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 		}
 		return m, nil
-		
-	case tea.KeyEsc:
+
+	case "esc":
 		m.searching = false
 		m.searchInput.Blur()
 		m.updateTableHeight()
 		return m, nil
 	}
-	
+
 	var cmd tea.Cmd
 	m.searchInput, cmd = m.searchInput.Update(msg)
 	return m, cmd
 }
 
 // handleHelpSearchMode handles search input in help mode
-func (m *Model) handleHelpSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m *Model) handleHelpSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		pattern := m.helpSearchInput.Value()
 		if pattern != "" {
 			// Check cache first
@@ -435,7 +435,7 @@ func (m *Model) handleHelpSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.helpSearching = false
 		m.helpSearchInput.Blur()
-		
+
 		// Find matching help lines
 		m.helpSearchMatches = nil
 		if m.helpSearchRegex != nil {
@@ -451,13 +451,13 @@ func (m *Model) handleHelpSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-		
-	case tea.KeyEsc:
+
+	case "esc":
 		m.helpSearching = false
 		m.helpSearchInput.Blur()
 		return m, nil
 	}
-	
+
 	var cmd tea.Cmd
 	m.helpSearchInput, cmd = m.helpSearchInput.Update(msg)
 	return m, cmd
@@ -465,7 +465,7 @@ func (m *Model) handleHelpSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleBlinkingState handles input when a task is blinking
 func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(tea.KeyMsg); ok {
+	if _, ok := msg.(tea.KeyPressMsg); ok {
 		// Only allow navigation while blinking
 		prevRow := m.tbl.Cursor()
 		prevCol := m.tbl.ColumnCursor()
@@ -480,7 +480,7 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleEditingModes checks if we're in any editing mode and handles it
-func (m *Model) handleEditingModes(msg tea.KeyMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
+func (m *Model) handleEditingModes(msg tea.KeyPressMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
 	switch {
 	case m.annotating:
 		model, cmd = m.handleAnnotationMode(msg)
@@ -539,11 +539,11 @@ func (m *Model) getTaskAtCursor() *task.Task {
 }
 
 // handleTaskDetailMode handles keyboard input in task detail view
-func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailSearching {
 		var cmd tea.Cmd
-		switch msg.Type {
-		case tea.KeyEnter:
+		switch msg.String() {
+		case "enter":
 			pattern := m.detailSearchInput.Value()
 			if pattern != "" {
 				re, err := compileAndCacheRegex(pattern)
@@ -559,7 +559,7 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.detailSearching = false
 			m.detailSearchInput.Blur()
 			return m, nil
-		case tea.KeyEsc, tea.KeyCtrlC:
+		case "esc", "ctrl+c":
 			m.detailSearching = false
 			m.detailSearchInput.Blur()
 			return m, nil
@@ -568,7 +568,7 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	}
-	
+
 	// Normal task detail view mode
 	switch msg.String() {
 	case "q", "esc":
@@ -605,7 +605,7 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Check if current field is editable
 		return m.handleDetailFieldEdit()
 	}
-	
+
 	return m, nil
 }
 

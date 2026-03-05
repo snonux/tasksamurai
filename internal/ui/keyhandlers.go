@@ -7,15 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // handleNormalMode handles keyboard input in normal mode (not editing)
-func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If help is shown, handle special cases
 	if m.showHelp {
 		switch msg.String() {
@@ -36,7 +36,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "pgup", "b":
 			m.helpViewport.PageUp()
 			return m, nil
-		case "pgdown", " ":
+		case "pgdown", "space":
 			m.helpViewport.PageDown()
 			return m, nil
 		case "g", "home":
@@ -50,7 +50,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	
+
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()
@@ -98,7 +98,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleDisco()
 	case "B":
 		return m.handleToggleBlink()
-	case " ":
+	case "space":
 		return m.handleRefresh()
 	case "/", "?":
 		return m.handleSearch()
@@ -123,7 +123,7 @@ func (m *Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 	m.showHelp = true
 	// Initialize help viewport with proper dimensions
-	width := m.tbl.Width() - 4 // Account for padding
+	width := m.tbl.Width() - 4   // Account for padding
 	height := m.windowHeight - 6 // Leave room for status bars and search input
 	if width <= 0 {
 		width = 80 // Default width
@@ -131,7 +131,7 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 	if height <= 0 {
 		height = 20 // Default height
 	}
-	m.helpViewport = viewport.New(width, height)
+	m.helpViewport = viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	// Set the content immediately
 	content := m.buildHelpContent()
 	m.helpViewport.SetContent(content)
@@ -187,7 +187,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	// Check if task is started
 	started := false
 	for _, tsk := range m.tasks {
@@ -196,7 +196,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 			break
 		}
 	}
-	
+
 	if started {
 		if err := task.Stop(id); err != nil {
 			m.showError(err)
@@ -208,7 +208,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	
+
 	m.reload()
 	return m, m.startBlink(id, false)
 }
@@ -226,17 +226,17 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	if task == nil {
 		return m, nil
 	}
-	
+
 	url := urlRegex.FindString(task.Description)
 	if url == "" {
 		return m, nil
 	}
-	
+
 	if err := exec.Command(m.browserCmd, url).Run(); err != nil {
 		m.showError(fmt.Errorf("opening browser: %w", err))
 		return m, nil
 	}
-	
+
 	return m, m.startBlink(task.ID, false)
 }
 
@@ -244,21 +244,21 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	if len(m.undoStack) == 0 {
 		return m, nil
 	}
-	
+
 	uuid := m.undoStack[len(m.undoStack)-1]
 	m.undoStack = m.undoStack[:len(m.undoStack)-1]
-	
+
 	if err := task.SetStatusUUID(uuid, "pending"); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	// Reload the task list to get the updated task with its new ID
 	if err := m.reload(); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	// Find the task ID for blinking
 	var id int
 	var found bool
@@ -269,7 +269,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			break
 		}
 	}
-	
+
 	// If task not found or has ID 0, try to get it directly from Taskwarrior
 	if !found || id == 0 {
 		// Use task export with UUID filter to get the specific task
@@ -278,7 +278,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			filters = append(filters, m.filters...)
 		}
 		filters = append(filters, "status:pending")
-		
+
 		tasks, err := task.Export(filters...)
 		if err == nil && len(tasks) > 0 {
 			id = tasks[0].ID
@@ -291,13 +291,13 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	
+
 	// If we still don't have a valid ID, don't try to blink
 	if id == 0 {
 		m.statusMsg = "Task restored"
 		return m, nil
 	}
-	
+
 	return m, m.startBlink(id, false)
 }
 
@@ -306,7 +306,7 @@ func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.dueID = id
 	m.dueEditing = true
@@ -320,13 +320,13 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	// In Taskwarrior, passing an empty value to due: removes the due date
 	if err := task.SetDueDate(id, ""); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	m.reload()
 	return m, m.startBlink(id, false)
 }
@@ -336,15 +336,15 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	days := rand.Intn(31) + 7
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
-	
+
 	if err := task.SetDueDate(id, due); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	m.reload()
 	return m, m.startBlink(id, false)
 }
@@ -354,12 +354,12 @@ func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	task := m.getTaskAtCursor()
 	if task == nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.recurID = id
 	m.recurEditing = true
@@ -374,7 +374,7 @@ func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.priorityID = id
 	m.prioritySelecting = true
@@ -388,7 +388,7 @@ func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.annotateID = id
 	m.annotating = true
@@ -422,7 +422,7 @@ func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.tagsID = id
 	m.tagsEditing = true
@@ -437,11 +437,11 @@ func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	m.clearEditingModes()
 	m.projID = id
 	m.projEditing = true
-	
+
 	// Get current project value
 	task := m.getTaskAtCursor()
 	if task != nil {
@@ -459,29 +459,29 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	// Get the task at cursor
 	currentTask := m.getTaskAtCursor()
 	if currentTask == nil || len(currentTask.Tags) == 0 {
 		// No tags to convert
 		return m, nil
 	}
-	
+
 	// Get the first tag
 	firstTag := currentTask.Tags[0]
-	
+
 	// Set the tag as project
 	if err := task.SetProject(id, firstTag); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	// Remove the tag from the task
 	if err := task.RemoveTags(id, []string{firstTag}); err != nil {
 		m.showError(err)
 		return m, nil
 	}
-	
+
 	m.reload()
 	return m, m.startBlink(id, false)
 }
@@ -533,7 +533,7 @@ func (m *Model) handleNextSearchMatch() (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) == 0 {
 		return m, nil
 	}
-	
+
 	m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
 	match := m.searchMatches[m.searchIndex]
 	prevRow := m.tbl.Cursor()
@@ -548,7 +548,7 @@ func (m *Model) handlePrevSearchMatch() (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) == 0 {
 		return m, nil
 	}
-	
+
 	m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
 	match := m.searchMatches[m.searchIndex]
 	prevRow := m.tbl.Cursor()
@@ -572,7 +572,7 @@ func (m *Model) handleNextHelpSearchMatch() (tea.Model, tea.Cmd) {
 	if len(m.helpSearchMatches) == 0 {
 		return m, nil
 	}
-	
+
 	m.helpSearchIndex = (m.helpSearchIndex + 1) % len(m.helpSearchMatches)
 	// In the future, we could add visual indication of current match
 	return m, nil
@@ -582,7 +582,7 @@ func (m *Model) handlePrevHelpSearchMatch() (tea.Model, tea.Cmd) {
 	if len(m.helpSearchMatches) == 0 {
 		return m, nil
 	}
-	
+
 	m.helpSearchIndex = (m.helpSearchIndex - 1 + len(m.helpSearchMatches)) % len(m.helpSearchMatches)
 	// In the future, we could add visual indication of current match
 	return m, nil
@@ -593,7 +593,7 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
-	
+
 	// Find the task with this ID
 	for i := range m.tasks {
 		if m.tasks[i].ID == id {
@@ -607,11 +607,11 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 			m.detailBlinkCount = 0
 			m.detailSearchInput = textinput.New()
 			m.detailSearchInput.Placeholder = "Search..."
-			m.detailSearchInput.Width = 30
+			m.detailSearchInput.SetWidth(30)
 			break
 		}
 	}
-	
+
 	return m, nil
 }
 
@@ -661,7 +661,7 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleTableNavigation(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTableNavigation(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	prevRow := m.tbl.Cursor()
 	prevCol := m.tbl.ColumnCursor()
 	var cmd tea.Cmd
@@ -684,22 +684,22 @@ func (m *Model) handleJumpToRandomTask() (tea.Model, tea.Cmd) {
 		m.statusMsg = "No tasks to jump to"
 		return m, nil
 	}
-	
+
 	// Pick a random index
 	randomIndex := rand.Intn(len(m.tasks))
-	
+
 	// Update cursor position
 	prevRow := m.tbl.Cursor()
 	prevCol := m.tbl.ColumnCursor()
 	m.tbl.SetCursor(randomIndex)
 	m.updateSelectionHighlight(prevRow, randomIndex, prevCol, m.tbl.ColumnCursor())
-	
+
 	// Blink the task to indicate jump
 	if randomIndex < len(m.tasks) {
 		taskID := m.tasks[randomIndex].ID
 		return m, m.startBlink(taskID, false)
 	}
-	
+
 	return m, nil
 }
 
@@ -712,27 +712,27 @@ func (m *Model) handleJumpToRandomTaskNoDue() (tea.Model, tea.Cmd) {
 			noDueTasks = append(noDueTasks, i)
 		}
 	}
-	
+
 	if len(noDueTasks) == 0 {
 		m.statusMsg = "No tasks without due date to jump to"
 		return m, nil
 	}
-	
+
 	// Pick a random task from the no-due list
 	randomChoice := rand.Intn(len(noDueTasks))
 	randomIndex := noDueTasks[randomChoice]
-	
+
 	// Update cursor position
 	prevRow := m.tbl.Cursor()
 	prevCol := m.tbl.ColumnCursor()
 	m.tbl.SetCursor(randomIndex)
 	m.updateSelectionHighlight(prevRow, randomIndex, prevCol, m.tbl.ColumnCursor())
-	
+
 	// Blink the task to indicate jump
 	if randomIndex < len(m.tasks) {
 		taskID := m.tasks[randomIndex].ID
 		return m, m.startBlink(taskID, false)
 	}
-	
+
 	return m, nil
 }

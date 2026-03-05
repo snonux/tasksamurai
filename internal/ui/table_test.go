@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestAnnotateHotkey(t *testing.T) {
@@ -46,14 +46,14 @@ func TestAnnotateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mp := &m  // Get pointer to model
-	mv, _ := mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	mp := &m // Get pointer to model
+	mv, _ := mp.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	mp = mv.(*Model)
 	for _, r := range "note" {
-		mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		mp = mv.(*Model)
 	}
-	mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	mp = mv.(*Model)
 
 	data, err := os.ReadFile(annoFile)
@@ -103,13 +103,15 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'A', Text: "A"})
 	m = *mv.(*Model)
 	for _, r := range "new" {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(annoFile)
@@ -163,10 +165,11 @@ func TestDoneHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = *mv.(*Model)
 	for i := 0; i < blinkCycles; i++ {
-		mp := &m; mv, _ = mp.Update(blinkMsg{})
+		mp := &m
+		mv, _ = mp.Update(blinkMsg{})
 		m = *mv.(*Model)
 	}
 
@@ -212,13 +215,15 @@ func TestUndoHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = *mv.(*Model)
 	for i := 0; i < blinkCycles; i++ {
-		mp := &m; mv, _ = mp.Update(blinkMsg{})
+		mp := &m
+		mv, _ = mp.Update(blinkMsg{})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'U'}})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
@@ -275,7 +280,7 @@ func TestOpenURLHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(openFile)
@@ -319,13 +324,15 @@ func TestDueDateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'w', Text: "w"})
 	m = *mv.(*Model)
 	for i := 0; i < 3; i++ {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRight})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(dueFile)
@@ -371,7 +378,7 @@ func TestRandomDueDateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(dueFile)
@@ -426,13 +433,15 @@ func TestRecurrenceHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'R', Text: "R"})
 	m = *mv.(*Model)
 	for _, r := range "daily" {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(recFile)
@@ -477,9 +486,10 @@ func TestPriorityHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 	m = *mv.(*Model)
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(priFile)
@@ -524,13 +534,15 @@ func TestAddHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'+'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '+', Text: "+"})
 	m = *mv.(*Model)
 	for _, r := range "foo due:today" {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(addFile)
@@ -574,19 +586,21 @@ func TestNavigationHotkeys(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = *mv.(*Model)
 	if m.tbl.Cursor() != 1 {
 		t.Fatalf("down: got cursor %d", m.tbl.Cursor())
 	}
 
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: '0', Text: "0"})
 	m = *mv.(*Model)
 	if m.tbl.Cursor() != 0 {
 		t.Fatalf("0 hotkey: expected 0 got %d", m.tbl.Cursor())
 	}
 
-	mp = &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	mp = &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	m = *mv.(*Model)
 	if m.tbl.Cursor() != 1 {
 		t.Fatalf("G hotkey: expected 1 got %d", m.tbl.Cursor())
@@ -631,13 +645,14 @@ func TestEscClosesHelp(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'H', Text: "H"})
 	m = *mv.(*Model)
 	if !m.showHelp {
 		t.Fatalf("help not shown")
 	}
 
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = *mv.(*Model)
 	if m.showHelp {
 		t.Fatalf("esc did not close help")
@@ -675,14 +690,14 @@ func TestExpandedCellViewNoDoubleRender(t *testing.T) {
 	// With cellExpanded false (the default), the expanded content must be absent.
 	m.cellExpanded = false
 	viewCollapsed := m.View()
-	if strings.Contains(viewCollapsed, expanded) {
+	if strings.Contains(viewCollapsed.Content, expanded) {
 		t.Fatalf("cellExpanded=false: expandedCellView content unexpectedly present in View()")
 	}
 
 	// With cellExpanded true, the expanded content must appear exactly once.
 	m.cellExpanded = true
 	viewExpanded := m.View()
-	count := strings.Count(viewExpanded, expanded)
+	count := strings.Count(viewExpanded.Content, expanded)
 	if count != 1 {
 		t.Fatalf("cellExpanded=true: expandedCellView content appears %d times in View(), want exactly 1", count)
 	}
@@ -699,39 +714,46 @@ func TestSearchExitHotkeys(t *testing.T) {
 	}
 
 	// enter search mode
-	mv, _ := (&m).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = *mv.(*Model)
 	for _, r := range "alpha" {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *mv.(*Model)
 	}
-	mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp := &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 	if m.searchRegex == nil {
 		t.Fatalf("search regex not set")
 	}
 
 	// escape search results with ESC
-	mp = &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mp = &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = *mv.(*Model)
 	if m.searchRegex != nil {
 		t.Fatalf("esc did not clear search")
 	}
 
 	// search again and exit with q
-	mp = &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mp = &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = *mv.(*Model)
 	for _, r := range "beta" {
-		mp := &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mp := &m
+		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *mv.(*Model)
 	}
-	mp = &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mp = &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 	if m.searchRegex == nil {
 		t.Fatalf("search regex not set for q")
 	}
 
-	mp = &m; mv, _ = mp.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	mp = &m
+	mv, _ = mp.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	m = *mv.(*Model)
 	if m.searchRegex != nil {
 		t.Fatalf("q did not clear search")

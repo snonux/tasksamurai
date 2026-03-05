@@ -11,7 +11,7 @@ import (
 	"codeberg.org/snonux/tasksamurai/internal/task"
 	"codeberg.org/snonux/tasksamurai/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -48,7 +48,7 @@ func main() {
 	// previous command line artefacts behind.
 	fmt.Print("\033[H\033[2J")
 
-	p := tea.NewProgram(&m, tea.WithAltScreen())
+	p := tea.NewProgram(&m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)

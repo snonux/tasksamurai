@@ -11,10 +11,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"codeberg.org/snonux/tasksamurai/internal"
 	atable "codeberg.org/snonux/tasksamurai/internal/atable"
@@ -64,18 +64,18 @@ type searchState struct {
 // Blink fields here are separate from blinkState because they drive a
 // per-field highlight inside the detail view rather than a table row.
 type detailViewState struct {
-	showTaskDetail     bool
-	currentTaskDetail  *task.Task
-	detailSearching    bool
-	detailSearchInput  textinput.Model
-	detailSearchRegex  *regexp.Regexp
-	detailFieldIndex   int    // currently selected field (-1 = none)
-	detailBlinkField   int    // field currently blinking (-1 = none)
-	detailBlinkOn      bool   // whether the blink is currently on
-	detailBlinkCount   int    // number of blink cycles completed so far
+	showTaskDetail    bool
+	currentTaskDetail *task.Task
+	detailSearching   bool
+	detailSearchInput textinput.Model
+	detailSearchRegex *regexp.Regexp
+	detailFieldIndex  int  // currently selected field (-1 = none)
+	detailBlinkField  int  // field currently blinking (-1 = none)
+	detailBlinkOn     bool // whether the blink is currently on
+	detailBlinkCount  int  // number of blink cycles completed so far
 	// detailDescEditing lives here (not in editState) because it drives an
 	// external-editor launch from the detail overlay, not inline text input.
-	detailDescEditing  bool   // whether the description editor is open
+	detailDescEditing bool // whether the description editor is open
 }
 
 // editState holds inline field-editing state for the task table.
@@ -153,9 +153,9 @@ type Model struct {
 	inProgress int
 	due        int
 
-	filters   []string
-	tasks     []task.Task
-	undoStack []string
+	filters    []string
+	tasks      []task.Task
+	undoStack  []string
 	browserCmd string
 
 	theme        Theme
@@ -171,8 +171,8 @@ type Model struct {
 type editDoneMsg struct{ err error }
 
 // descEditDoneMsg is emitted when the external editor for description finishes.
-type descEditDoneMsg struct{ 
-	err error
+type descEditDoneMsg struct {
+	err      error
 	tempFile string
 }
 
@@ -202,7 +202,7 @@ func editDescriptionCmd(description string) tea.Cmd {
 			return descEditDoneMsg{err: err, tempFile: ""}
 		}
 		tmpPath := tmpFile.Name()
-		
+
 		// Write current description to temp file
 		_, err = tmpFile.WriteString(description)
 		_ = tmpFile.Close()
@@ -210,19 +210,19 @@ func editDescriptionCmd(description string) tea.Cmd {
 			_ = os.Remove(tmpPath)
 			return descEditDoneMsg{err: err, tempFile: ""}
 		}
-		
+
 		// Get editor from environment
 		editor := os.Getenv("EDITOR")
 		if editor == "" {
 			editor = "vi" // fallback to vi
 		}
-		
+
 		// Create the command
 		c := exec.Command(editor, tmpPath)
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-		
+
 		// Use ExecProcess to properly handle the external TUI editor
 		return tea.ExecProcess(c, func(err error) tea.Msg {
 			return descEditDoneMsg{err: err, tempFile: tmpPath}
@@ -384,7 +384,7 @@ func (m *Model) reload() error {
 	m.total = task.TotalTasks(tasks)
 	m.inProgress = task.InProgressTasks(tasks)
 	m.due = task.DueTasks(tasks, time.Now())
-	
+
 	// Refresh current task detail if in detail view
 	if m.showTaskDetail {
 		m.refreshCurrentTaskDetail()
@@ -447,12 +447,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case struct{ clearStatus bool }:
 		m.statusMsg = ""
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Handle blinking state first
 		if m.blinkID != 0 {
 			return m.handleBlinkingState(msg)
 		}
-		
+
 		// Check if we're in detail view
 		if m.showTaskDetail {
 			// If we're editing in detail view, let editing modes handle it
@@ -464,16 +464,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Otherwise handle detail view navigation
 			return m.handleTaskDetailMode(msg)
 		}
-		
+
 		// Check if we're in any editing mode
 		if handled, model, cmd := m.handleEditingModes(msg); handled {
 			return model, cmd
 		}
-		
+
 		// Otherwise handle normal mode
 		return m.handleNormalMode(msg)
 	}
-	
+
 	// Default case - pass through to appropriate component
 	if m.showHelp {
 		// Update help viewport for mouse wheel and other events
@@ -481,7 +481,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.helpViewport, cmd = m.helpViewport.Update(msg)
 		return m, cmd
 	}
-	
+
 	var cmd tea.Cmd
 	m.tbl, cmd = m.tbl.Update(msg)
 	return m, cmd
@@ -493,17 +493,17 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.windowHeight = msg.Height
 	m.computeColumnWidths()
 	m.updateTableHeight()
-	
+
 	// Update help viewport if active
-	if m.showHelp && m.helpViewport.Width > 0 {
+	if m.showHelp && m.helpViewport.Width() > 0 {
 		width := msg.Width - 4
 		height := msg.Height - 6
 		if width > 0 && height > 0 {
-			m.helpViewport.Width = width
-			m.helpViewport.Height = height
+			m.helpViewport.SetWidth(width)
+			m.helpViewport.SetHeight(height)
 		}
 	}
-	
+
 	return m, nil
 }
 
@@ -522,7 +522,7 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	m.detailDescEditing = false
 	_ = os.Remove(msg.tempFile) // Clean up temp file
-	
+
 	if msg.err != nil {
 		m.statusMsg = fmt.Sprintf("Edit error: %v", msg.err)
 		cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
@@ -530,7 +530,7 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		})
 		return m, cmd
 	}
-	
+
 	// Read the edited content
 	content, err := os.ReadFile(msg.tempFile)
 	if err != nil {
@@ -540,7 +540,7 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		})
 		return m, cmd
 	}
-	
+
 	// Update the description
 	newDesc := strings.TrimSpace(string(content))
 	if m.currentTaskDetail != nil {
@@ -552,12 +552,12 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 			})
 			return m, cmd
 		}
-		
+
 		// Reload and start blinking
 		m.reload()
 		return m, m.startDetailBlink(m.detailDescriptionFieldIndex())
 	}
-	
+
 	return m, nil
 }
 
@@ -567,7 +567,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 	if m.showTaskDetail && m.detailBlinkField != -1 {
 		m.detailBlinkOn = !m.detailBlinkOn
 		m.detailBlinkCount++
-		
+
 		if m.detailBlinkCount >= blinkCycles {
 			m.detailBlinkField = -1
 			m.detailBlinkOn = false
@@ -577,15 +577,15 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	
+
 	if m.blinkID == 0 {
 		return m, nil
 	}
-	
+
 	m.blinkOn = !m.blinkOn
 	m.blinkCount++
 	m.updateBlinkRow()
-	
+
 	if m.blinkCount >= blinkCycles {
 		id := m.blinkID
 		mark := m.blinkMarkDone
@@ -593,7 +593,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 		m.blinkOn = false
 		m.blinkCount = 0
 		m.blinkMarkDone = false
-		
+
 		if mark {
 			for _, tsk := range m.tasks {
 				if tsk.ID == id {
@@ -608,31 +608,36 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 		m.reload()
 		return m, nil
 	}
-	
+
 	return m, blinkCmd()
 }
 
 // View renders the table UI.
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	var content string
 	if m.showHelp {
 		m.updateHelpContent()
-		return m.renderHelpScreen()
+		content = m.renderHelpScreen()
+	} else if m.showTaskDetail {
+		content = m.renderTaskDetail()
+	} else {
+		// expandedCellView is only appended when the user has toggled the
+		// expanded-cell panel open; including it unconditionally caused a
+		// double-render whenever cellExpanded was true.
+		view := lipgloss.JoinVertical(lipgloss.Left,
+			m.topStatusLine(),
+			m.tbl.View(),
+			m.statusLine(),
+		)
+		if m.cellExpanded {
+			view = lipgloss.JoinVertical(lipgloss.Left, view, m.expandedCellView())
+		}
+		content = m.appendInlineInputOverlay(view)
 	}
-	if m.showTaskDetail {
-		return m.renderTaskDetail()
-	}
-	// expandedCellView is only appended when the user has toggled the
-	// expanded-cell panel open; including it unconditionally caused a
-	// double-render whenever cellExpanded was true.
-	view := lipgloss.JoinVertical(lipgloss.Left,
-		m.topStatusLine(),
-		m.tbl.View(),
-		m.statusLine(),
-	)
-	if m.cellExpanded {
-		view = lipgloss.JoinVertical(lipgloss.Left, view, m.expandedCellView())
-	}
-	return m.appendInlineInputOverlay(view)
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 // appendInlineInputOverlay appends whichever active inline-editing widget
@@ -683,17 +688,17 @@ func (m Model) buildHelpContent() string {
 		Foreground(lipgloss.Color(m.theme.HeaderFG)).
 		Background(lipgloss.Color(m.theme.SelectedBG)).
 		Padding(0, 1)
-		
+
 	keyStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(m.theme.SelectedFG))
-		
+
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("250")) // Light gray for readability
 
 	// Build help content with styled headers
 	var sections []string
-	
+
 	// Navigation section
 	sections = append(sections, headerStyle.Render("Navigation"),
 		m.formatHelpLine("↑/k, ↓/j", "move up/down", keyStyle, descStyle),
@@ -704,7 +709,7 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("1", "jump to random task", keyStyle, descStyle),
 		m.formatHelpLine("2", "jump to random task (no due date)", keyStyle, descStyle),
 		"")
-	
+
 	// Task Management section
 	sections = append(sections, headerStyle.Render("Task Management"),
 		m.formatHelpLine("Enter", "view task details", keyStyle, descStyle),
@@ -714,7 +719,7 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("U", "undo last done", keyStyle, descStyle),
 		m.formatHelpLine("s", "start/stop task", keyStyle, descStyle),
 		"")
-	
+
 	// Task Fields section
 	sections = append(sections, headerStyle.Render("Task Fields"),
 		m.formatHelpLine("i", "edit current field", keyStyle, descStyle),
@@ -728,7 +733,7 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("a, A", "add/replace annotations", keyStyle, descStyle),
 		m.formatHelpLine("o", "open URL from description", keyStyle, descStyle),
 		"")
-	
+
 	// View & Search section
 	sections = append(sections, headerStyle.Render("View & Search"),
 		m.formatHelpLine("f", "change filter", keyStyle, descStyle),
@@ -736,20 +741,20 @@ func (m Model) buildHelpContent() string {
 		m.formatHelpLine("n, N", "next/previous match", keyStyle, descStyle),
 		m.formatHelpLine("space", "refresh tasks", keyStyle, descStyle),
 		"")
-	
+
 	// Appearance section
 	sections = append(sections, headerStyle.Render("Appearance"),
 		m.formatHelpLine("c, C", "random/reset theme", keyStyle, descStyle),
 		m.formatHelpLine("x", "toggle disco mode", keyStyle, descStyle),
 		m.formatHelpLine("B", "toggle blinking", keyStyle, descStyle),
 		"")
-	
+
 	// General section
 	sections = append(sections, headerStyle.Render("General"),
 		m.formatHelpLine("H", "toggle help", keyStyle, descStyle),
 		m.formatHelpLine("ESC", "close dialogs/cancel", keyStyle, descStyle),
 		m.formatHelpLine("q", "quit", keyStyle, descStyle))
-	
+
 	// Apply search highlighting if active
 	if m.helpSearchRegex != nil {
 		for i, line := range sections {
@@ -758,7 +763,7 @@ func (m Model) buildHelpContent() string {
 			}
 		}
 	}
-	
+
 	// Join all sections
 	return strings.Join(sections, "\n")
 }
@@ -767,10 +772,10 @@ func (m Model) buildHelpContent() string {
 func (m Model) renderHelpScreen() string {
 	containerStyle := lipgloss.NewStyle().
 		Padding(1, 2)
-	
+
 	// Render viewport
 	viewportView := m.helpViewport.View()
-	
+
 	result := containerStyle.Render(viewportView)
 
 	// Add search input at the bottom if in help search mode
@@ -798,25 +803,25 @@ func (m Model) highlightHelpLine(line string) string {
 	if m.helpSearchRegex == nil {
 		return line
 	}
-	
+
 	matches := m.helpSearchRegex.FindAllStringIndex(line, -1)
 	if len(matches) == 0 {
 		return line
 	}
-	
+
 	highlighted := line
 	offset := 0
 	highlightStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(m.theme.SearchBG)).
 		Foreground(lipgloss.Color(m.theme.SearchFG))
-		
+
 	for _, match := range matches {
 		start := match[0] + offset
 		end := match[1] + offset
 		highlighted = highlighted[:start] + highlightStyle.Render(highlighted[start:end]) + highlighted[end:]
 		offset += len(highlightStyle.Render(highlighted[start:end])) - (end - start)
 	}
-	
+
 	return highlighted
 }
 
@@ -982,7 +987,7 @@ func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string)
 		if loc[0] > last {
 			b.WriteString(base.Render(raw[last:loc[0]]))
 		}
-		b.WriteString(highlight.Copy().Inherit(base).Render(raw[loc[0]:loc[1]]))
+		b.WriteString(highlight.Inherit(base).Render(raw[loc[0]:loc[1]]))
 		last = loc[1]
 	}
 	if last < len(raw) {
@@ -994,7 +999,7 @@ func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string)
 func (m Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
 	if re != nil && re.MatchString(raw) {
 		highlight := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.SearchBG)).Foreground(lipgloss.Color(m.theme.SearchFG))
-		return highlight.Copy().Inherit(base).Render(display)
+		return highlight.Inherit(base).Render(display)
 	}
 	return base.Render(display)
 }
@@ -1023,8 +1028,8 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 		anns = append(anns, a.Description)
 	}
 
-	cellStyle := rowStyle.Copy().Inherit(styles.Cell)
-	selStyle := cellStyle.Copy().Inherit(styles.Selected)
+	cellStyle := rowStyle.Inherit(styles.Cell)
+	selStyle := cellStyle.Inherit(styles.Selected)
 
 	getStyle := func(col int) lipgloss.Style {
 		if col == selectedCol {
@@ -1153,7 +1158,6 @@ func (m *Model) updateTableHeight() {
 	}
 	m.tbl.SetHeight(h)
 }
-
 
 func (m *Model) computeColumnWidths() {
 	maxID := 1

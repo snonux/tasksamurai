@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // wordWrap wraps text to fit within the specified width, breaking at word boundaries
@@ -13,13 +13,13 @@ func wordWrap(text string, width int) []string {
 	if width <= 0 {
 		return []string{text}
 	}
-	
+
 	var lines []string
 	words := strings.Fields(text)
 	if len(words) == 0 {
 		return []string{""}
 	}
-	
+
 	currentLine := words[0]
 	for i := 1; i < len(words); i++ {
 		word := words[i]
@@ -34,7 +34,7 @@ func wordWrap(text string, width int) []string {
 	if currentLine != "" {
 		lines = append(lines, currentLine)
 	}
-	
+
 	return lines
 }
 
@@ -138,7 +138,7 @@ func (m *Model) renderDetailPriorityField(labelStyle, valueStyle lipgloss.Style,
 	if pv == "" {
 		pv = "-"
 	}
-	ps := valueStyle.Copy()
+	ps := valueStyle
 	switch t.Priority {
 	case "H":
 		ps = ps.Background(lipgloss.Color(m.theme.PrioHighBG))
@@ -219,7 +219,7 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 	t := m.currentTaskDetail
 	lines = append(lines, "")
 
-	ls, vs := labelStyle.Copy(), descStyle.Copy()
+	ls, vs := labelStyle, descStyle
 	if m.detailBlinkField == cf && m.detailBlinkOn {
 		bg := lipgloss.Color("226")
 		ls = ls.Background(bg).Foreground(lipgloss.Color("0"))
@@ -260,7 +260,7 @@ func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, desc
 		return lines
 	}
 	lines = append(lines, "")
-	ls, vs := labelStyle.Copy(), descStyle.Copy()
+	ls, vs := labelStyle, descStyle
 	if m.detailFieldIndex == cf {
 		ls = ls.Background(lipgloss.Color(m.theme.SelectedBG))
 		vs = vs.Background(lipgloss.Color(m.theme.SelectedBG))
