@@ -229,6 +229,14 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 
 	url := urlRegex.FindString(task.Description)
 	if url == "" {
+		for _, ann := range task.Annotations {
+			url = urlRegex.FindString(ann.Description)
+			if url != "" {
+				break
+			}
+		}
+	}
+	if url == "" {
 		return m, nil
 	}
 

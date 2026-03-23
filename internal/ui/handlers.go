@@ -601,6 +601,8 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		m.detailFieldIndex = m.getDetailFieldCount() - 1
 		return m, nil
+	case "o":
+		return m.handleOpenURL()
 	case "i", "enter":
 		// Check if current field is editable
 		return m.handleDetailFieldEdit()

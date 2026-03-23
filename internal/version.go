@@ -1,4 +1,4 @@
 package internal
 
 // Version is the current version of Task Samurai.
-const Version = "0.11.4"
+const Version = "0.12.0"
