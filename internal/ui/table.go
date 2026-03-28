@@ -78,6 +78,17 @@ type detailViewState struct {
 	detailDescEditing bool // whether the description editor is open
 }
 
+// ultraState holds the state for the ultra mode task list and its search UI.
+type ultraState struct {
+	showUltra        bool
+	ultraCursor      int
+	ultraOffset      int
+	ultraSearching   bool
+	ultraSearchInput textinput.Model
+	ultraSearchRegex *regexp.Regexp
+	ultraFiltered    []int
+}
+
 // editState holds inline field-editing state for the task table.
 // Each editing mode (annotate, desc, tags, …) is mutually exclusive;
 // clearEditingModes resets them all before activating a new one.
@@ -132,6 +143,7 @@ type Model struct {
 	blinkState      // row blink animation (see blinkState)
 	searchState     // task-table and help-screen search (see searchState)
 	detailViewState // task detail overlay (see detailViewState)
+	ultraState      // ultra mode task list and search state (see ultraState)
 	editState       // inline field editing (see editState)
 
 	cellExpanded bool
@@ -325,6 +337,8 @@ func New(filters []string, browserCmd string) (Model, error) {
 	m.searchInput.Prompt = "search: "
 	m.helpSearchInput = textinput.New()
 	m.helpSearchInput.Prompt = "help search: "
+	m.ultraSearchInput = textinput.New()
+	m.ultraSearchInput.Prompt = "ultra search: "
 	m.filterInput = textinput.New()
 	m.filterInput.Prompt = "filter: "
 
