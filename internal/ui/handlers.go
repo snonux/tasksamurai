@@ -346,6 +346,11 @@ func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.tbl.SetCursor(row)
 			m.tbl.SetColumnCursor(7) // Description column
 			m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+			if m.showUltra {
+				m.ultraFocusedID = newID
+				m.selectTaskByID(newID)
+				m.ultraFocusedID = 0
+			}
 			return m, m.startBlink(newID, false)
 		}
 		return m, nil
@@ -466,7 +471,11 @@ func (m *Model) handleHelpSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleBlinkingState handles input when a task is blinking
 func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tea.KeyPressMsg); ok {
-		// Only allow navigation while blinking
+		if m.showUltra {
+			return m.handleUltraBlinkingState(msg.(tea.KeyPressMsg))
+		}
+
+		// Only allow navigation while blinking.
 		prevRow := m.tbl.Cursor()
 		prevCol := m.tbl.ColumnCursor()
 		var cmd tea.Cmd
@@ -475,6 +484,24 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
 		}
 		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *Model) handleUltraBlinkingState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		m.ultraMoveCursor(1)
+	case "k", "up":
+		m.ultraMoveCursor(-1)
+	case "pgdn", "pgdown", "space":
+		m.ultraMoveCursor(m.ultraVisibleCount())
+	case "pgup", "b":
+		m.ultraMoveCursor(-m.ultraVisibleCount())
+	case "g", "home":
+		m.ultraGoHome()
+	case "G", "end":
+		m.ultraGoEnd()
 	}
 	return m, nil
 }

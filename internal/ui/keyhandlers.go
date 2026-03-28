@@ -111,6 +111,7 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		return m.handleEnterOrEdit()
 	case "u":
+		m.ultraClearFocusedID()
 		m.showUltra = true
 		m.ultraCursor = m.tbl.Cursor()
 		m.ultraOffset = 0
@@ -146,6 +147,7 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 	if m.showUltra {
+		m.ultraClearFocusedID()
 		m.showUltra = false
 		m.ultraSearchRegex = nil
 		m.ultraFiltered = nil

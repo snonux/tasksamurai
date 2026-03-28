@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -623,6 +624,35 @@ func setupUltraTaskSet(t *testing.T, tmp string) string {
 	return taskPath
 }
 
+func setupUltraReloadTaskSet(t *testing.T, tmp string) (string, string) {
+	taskPath := filepath.Join(tmp, "task")
+	phaseFile := filepath.Join(tmp, "phase")
+	if err := os.WriteFile(phaseFile, []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"phase=$(cat %q)\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  if [ \"$phase\" = \"1\" ]; then\n"+
+		"    echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"one\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"L\",\"urgency\":0}'\n"+
+		"    echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"two\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"M\",\"urgency\":0}'\n"+
+		"    echo '{\"id\":3,\"uuid\":\"3\",\"description\":\"three\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"H\",\"urgency\":0}'\n"+
+		"  else\n"+
+		"    echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"one\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"H\",\"urgency\":0}'\n"+
+		"    echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"two\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"L\",\"urgency\":0}'\n"+
+		"    echo '{\"id\":3,\"uuid\":\"3\",\"description\":\"three\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"M\",\"urgency\":0}'\n"+
+		"  fi\n"+
+		"  exit 0\n"+
+		"fi\n", phaseFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	return taskPath, phaseFile
+}
+
 func setupBasicTask(t *testing.T, tmp string) string {
 	taskPath := filepath.Join(tmp, "task")
 	script := "#!/bin/sh\n" +
@@ -685,6 +715,7 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
+	m.ultraFocusedID = 42
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if cmd != nil {
 		t.Fatalf("u unexpectedly returned a command")
@@ -693,10 +724,14 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	if !m.showUltra {
 		t.Fatalf("u did not enter ultra mode")
 	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("u did not clear ultraFocusedID, got %d", m.ultraFocusedID)
+	}
 
 	m.ultraSearchRegex = regexp.MustCompile("alpha")
 	m.ultraFiltered = []int{0, 1}
 	m.ultraSearchInput.SetValue("ultra needle")
+	m.ultraFocusedID = 17
 
 	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
@@ -715,12 +750,16 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	if got := m.ultraSearchInput.Value(); got != "" {
 		t.Fatalf("q did not clear ultraSearchInput, got %q", got)
 	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("q did not clear ultraFocusedID, got %d", m.ultraFocusedID)
+	}
 
 	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if cmd != nil {
 		t.Fatalf("u unexpectedly returned a command on re-entry")
 	}
 	m = *mv.(*Model)
+	m.ultraFocusedID = 23
 	m.ultraSearchRegex = regexp.MustCompile("beta")
 	m.ultraFiltered = []int{2}
 	m.ultraSearchInput.SetValue("second needle")
@@ -741,6 +780,78 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	}
 	if got := m.ultraSearchInput.Value(); got != "" {
 		t.Fatalf("esc did not clear ultraSearchInput, got %q", got)
+	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("esc did not clear ultraFocusedID, got %d", m.ultraFocusedID)
+	}
+}
+
+func TestUltraFocusedIDLifecycleAcrossNormalEditEntryAndReload(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if cmd != nil {
+		t.Fatalf("resize unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	m.blinkEnabled = false
+	m.editID = 1
+
+	mv, cmd = (&m).Update(editDoneMsg{})
+	if cmd != nil {
+		t.Fatalf("editDone unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("normal edit completion left ultraFocusedID=%d, want 0", m.ultraFocusedID)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if cmd != nil {
+		t.Fatalf("j unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if got := m.tbl.Cursor(); got != 1 {
+		t.Fatalf("cursor after j = %d, want 1", got)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("u left ultraFocusedID=%d, want 0", m.ultraFocusedID)
+	}
+	if got := m.ultraCursor; got != 1 {
+		t.Fatalf("ultra cursor after entry = %d, want 1", got)
+	}
+
+	if err := m.reload(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("reload left ultraFocusedID=%d, want 0", m.ultraFocusedID)
+	}
+	if got := m.ultraCursor; got != 1 {
+		t.Fatalf("ultra cursor after reload = %d, want 1", got)
+	}
+	if got := m.ultraTaskList()[m.ultraCursor].ID; got != 2 {
+		t.Fatalf("reload snapped to task %d, want 2", got)
+	}
+	if got := m.tbl.Cursor(); got != 1 {
+		t.Fatalf("table cursor after reload = %d, want 1", got)
 	}
 }
 
@@ -846,6 +957,178 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 	}
 	if m.ultraOffset != 2 {
 		t.Fatalf("G: offset = %d, want 2", m.ultraOffset)
+	}
+}
+
+func TestUltraBlinkUsesVisibleSelectionAndRendersBlink(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	step := func(msg tea.KeyPressMsg) {
+		t.Helper()
+		mv, cmd := (&m).Update(msg)
+		if cmd != nil {
+			t.Fatalf("%q unexpectedly returned a command", msg.String())
+		}
+		m = *mv.(*Model)
+	}
+
+	mv, cmd := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if cmd != nil {
+		t.Fatalf("resize unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	step(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+
+	m.blinkID = m.tasks[m.ultraCursor].ID
+	m.blinkOn = false
+	baseView := m.renderUltraModus()
+	m.blinkOn = true
+	blinkView := m.renderUltraModus()
+	if baseView == blinkView {
+		t.Fatalf("ultra view did not change when blink state toggled")
+	}
+
+	beforeTable := m.tbl.Cursor()
+	beforeUltra := m.ultraCursor
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if cmd != nil {
+		t.Fatalf("blink navigation unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.tbl.Cursor() != beforeTable {
+		t.Fatalf("blink navigation moved hidden table cursor: got %d want %d", m.tbl.Cursor(), beforeTable)
+	}
+	if m.ultraCursor != beforeUltra+1 {
+		t.Fatalf("blink navigation did not move visible ultra cursor: got %d want %d", m.ultraCursor, beforeUltra+1)
+	}
+}
+
+func TestUltraPriorityOpUsesUltraSelection(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	m.showUltra = true
+	m.tbl.SetCursor(0)
+	m.ultraCursor = 1
+
+	hiddenID := m.tasks[m.tbl.Cursor()].ID
+	selectedID := m.ultraTaskList()[m.ultraCursor].ID
+	if hiddenID == selectedID {
+		t.Fatalf("test setup failed: hidden and ultra selections match")
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+	if cmd != nil {
+		t.Fatalf("ultra priority hotkey unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	if m.priorityID != selectedID {
+		t.Fatalf("priority editor targeted task %d, want ultra-selected task %d", m.priorityID, selectedID)
+	}
+	if m.priorityID == hiddenID {
+		t.Fatalf("priority editor followed hidden table cursor %d instead of ultra selection %d", hiddenID, selectedID)
+	}
+	if !m.prioritySelecting {
+		t.Fatalf("priority editor was not activated")
+	}
+}
+
+func TestUltraReloadPreservesFilteredSelection(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, phaseFile := setupUltraReloadTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got := m.tasks; len(got) != 3 || got[0].ID != 3 || got[1].ID != 2 || got[2].ID != 1 {
+		t.Fatalf("unexpected initial sort order: %+v", got)
+	}
+
+	m.showUltra = true
+	m.ultraFiltered = []int{0, 2}
+	m.ultraCursor = 1
+	m.ultraOffset = 0
+	if got := m.ultraTaskList(); len(got) != 2 || got[0].ID != 3 || got[1].ID != 1 {
+		t.Fatalf("unexpected initial ultra filter list: %+v", got)
+	}
+
+	if err := os.WriteFile(phaseFile, []byte("2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.reload(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	if got := m.tasks; len(got) != 3 || got[0].ID != 1 || got[1].ID != 3 || got[2].ID != 2 {
+		t.Fatalf("unexpected reloaded sort order: %+v", got)
+	}
+	if !reflect.DeepEqual(m.ultraFiltered, []int{1, 0}) {
+		t.Fatalf("ultraFiltered was not rebuilt from task IDs: %#v", m.ultraFiltered)
+	}
+	if got := m.ultraTaskList(); len(got) != 2 || got[0].ID != 3 || got[1].ID != 1 {
+		t.Fatalf("ultra task list changed selection order: %+v", got)
+	}
+	if got := m.ultraTaskList()[m.ultraCursor].ID; got != 1 {
+		t.Fatalf("ultra cursor drifted after reload: got task %d want 1", got)
+	}
+}
+
+func TestUltraInlineOverlayRenders(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if cmd != nil {
+		t.Fatalf("resize unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	if cmd != nil {
+		t.Fatalf("f unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.filterEditing {
+		t.Fatalf("f did not activate filter editing in ultra mode")
+	}
+
+	view := m.View().Content
+	if !strings.Contains(view, "filter:") {
+		t.Fatalf("ultra view did not render filter overlay: %q", view)
 	}
 }
 

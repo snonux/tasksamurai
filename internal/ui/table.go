@@ -87,6 +87,7 @@ type ultraState struct {
 	ultraSearchInput textinput.Model
 	ultraSearchRegex *regexp.Regexp
 	ultraFiltered    []int
+	ultraFocusedID   int
 }
 
 // editState holds inline field-editing state for the task table.
@@ -387,6 +388,7 @@ func (m *Model) reload() error {
 	// Always show only pending tasks by default.
 	filters := append([]string(nil), m.filters...)
 	filters = append(filters, "status:pending")
+	ultraFilterIDs := m.ultraFilteredTaskIDs()
 	tasks, err := task.Export(filters...)
 	if err != nil {
 		return err
@@ -432,6 +434,7 @@ func (m *Model) reload() error {
 	if len(m.searchMatches) > 0 {
 		m.searchIndex = 0
 	}
+	m.rebuildUltraFiltered(ultraFilterIDs)
 
 	if m.tbl.Columns() == nil {
 		m.tbl, m.tblStyles = m.newTable(rows)
@@ -439,6 +442,7 @@ func (m *Model) reload() error {
 		m.tbl.SetRows(rows)
 		m.applyColumns()
 	}
+	m.reconcileUltraSelection()
 	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
 	return nil
 }
@@ -535,6 +539,9 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.showError(fmt.Errorf("editor: %w", msg.err))
+	}
+	if m.showUltra {
+		m.ultraFocusedID = m.editID
 	}
 	m.reload()
 	cmd := m.startBlink(m.editID, false)

@@ -18,7 +18,7 @@ func (m *Model) renderUltraModus() string {
 
 	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
 	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
-	overlay, overlayHeight := m.ultraSearchOverlay()
+	overlay, overlayHeight := m.ultraOverlay()
 
 	var lines []string
 	lines = append(lines, top)
@@ -87,7 +87,7 @@ func (m *Model) ultraVisibleCount() int {
 	width := m.ultraRenderWidth()
 	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
 	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
-	_, overlayHeight := m.ultraSearchOverlay()
+	_, overlayHeight := m.ultraOverlay()
 
 	budget := m.ultraCardBudget(top, bottom, overlayHeight)
 	if budget <= 0 {
@@ -138,6 +138,146 @@ func (m *Model) ultraTaskList() []task.Task {
 		tasks = append(tasks, m.tasks[idx])
 	}
 	return tasks
+}
+
+func (m *Model) ultraFilteredTaskIDs() []int {
+	if m.ultraFiltered == nil {
+		return nil
+	}
+
+	ids := make([]int, 0, len(m.ultraFiltered))
+	for _, idx := range m.ultraFiltered {
+		if idx < 0 || idx >= len(m.tasks) {
+			continue
+		}
+		ids = append(ids, m.tasks[idx].ID)
+	}
+	return ids
+}
+
+func (m *Model) rebuildUltraFiltered(ids []int) {
+	if m.ultraFiltered == nil {
+		return
+	}
+
+	indexes := make([]int, 0, len(ids))
+	for _, id := range ids {
+		if idx := m.taskIndexByID(id); idx >= 0 {
+			indexes = append(indexes, idx)
+		}
+	}
+	m.ultraFiltered = indexes
+}
+
+func (m *Model) getUltraSelectedTaskID() (int, error) {
+	tasks := m.ultraTaskList()
+	if len(tasks) == 0 {
+		return 0, fmt.Errorf("no ultra tasks available")
+	}
+	if m.ultraCursor < 0 || m.ultraCursor >= len(tasks) {
+		return 0, fmt.Errorf("ultra cursor %d out of range", m.ultraCursor)
+	}
+	return tasks[m.ultraCursor].ID, nil
+}
+
+func (m *Model) ultraTaskIndexByID(id int) int {
+	for i, t := range m.ultraTaskList() {
+		if t.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *Model) taskIndexByID(id int) int {
+	for i, t := range m.tasks {
+		if t.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *Model) selectTaskByID(id int) bool {
+	row := m.taskIndexByID(id)
+	if row < 0 {
+		return false
+	}
+
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
+	m.tbl.SetCursor(row)
+
+	if m.showUltra {
+		if ultraRow := m.ultraTaskIndexByID(id); ultraRow >= 0 {
+			m.ultraCursor = ultraRow
+		}
+		m.ultraEnsureVisible()
+	}
+
+	if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
+		m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+	}
+	return true
+}
+
+func (m *Model) reconcileUltraSelection() {
+	if !m.showUltra {
+		return
+	}
+
+	if m.ultraFocusedID > 0 {
+		_ = m.selectTaskByID(m.ultraFocusedID)
+		m.ultraFocusedID = 0
+		m.ultraEnsureVisible()
+		return
+	}
+
+	m.ultraEnsureVisible()
+}
+
+func (m *Model) ultraOverlay() (string, int) {
+	overlay, overlayHeight := m.ultraSearchOverlay()
+
+	inputOverlay := m.ultraInputOverlay()
+	if inputOverlay != "" {
+		if overlay != "" {
+			overlay += "\n" + inputOverlay
+			overlayHeight += lipgloss.Height(inputOverlay)
+		} else {
+			overlay = inputOverlay
+			overlayHeight = lipgloss.Height(inputOverlay)
+		}
+	}
+
+	return overlay, overlayHeight
+}
+
+func (m *Model) ultraInputOverlay() string {
+	switch {
+	case m.annotating:
+		return m.annotateInput.View()
+	case m.dueEditing:
+		return m.dueView(true)
+	case m.prioritySelecting:
+		return m.priorityView(true)
+	case m.descEditing:
+		return m.descInput.View()
+	case m.tagsEditing:
+		return m.tagsInput.View()
+	case m.recurEditing:
+		return m.recurInput.View()
+	case m.projEditing:
+		return m.projInput.View()
+	case m.filterEditing:
+		return m.filterInput.View()
+	case m.addingTask:
+		return m.addInput.View()
+	case m.searching:
+		return m.searchInput.View()
+	default:
+		return ""
+	}
 }
 
 // ultraVisibleCursor treats ultraCursor as a cursor within the visible ultra task list.
@@ -193,7 +333,13 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 	if card == "" {
 		return ""
 	}
-	return ultraCardStyle(m.theme, width, selected).Render(card)
+	blink := m.blinkID != 0 && m.blinkOn && t.ID == m.blinkID
+	if blink {
+		lines := strings.SplitN(card, "\n", 2)
+		lines[0] = "! " + lines[0]
+		card = strings.Join(lines, "\n")
+	}
+	return ultraCardStyle(m.theme, width, selected, blink).Render(card)
 }
 
 // renderUltraHeader renders the task's primary state line.
@@ -328,10 +474,13 @@ func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value string) string {
 	return labelStyle.Render(label+":") + " " + m.ultraStyledText(re, valueStyle, value)
 }
 
-func ultraCardStyle(theme Theme, width int, selected bool) lipgloss.Style {
+func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
 	style := lipgloss.NewStyle().Width(width)
 	if selected {
-		return style.Foreground(lipgloss.Color(theme.SelectedFG)).Background(lipgloss.Color(theme.SelectedBG))
+		style = style.Foreground(lipgloss.Color(theme.SelectedFG)).Background(lipgloss.Color(theme.SelectedBG))
+	}
+	if blink {
+		style = style.Bold(true).Reverse(true)
 	}
 	return style
 }
@@ -457,50 +606,195 @@ func (m *Model) ultraEnsureVisible() {
 
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	tasks := m.ultraTaskList()
-	last := len(tasks) - 1
-
 	switch msg.String() {
 	case "q", "esc":
 		return m.handleQuitOrEscape()
 	case "j", "down":
-		if last >= 0 {
-			m.ultraCursor++
-			if m.ultraCursor > last {
-				m.ultraCursor = last
-			}
-		}
-		m.ultraEnsureVisible()
+		m.ultraMoveCursor(1)
 	case "k", "up":
-		if last >= 0 {
-			m.ultraCursor--
-			if m.ultraCursor < 0 {
-				m.ultraCursor = 0
-			}
-		}
-		m.ultraEnsureVisible()
+		m.ultraMoveCursor(-1)
 	case "pgdn", "pgdown", "space":
-		m.ultraCursor += m.ultraVisibleCount()
-		if last >= 0 && m.ultraCursor > last {
-			m.ultraCursor = last
-		}
-		m.ultraEnsureVisible()
+		m.ultraMoveCursor(m.ultraVisibleCount())
 	case "pgup", "b":
-		m.ultraCursor -= m.ultraVisibleCount()
+		m.ultraMoveCursor(-m.ultraVisibleCount())
+	case "g", "home":
+		m.ultraGoHome()
+	case "G", "end":
+		m.ultraGoEnd()
+	case "enter", "e", "E":
+		return m.handleUltraEditTask()
+	case "s":
+		return m.handleUltraToggleStart()
+	case "d":
+		return m.handleUltraMarkDone()
+	case "p":
+		return m.handleUltraSetPriority()
+	case "w":
+		return m.handleUltraSetDueDate()
+	case "W":
+		return m.handleUltraRemoveDueDate()
+	case "t":
+		return m.handleUltraEditTags()
+	case "a":
+		return m.handleUltraAnnotate(false)
+	case "A":
+		return m.handleUltraAnnotate(true)
+	case "J":
+		return m.handleUltraEditProject()
+	case "R":
+		return m.handleUltraSetRecurrence()
+	case "f":
+		return m.handleFilter()
+	case "+":
+		m.ultraClearFocusedID()
+		return m.handleAddTask()
+	case "U":
+		return m.handleUndo()
+	case "c":
+		return m.handleRandomTheme()
+	case "C":
+		return m.handleResetTheme()
+	case "x":
+		return m.handleToggleDisco()
+	case "B":
+		return m.handleToggleBlink()
+	}
+	return m, nil
+}
+
+func (m *Model) ultraMoveCursor(delta int) {
+	m.ultraFocusedID = 0
+
+	tasks := m.ultraTaskList()
+	last := len(tasks) - 1
+	if last >= 0 {
+		m.ultraCursor += delta
 		if m.ultraCursor < 0 {
 			m.ultraCursor = 0
 		}
-		m.ultraEnsureVisible()
-	case "g", "home":
-		m.ultraCursor = 0
-		m.ultraOffset = 0
-	case "G", "end":
-		if last >= 0 {
+		if m.ultraCursor > last {
 			m.ultraCursor = last
-		} else {
-			m.ultraCursor = 0
 		}
-		m.ultraEnsureVisible()
 	}
-	return m, nil
+
+	m.ultraEnsureVisible()
+}
+
+func (m *Model) ultraGoHome() {
+	m.ultraFocusedID = 0
+	m.ultraCursor = 0
+	m.ultraOffset = 0
+}
+
+func (m *Model) ultraGoEnd() {
+	m.ultraFocusedID = 0
+
+	tasks := m.ultraTaskList()
+	if last := len(tasks) - 1; last >= 0 {
+		m.ultraCursor = last
+	} else {
+		m.ultraCursor = 0
+	}
+
+	m.ultraEnsureVisible()
+}
+
+func (m *Model) ultraClearFocusedID() {
+	m.ultraFocusedID = 0
+}
+
+func (m *Model) ultraPrepareSelectedTask() (int, bool) {
+	id, err := m.getUltraSelectedTaskID()
+	if err != nil {
+		return 0, false
+	}
+	if !m.selectTaskByID(id) {
+		return 0, false
+	}
+
+	m.ultraFocusedID = id
+	return id, true
+}
+
+func (m *Model) handleUltraEditTask() (tea.Model, tea.Cmd) {
+	id, ok := m.ultraPrepareSelectedTask()
+	if !ok {
+		return m, nil
+	}
+
+	m.editID = id
+	return m, editCmd(id)
+}
+
+func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleToggleStart()
+}
+
+func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
+	id, ok := m.ultraPrepareSelectedTask()
+	if !ok {
+		return m, nil
+	}
+
+	return m, m.startBlink(id, true)
+}
+
+func (m *Model) handleUltraSetPriority() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleSetPriority()
+}
+
+func (m *Model) handleUltraSetDueDate() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleSetDueDate()
+}
+
+func (m *Model) handleUltraRemoveDueDate() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleRemoveDueDate()
+}
+
+func (m *Model) handleUltraEditTags() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleEditTags()
+}
+
+func (m *Model) handleUltraAnnotate(replace bool) (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleAnnotate(replace)
+}
+
+func (m *Model) handleUltraEditProject() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleEditProject()
+}
+
+func (m *Model) handleUltraSetRecurrence() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleSetRecurrence()
 }
