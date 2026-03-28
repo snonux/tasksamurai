@@ -479,6 +479,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleTaskDetailMode(msg)
 		}
 
+		if m.showUltra {
+			if handled, model, cmd := m.handleEditingModes(msg); handled {
+				return model, cmd
+			}
+			return m.handleUltraMode(msg)
+		}
+
 		// Check if we're in any editing mode
 		if handled, model, cmd := m.handleEditingModes(msg); handled {
 			return model, cmd
