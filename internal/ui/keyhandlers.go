@@ -110,6 +110,11 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleShowTaskDetail()
 	case "i":
 		return m.handleEnterOrEdit()
+	case "u":
+		m.showUltra = true
+		m.ultraCursor = m.tbl.Cursor()
+		m.ultraOffset = 0
+		return m, nil
 	case "1":
 		return m.handleJumpToRandomTask()
 	case "2":
@@ -139,6 +144,13 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
+	if m.showUltra {
+		m.showUltra = false
+		m.ultraSearchRegex = nil
+		m.ultraFiltered = nil
+		m.ultraSearchInput.SetValue("")
+		return m, nil
+	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
 		m.currentTaskDetail = nil

@@ -10,5 +10,9 @@ func (m *Model) renderUltraModus() string {
 
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc":
+		return m.handleQuitOrEscape()
+	}
 	return m, nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -656,6 +657,75 @@ func TestEscClosesHelp(t *testing.T) {
 	m = *mv.(*Model)
 	if m.showHelp {
 		t.Fatalf("esc did not close help")
+	}
+}
+
+func TestUltraExitHotkeysClearUltraState(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+
+	m.ultraSearchRegex = regexp.MustCompile("alpha")
+	m.ultraFiltered = []int{0, 1}
+	m.ultraSearchInput.SetValue("ultra needle")
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd != nil {
+		t.Fatalf("q in ultra mode unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showUltra {
+		t.Fatalf("q did not exit ultra mode")
+	}
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("q did not clear ultraSearchRegex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("q did not clear ultraFiltered")
+	}
+	if got := m.ultraSearchInput.Value(); got != "" {
+		t.Fatalf("q did not clear ultraSearchInput, got %q", got)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command on re-entry")
+	}
+	m = *mv.(*Model)
+	m.ultraSearchRegex = regexp.MustCompile("beta")
+	m.ultraFiltered = []int{2}
+	m.ultraSearchInput.SetValue("second needle")
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc in ultra mode unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showUltra {
+		t.Fatalf("esc did not exit ultra mode")
+	}
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("esc did not clear ultraSearchRegex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("esc did not clear ultraFiltered")
+	}
+	if got := m.ultraSearchInput.Value(); got != "" {
+		t.Fatalf("esc did not clear ultraSearchInput, got %q", got)
 	}
 }
 
