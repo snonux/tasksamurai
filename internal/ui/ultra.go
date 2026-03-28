@@ -78,6 +78,53 @@ func (m *Model) ultraVisibleStart(total int) int {
 	return start
 }
 
+func (m *Model) ultraVisibleCount() int {
+	tasks := m.ultraTaskList()
+	if len(tasks) == 0 {
+		return 0
+	}
+
+	width := m.ultraRenderWidth()
+	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
+	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
+	_, overlayHeight := m.ultraSearchOverlay()
+
+	budget := m.ultraCardBudget(top, bottom, overlayHeight)
+	if budget <= 0 {
+		return 0
+	}
+
+	start := m.ultraVisibleStart(len(tasks))
+	selected := m.ultraVisibleCursor(tasks)
+	used := 0
+	count := 0
+	for i := start; i < len(tasks); i++ {
+		card := m.renderUltraCard(tasks[i], width, i == selected, m.ultraSearchRegex)
+		if card == "" {
+			continue
+		}
+
+		cardHeight := lipgloss.Height(card)
+		if count > 0 {
+			if used+1+cardHeight > budget {
+				break
+			}
+			used++
+		} else if cardHeight > budget {
+			break
+		}
+
+		if used+cardHeight > budget {
+			break
+		}
+
+		used += cardHeight
+		count++
+	}
+
+	return count
+}
+
 func (m *Model) ultraTaskList() []task.Task {
 	if m.ultraFiltered == nil {
 		return m.tasks
@@ -353,11 +400,107 @@ func ultraDueValue(m *Model, due string) string {
 	return ultraOrDash(val)
 }
 
+func (m *Model) ultraEnsureVisible() {
+	tasks := m.ultraTaskList()
+	if len(tasks) == 0 {
+		m.ultraCursor = 0
+		m.ultraOffset = 0
+		return
+	}
+
+	if m.ultraCursor < 0 {
+		m.ultraCursor = 0
+	}
+	if m.ultraCursor >= len(tasks) {
+		m.ultraCursor = len(tasks) - 1
+	}
+	if m.ultraOffset < 0 {
+		m.ultraOffset = 0
+	}
+	if m.ultraOffset >= len(tasks) {
+		m.ultraOffset = len(tasks) - 1
+	}
+
+	for range tasks {
+		visible := m.ultraVisibleCount()
+		if visible <= 0 {
+			if m.ultraOffset == m.ultraCursor {
+				return
+			}
+			m.ultraOffset = m.ultraCursor
+			continue
+		}
+
+		start := m.ultraVisibleStart(len(tasks))
+		end := start + visible - 1
+		if m.ultraCursor < start {
+			if m.ultraOffset == m.ultraCursor {
+				return
+			}
+			m.ultraOffset = m.ultraCursor
+			continue
+		}
+		if m.ultraCursor > end {
+			next := m.ultraCursor - visible + 1
+			if next < 0 {
+				next = 0
+			}
+			if next == m.ultraOffset {
+				return
+			}
+			m.ultraOffset = next
+			continue
+		}
+		return
+	}
+}
+
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	tasks := m.ultraTaskList()
+	last := len(tasks) - 1
+
 	switch msg.String() {
 	case "q", "esc":
 		return m.handleQuitOrEscape()
+	case "j", "down":
+		if last >= 0 {
+			m.ultraCursor++
+			if m.ultraCursor > last {
+				m.ultraCursor = last
+			}
+		}
+		m.ultraEnsureVisible()
+	case "k", "up":
+		if last >= 0 {
+			m.ultraCursor--
+			if m.ultraCursor < 0 {
+				m.ultraCursor = 0
+			}
+		}
+		m.ultraEnsureVisible()
+	case "pgdn", "pgdown", "space":
+		m.ultraCursor += m.ultraVisibleCount()
+		if last >= 0 && m.ultraCursor > last {
+			m.ultraCursor = last
+		}
+		m.ultraEnsureVisible()
+	case "pgup", "b":
+		m.ultraCursor -= m.ultraVisibleCount()
+		if m.ultraCursor < 0 {
+			m.ultraCursor = 0
+		}
+		m.ultraEnsureVisible()
+	case "g", "home":
+		m.ultraCursor = 0
+		m.ultraOffset = 0
+	case "G", "end":
+		if last >= 0 {
+			m.ultraCursor = last
+		} else {
+			m.ultraCursor = 0
+		}
+		m.ultraEnsureVisible()
 	}
 	return m, nil
 }

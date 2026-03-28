@@ -608,6 +608,21 @@ func TestNavigationHotkeys(t *testing.T) {
 	}
 }
 
+func setupUltraTaskSet(t *testing.T, tmp string) string {
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"beta bravo\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":3,\"uuid\":\"3\",\"description\":\"charlie delta\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
 func setupBasicTask(t *testing.T, tmp string) string {
 	taskPath := filepath.Join(tmp, "task")
 	script := "#!/bin/sh\n" +
@@ -726,6 +741,111 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	}
 	if got := m.ultraSearchInput.Value(); got != "" {
 		t.Fatalf("esc did not clear ultraSearchInput, got %q", got)
+	}
+}
+
+func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	step := func(msg tea.KeyPressMsg) {
+		t.Helper()
+		mv, cmd := (&m).Update(msg)
+		if cmd != nil {
+			t.Fatalf("%q unexpectedly returned a command", msg.String())
+		}
+		m = *mv.(*Model)
+	}
+
+	resize := func(width, height int) {
+		t.Helper()
+		mv, cmd := (&m).Update(tea.WindowSizeMsg{Width: width, Height: height})
+		if cmd != nil {
+			t.Fatalf("resize %dx%d unexpectedly returned a command", width, height)
+		}
+		m = *mv.(*Model)
+	}
+
+	resize(60, 16)
+
+	step(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	step(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if m.tbl.Cursor() != 2 {
+		t.Fatalf("table cursor = %d, want 2 before ultra entry", m.tbl.Cursor())
+	}
+
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+	if m.ultraCursor != 2 {
+		t.Fatalf("u: cursor = %d, want 2", m.ultraCursor)
+	}
+	if m.ultraOffset != 1 {
+		t.Fatalf("u: offset = %d, want 1", m.ultraOffset)
+	}
+	if got := m.ultraVisibleCount(); got != 2 {
+		t.Fatalf("u: visible count = %d, want 2", got)
+	}
+	if start := m.ultraVisibleStart(len(m.ultraTaskList())); m.ultraCursor < start || m.ultraCursor >= start+m.ultraVisibleCount() {
+		t.Fatalf("u: cursor %d not visible at offset %d", m.ultraCursor, m.ultraOffset)
+	}
+
+	resize(60, 7)
+	if m.ultraOffset != 2 {
+		t.Fatalf("resize: offset = %d, want 2", m.ultraOffset)
+	}
+	if got := m.ultraVisibleCount(); got != 1 {
+		t.Fatalf("resize: visible count = %d, want 1", got)
+	}
+	if start := m.ultraVisibleStart(len(m.ultraTaskList())); m.ultraCursor < start || m.ultraCursor >= start+m.ultraVisibleCount() {
+		t.Fatalf("resize: cursor %d not visible at offset %d", m.ultraCursor, m.ultraOffset)
+	}
+
+	step(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if m.ultraCursor != 1 {
+		t.Fatalf("k: cursor = %d, want 1", m.ultraCursor)
+	}
+	if m.ultraOffset != 1 {
+		t.Fatalf("k: offset = %d, want 1", m.ultraOffset)
+	}
+
+	step(tea.KeyPressMsg{Code: tea.KeyPgDown, Text: "pgdn"})
+	if m.ultraCursor != 2 {
+		t.Fatalf("pgdn: cursor = %d, want 2", m.ultraCursor)
+	}
+	if m.ultraOffset != 2 {
+		t.Fatalf("pgdn: offset = %d, want 2", m.ultraOffset)
+	}
+
+	step(tea.KeyPressMsg{Code: tea.KeyPgUp, Text: "pgup"})
+	if m.ultraCursor != 1 {
+		t.Fatalf("pgup: cursor = %d, want 1", m.ultraCursor)
+	}
+	if m.ultraOffset != 1 {
+		t.Fatalf("pgup: offset = %d, want 1", m.ultraOffset)
+	}
+
+	step(tea.KeyPressMsg{Code: 'g', Text: "g"})
+	if m.ultraCursor != 0 {
+		t.Fatalf("g: cursor = %d, want 0", m.ultraCursor)
+	}
+	if m.ultraOffset != 0 {
+		t.Fatalf("g: offset = %d, want 0", m.ultraOffset)
+	}
+
+	step(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	if m.ultraCursor != 2 {
+		t.Fatalf("G: cursor = %d, want 2", m.ultraCursor)
+	}
+	if m.ultraOffset != 2 {
+		t.Fatalf("G: offset = %d, want 2", m.ultraOffset)
 	}
 }
 

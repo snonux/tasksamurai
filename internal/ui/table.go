@@ -514,6 +514,9 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.windowHeight = msg.Height
 	m.computeColumnWidths()
 	m.updateTableHeight()
+	if m.showUltra {
+		m.ultraEnsureVisible()
+	}
 
 	// Update help viewport if active
 	if m.showHelp && m.helpViewport.Width() > 0 {

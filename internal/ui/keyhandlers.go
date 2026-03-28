@@ -114,6 +114,7 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showUltra = true
 		m.ultraCursor = m.tbl.Cursor()
 		m.ultraOffset = 0
+		m.ultraEnsureVisible()
 		return m, nil
 	case "1":
 		return m.handleJumpToRandomTask()
