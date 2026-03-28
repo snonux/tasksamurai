@@ -634,6 +634,8 @@ func (m Model) View() tea.View {
 		content = m.renderHelpScreen()
 	} else if m.showTaskDetail {
 		content = m.renderTaskDetail()
+	} else if m.showUltra {
+		content = m.renderUltraModus()
 	} else {
 		// expandedCellView is only appended when the user has toggled the
 		// expanded-cell panel open; including it unconditionally caused a
