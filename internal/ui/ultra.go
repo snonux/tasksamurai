@@ -39,6 +39,69 @@ func (m *Model) renderUltraModus() string {
 	return strings.Join(lines, "\n")
 }
 
+func (m Model) buildUltraHelpContent() string {
+	return m.buildRenderedHelpContent(m.ultraHelpSections())
+}
+
+func (m Model) ultraHelpSections() []helpSection {
+	return []helpSection{
+		{
+			title: "Navigation",
+			items: []helpItem{
+				{key: "j, k", desc: "move down/up"},
+				{key: "pgup, pgdn", desc: "page up/down"},
+				{key: "g, G", desc: "go to start/end"},
+			},
+		},
+		{
+			title: "Task Management",
+			items: []helpItem{
+				{key: "Enter, e, E", desc: "edit selected task"},
+				{key: "s", desc: "start/stop task"},
+				{key: "d", desc: "mark task done"},
+				{key: "U", desc: "undo last done"},
+				{key: "+", desc: "add new task"},
+			},
+		},
+		{
+			title: "Task Fields",
+			items: []helpItem{
+				{key: "p", desc: "set priority"},
+				{key: "w", desc: "set due date"},
+				{key: "W", desc: "remove due date"},
+				{key: "t", desc: "edit tags"},
+				{key: "a, A", desc: "add/replace annotations"},
+				{key: "J", desc: "edit project"},
+				{key: "R", desc: "edit recurrence"},
+				{key: "f", desc: "change filter"},
+			},
+		},
+		{
+			title: "Search",
+			items: []helpItem{
+				{key: "/", desc: "search ultra cards"},
+				{key: "n, N", desc: "next/previous match"},
+			},
+		},
+		{
+			title: "Appearance",
+			items: []helpItem{
+				{key: "c, C", desc: "random/reset theme"},
+				{key: "x", desc: "toggle disco mode"},
+				{key: "B", desc: "toggle blinking"},
+			},
+		},
+		{
+			title: "General",
+			items: []helpItem{
+				{key: "H", desc: "toggle help"},
+				{key: "esc", desc: "close help/input or exit ultra mode"},
+				{key: "q", desc: "exit ultra mode"},
+			},
+		},
+	}
+}
+
 func (m *Model) ultraRenderWidth() int {
 	width := m.tbl.Width()
 	if width <= 0 {
@@ -227,13 +290,35 @@ func (m *Model) reconcileUltraSelection() {
 	}
 
 	if m.ultraFocusedID > 0 {
-		_ = m.selectTaskByID(m.ultraFocusedID)
+		if m.ultraTaskIndexByID(m.ultraFocusedID) >= 0 {
+			_ = m.selectTaskByID(m.ultraFocusedID)
+			m.ultraFocusedID = 0
+			m.ultraEnsureVisible()
+			return
+		}
 		m.ultraFocusedID = 0
-		m.ultraEnsureVisible()
-		return
 	}
 
 	m.ultraEnsureVisible()
+	m.syncUltraTableSelection()
+}
+
+func (m *Model) syncUltraTableSelection() {
+	tasks := m.ultraTaskList()
+	cursor := m.ultraVisibleCursor(tasks)
+	if cursor < 0 {
+		return
+	}
+
+	row := m.taskIndexByID(tasks[cursor].ID)
+	if row < 0 {
+		return
+	}
+
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
+	m.tbl.SetCursor(row)
+	m.updateSelectionHighlight(prevRow, row, prevCol, m.tbl.ColumnCursor())
 }
 
 func (m *Model) ultraOverlay() (string, int) {
@@ -304,8 +389,14 @@ func (m Model) ultraStatusLine(text string, width int) string {
 
 func (m *Model) ultraModeStatus(tasks []task.Task) string {
 	filter := "all"
-	if query := strings.TrimSpace(m.ultraSearchInput.Value()); query != "" {
-		filter = query
+	if m.ultraSearching {
+		if query := strings.TrimSpace(m.ultraSearchInput.Value()); query != "" {
+			filter = query
+		} else if m.ultraSearchRegex != nil {
+			filter = m.ultraSearchRegex.String()
+		} else if m.ultraFiltered != nil {
+			filter = "filtered"
+		}
 	} else if m.ultraSearchRegex != nil {
 		filter = m.ultraSearchRegex.String()
 	} else if m.ultraFiltered != nil {
@@ -314,12 +405,152 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 	return fmt.Sprintf("ULTRA MODE | filter: %s | %d tasks", filter, len(tasks))
 }
 
+func (m *Model) ultraSearchText(t task.Task) string {
+	return ultraJoinSections(
+		m.ultraHeaderText(t),
+		m.ultraMetaText(t),
+		ultraOrDash(strings.TrimSpace(t.Description)),
+		m.ultraAnnotationsSearchText(t),
+	)
+}
+
+func (m *Model) ultraFilteredIndexes(re *regexp.Regexp) []int {
+	if re == nil {
+		return nil
+	}
+
+	indexes := make([]int, 0, len(m.tasks))
+	for i, t := range m.tasks {
+		if re.MatchString(m.ultraSearchText(t)) {
+			indexes = append(indexes, i)
+		}
+	}
+	return indexes
+}
+
+func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	onEnter := func(value string) error {
+		if value == "" {
+			m.ultraSearchRegex = nil
+			m.ultraFiltered = nil
+			m.ultraCursor = 0
+			m.ultraOffset = 0
+			return nil
+		}
+
+		re, err := compileAndCacheRegex(value)
+		if err != nil {
+			return err
+		}
+
+		m.ultraSearchRegex = re
+		m.ultraFiltered = m.ultraFilteredIndexes(re)
+		m.ultraCursor = 0
+		m.ultraOffset = 0
+		return nil
+	}
+
+	onExit := func() {
+		m.ultraSearching = false
+		m.ultraSearchInput.SetValue("")
+	}
+
+	return m.handleTextInput(msg, &m.ultraSearchInput, onEnter, onExit)
+}
+
+func (m *Model) ultraMoveSearchMatch(delta int) {
+	if len(m.ultraFiltered) == 0 {
+		return
+	}
+
+	m.ultraMoveCursor(delta)
+}
+
 func (m *Model) ultraCursorStatus(tasks []task.Task) string {
 	cursor := m.ultraVisibleCursor(tasks)
 	if cursor < 0 {
 		return fmt.Sprintf("0/%d", len(tasks))
 	}
 	return fmt.Sprintf("%d/%d", cursor+1, len(tasks))
+}
+
+func (m *Model) ultraHeaderText(t task.Task) string {
+	return strings.Join(
+		[]string{
+			fmt.Sprintf("#%d", t.ID),
+			ultraOrDash(t.Priority),
+			ultraOrDash(t.Status),
+			fmt.Sprintf("%.1f", t.Urgency),
+			ultraTaskAge(t.Entry),
+		},
+		" | ",
+	)
+}
+
+func (m *Model) ultraMetaText(t task.Task) string {
+	return strings.Join(
+		[]string{
+			"project: " + ultraOrDash(t.Project),
+			"tags: " + ultraOrDash(strings.Join(t.Tags, " ")),
+			"due: " + ultraDueValue(m, t.Due),
+			"recur: " + ultraOrDash(t.Recur),
+			"start: " + ultraOrDash(m.formatTaskDate(t.Start)),
+		},
+		" | ",
+	)
+}
+
+func (m *Model) ultraDescriptionLines(t task.Task, width int) []string {
+	text := t.Description
+	if text == "" {
+		text = "-"
+	}
+
+	lines := wordWrap(text, ultraBodyWidth(width))
+	for i, line := range lines {
+		lines[i] = "  " + line
+	}
+	return lines
+}
+
+func (m *Model) ultraDescriptionText(t task.Task, width int) string {
+	return strings.Join(m.ultraDescriptionLines(t, width), "\n")
+}
+
+func (m *Model) ultraAnnotationsLines(t task.Task, width int) []string {
+	if len(t.Annotations) == 0 {
+		return nil
+	}
+
+	bodyWidth := ultraBodyWidth(width)
+	var lines []string
+	for _, ann := range t.Annotations {
+		text := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ultraOrDash(strings.TrimSpace(ann.Description)))
+		for i, line := range wordWrap(text, bodyWidth) {
+			if i > 0 {
+				line = "  " + line
+			}
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func (m *Model) ultraAnnotationsText(t task.Task, width int) string {
+	return strings.Join(m.ultraAnnotationsLines(t, width), "\n")
+}
+
+func (m *Model) ultraAnnotationsSearchText(t task.Task) string {
+	if len(t.Annotations) == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(t.Annotations))
+	for _, ann := range t.Annotations {
+		line := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ultraOrDash(strings.TrimSpace(ann.Description)))
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderUltraCard assembles the card sections and applies the outer selection style.
@@ -364,63 +595,79 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 
 func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Regexp) string {
 	_ = width
-	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true), fmt.Sprintf("#%d", t.ID))
-	priority := ultraPriorityToken(m.theme, t.Priority)
-	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), ultraOrDash(t.Status))
-	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), fmt.Sprintf("%.1f", t.Urgency))
-	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), ultraTaskAge(t.Entry))
+	idText := fmt.Sprintf("#%d", t.ID)
+	priorityText := ultraOrDash(t.Priority)
+	statusText := ultraOrDash(t.Status)
+	urgencyText := fmt.Sprintf("%.1f", t.Urgency)
+	ageText := ultraTaskAge(t.Entry)
+	line := strings.Join([]string{idText, priorityText, statusText, urgencyText, ageText}, " | ")
+	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, idText, priorityText, statusText, urgencyText, ageText) {
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252")), re)
+	}
+
+	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true), idText)
+	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText)
+	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), statusText)
+	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), urgencyText)
+	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), ageText)
 	return strings.Join([]string{id, priority, status, urgency, age}, " | ")
 }
 
 func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Regexp) string {
 	_ = width
+	project := ultraOrDash(t.Project)
+	tags := ultraOrDash(strings.Join(t.Tags, " "))
+	due := ultraDueValue(m, t.Due)
+	recur := ultraOrDash(t.Recur)
+	start := ultraOrDash(m.formatTaskDate(t.Start))
+	line := strings.Join(
+		[]string{
+			"project: " + project,
+			"tags: " + tags,
+			"due: " + due,
+			"recur: " + recur,
+			"start: " + start,
+		},
+		" | ",
+	)
+	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, "project:", project, "tags:", tags, "due:", due, "recur:", recur, "start:", start) {
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), re)
+	}
+
 	parts := []string{
-		m.ultraKeyValue(re, "project", ultraOrDash(t.Project)),
-		m.ultraKeyValue(re, "tags", ultraOrDash(strings.Join(t.Tags, " "))),
-		m.ultraKeyValue(re, "due", ultraDueValue(m, t.Due)),
-		m.ultraKeyValue(re, "recur", ultraOrDash(t.Recur)),
-		m.ultraKeyValue(re, "start", ultraOrDash(m.formatTaskDate(t.Start))),
+		m.ultraKeyValue(re, "project", project),
+		m.ultraKeyValue(re, "tags", tags),
+		m.ultraKeyValue(re, "due", due),
+		m.ultraKeyValue(re, "recur", recur),
+		m.ultraKeyValue(re, "start", start),
 	}
 	return strings.Join(parts, " | ")
 }
 
 func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *regexp.Regexp) string {
-	bodyWidth := ultraBodyWidth(width)
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	text := t.Description
-	if text == "" {
-		text = "-"
-	}
-
 	var lines []string
-	for _, line := range wordWrap(text, bodyWidth) {
+	for _, line := range m.ultraDescriptionLines(t, width) {
 		if re != nil && re.MatchString(line) {
 			line = m.highlightMatches(line, re)
 		}
-		lines = append(lines, style.Render("  "+line))
+		lines = append(lines, style.Render(line))
 	}
 	return strings.Join(lines, "\n")
 }
 
 func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *regexp.Regexp) string {
-	if len(t.Annotations) == 0 {
+	lines := m.ultraAnnotationsLines(t, width)
+	if len(lines) == 0 {
 		return ""
 	}
 
-	bodyWidth := ultraBodyWidth(width)
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
-	var lines []string
-	for _, ann := range t.Annotations {
-		text := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ultraOrDash(strings.TrimSpace(ann.Description)))
-		for i, line := range wordWrap(text, bodyWidth) {
-			if re != nil && re.MatchString(line) {
-				line = m.highlightMatches(line, re)
-			}
-			if i > 0 {
-				line = "  " + line
-			}
-			lines = append(lines, style.Render(line))
+	for i, line := range lines {
+		if re != nil && re.MatchString(line) {
+			line = m.highlightMatches(line, re)
 		}
+		lines[i] = style.Render(line)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -468,10 +715,17 @@ func (m *Model) ultraStyledText(re *regexp.Regexp, style lipgloss.Style, text st
 	return style.Render(ultraOrDash(text))
 }
 
+func (m *Model) renderUltraSearchLine(text string, style lipgloss.Style, re *regexp.Regexp) string {
+	if re != nil && re.MatchString(text) {
+		text = m.highlightMatches(text, re)
+	}
+	return style.Render(text)
+}
+
 func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value string) string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.HeaderFG))
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	return labelStyle.Render(label+":") + " " + m.ultraStyledText(re, valueStyle, value)
+	return m.ultraStyledText(re, labelStyle, label+":") + " " + m.ultraStyledText(re, valueStyle, value)
 }
 
 func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
@@ -485,10 +739,7 @@ func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style
 	return style
 }
 
-func ultraPriorityToken(theme Theme, priority string) string {
-	if priority == "" {
-		return "-"
-	}
+func ultraPriorityStyle(theme Theme, priority string) lipgloss.Style {
 	style := lipgloss.NewStyle().Width(1)
 	switch priority {
 	case "H":
@@ -498,7 +749,7 @@ func ultraPriorityToken(theme Theme, priority string) string {
 	case "L":
 		style = style.Background(lipgloss.Color(theme.PrioLowBG))
 	}
-	return style.Render(priority)
+	return style
 }
 
 func ultraJoinSections(sections ...string) string {
@@ -513,6 +764,18 @@ func ultraJoinSections(sections ...string) string {
 		parts = append(parts, sec)
 	}
 	return strings.Join(parts, "\n")
+}
+
+func ultraRegexMatchesAny(re *regexp.Regexp, parts ...string) bool {
+	if re == nil {
+		return false
+	}
+	for _, part := range parts {
+		if re.MatchString(part) {
+			return true
+		}
+	}
+	return false
 }
 
 func ultraBodyWidth(width int) int {
@@ -607,12 +870,23 @@ func (m *Model) ultraEnsureVisible() {
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "H":
+		return m.handleToggleHelp()
 	case "q", "esc":
 		return m.handleQuitOrEscape()
+	case "/":
+		m.ultraSearching = true
+		m.ultraSearchInput.SetValue("")
+		m.ultraSearchInput.Focus()
+		return m, nil
 	case "j", "down":
 		m.ultraMoveCursor(1)
 	case "k", "up":
 		m.ultraMoveCursor(-1)
+	case "n":
+		m.ultraMoveSearchMatch(1)
+	case "N":
+		m.ultraMoveSearchMatch(-1)
 	case "pgdn", "pgdown", "space":
 		m.ultraMoveCursor(m.ultraVisibleCount())
 	case "pgup", "b":

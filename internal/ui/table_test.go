@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestAnnotateHotkey(t *testing.T) {
@@ -624,6 +625,21 @@ func setupUltraTaskSet(t *testing.T, tmp string) string {
 	return taskPath
 }
 
+func setupUltraSearchTaskSet(t *testing.T, tmp string) string {
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha\",\"project\":\"home\",\"tags\":[\"blue\"],\"status\":\"pending\",\"entry\":\"\",\"priority\":\"H\",\"urgency\":0,\"annotations\":[{\"entry\":\"\",\"description\":\"project note\"}]}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"beta bravo\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":3,\"uuid\":\"3\",\"description\":\"charlie delta\",\"tags\":[\"home\"],\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
 func setupUltraReloadTaskSet(t *testing.T, tmp string) (string, string) {
 	taskPath := filepath.Join(tmp, "task")
 	phaseFile := filepath.Join(tmp, "phase")
@@ -653,12 +669,53 @@ func setupUltraReloadTaskSet(t *testing.T, tmp string) (string, string) {
 	return taskPath, phaseFile
 }
 
+func setupUltraSearchReloadTaskSet(t *testing.T, tmp string) (string, string) {
+	taskPath := filepath.Join(tmp, "task")
+	phaseFile := filepath.Join(tmp, "phase")
+	if err := os.WriteFile(phaseFile, []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"phase=$(cat %q)\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  if [ \"$phase\" = \"1\" ]; then\n"+
+		"    echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha current\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"H\",\"urgency\":2}'\n"+
+		"    echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"beta current\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"L\",\"urgency\":1}'\n"+
+		"  else\n"+
+		"    echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"omega current\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"H\",\"urgency\":2}'\n"+
+		"    echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"alpha moved\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"L\",\"urgency\":1}'\n"+
+		"  fi\n"+
+		"  exit 0\n"+
+		"fi\n", phaseFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	return taskPath, phaseFile
+}
+
 func setupBasicTask(t *testing.T, tmp string) string {
 	taskPath := filepath.Join(tmp, "task")
 	script := "#!/bin/sh\n" +
 		"if echo \"$@\" | grep -q export; then\n" +
 		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
 		"  echo '{\"id\":2,\"uuid\":\"y\",\"description\":\"beta\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
+func setupSharedSearchTaskSet(t *testing.T, tmp string) string {
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"shared alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"y\",\"description\":\"shared beta\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
 		"  exit 0\n" +
 		"fi\n"
 	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
@@ -702,6 +759,114 @@ func TestEscClosesHelp(t *testing.T) {
 	m = *mv.(*Model)
 	if m.showHelp {
 		t.Fatalf("esc did not close help")
+	}
+}
+
+func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	m = *mv.(*Model)
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'H', Text: "H"})
+	if cmd != nil {
+		t.Fatalf("H unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showHelp {
+		t.Fatalf("H did not open help in ultra mode")
+	}
+	if !m.showUltra {
+		t.Fatalf("opening help unexpectedly exited ultra mode")
+	}
+
+	view := ansi.Strip(m.activeHelpContent())
+	if !strings.Contains(view, "search ultra cards") {
+		t.Fatalf("ultra help content missing ultra search binding: %q", view)
+	}
+	if !strings.Contains(view, "exit ultra mode") {
+		t.Fatalf("ultra help content missing ultra exit binding: %q", view)
+	}
+	if strings.Contains(view, "open URL from description") {
+		t.Fatalf("ultra help rendered normal-mode binding: %q", view)
+	}
+	if strings.Contains(view, "edit current field") {
+		t.Fatalf("ultra help rendered normal-only inline edit binding: %q", view)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc while ultra help is open unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showHelp {
+		t.Fatalf("esc did not close ultra help")
+	}
+	if !m.showUltra {
+		t.Fatalf("esc while ultra help is open unexpectedly exited ultra mode")
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("second esc in ultra mode unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showUltra {
+		t.Fatalf("second esc did not exit ultra mode")
+	}
+}
+
+func TestUltraHelpSearchUsesUltraHelpLines(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	step := func(msg tea.Msg) {
+		t.Helper()
+		mv, _ := (&m).Update(msg)
+		m = *mv.(*Model)
+	}
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 24})
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	step(tea.KeyPressMsg{Code: 'H', Text: "H"})
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "URL" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := len(m.helpSearchMatches); got != 0 {
+		t.Fatalf("ultra help search matched normal help content, got %d matches", got)
+	}
+
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "ultra" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := len(m.helpSearchMatches); got == 0 {
+		t.Fatalf("ultra help search did not match ultra-specific help content")
 	}
 }
 
@@ -786,6 +951,163 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	}
 }
 
+func TestUltraSearchFiltersNavigatesAndHighlights(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraSearchTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var expected []int
+	for i, tsk := range m.tasks {
+		if tsk.Project == "home" || strings.Contains(strings.Join(tsk.Tags, " "), "home") {
+			expected = append(expected, i)
+		}
+	}
+	if len(expected) != 2 {
+		t.Fatalf("test setup failed: expected 2 matching tasks, got %d", len(expected))
+	}
+
+	step := func(msg tea.KeyPressMsg) {
+		t.Helper()
+		mv, _ := (&m).Update(msg)
+		m = *mv.(*Model)
+	}
+
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if !m.ultraSearching {
+		t.Fatalf("/ did not start ultra search")
+	}
+	for _, r := range "home" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if m.ultraSearching {
+		t.Fatalf("enter did not close ultra search")
+	}
+	if m.ultraSearchRegex == nil {
+		t.Fatalf("enter did not compile ultra search regex")
+	}
+	if !reflect.DeepEqual(m.ultraFiltered, expected) {
+		t.Fatalf("unexpected ultraFiltered: got %#v want %#v", m.ultraFiltered, expected)
+	}
+	if m.ultraCursor != 0 || m.ultraOffset != 0 {
+		t.Fatalf("search did not reset cursor/offset, got cursor=%d offset=%d", m.ultraCursor, m.ultraOffset)
+	}
+	if structured := m.ultraSearchText(m.tasks[0]); !regexp.MustCompile(`(?m)^project:`).MatchString(structured) {
+		t.Fatalf("ultra search text lost card line structure: %q", structured)
+	}
+
+	filtered := m.ultraTaskList()
+	if len(filtered) != 2 {
+		t.Fatalf("unexpected filtered task count: %d", len(filtered))
+	}
+	plain := m.renderUltraCard(filtered[0], 80, true, nil)
+	highlighted := m.renderUltraCard(filtered[0], 80, true, m.ultraSearchRegex)
+	if plain == highlighted {
+		t.Fatalf("search highlighting did not change rendered card")
+	}
+	if ansi.Strip(plain) != ansi.Strip(highlighted) {
+		t.Fatalf("search highlighting changed visible text")
+	}
+	labelHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`project:`))
+	if labelHighlighted == plain {
+		t.Fatalf("label search did not change rendered card")
+	}
+	if ansi.Strip(labelHighlighted) != ansi.Strip(plain) {
+		t.Fatalf("label search highlighting changed visible text")
+	}
+	combinedHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`project: home`))
+	if combinedHighlighted == plain {
+		t.Fatalf("combined meta search did not change rendered card")
+	}
+	if ansi.Strip(combinedHighlighted) != ansi.Strip(plain) {
+		t.Fatalf("combined meta search highlighting changed visible text")
+	}
+	priorityHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`H`))
+	if priorityHighlighted == plain {
+		t.Fatalf("priority search did not change rendered card")
+	}
+	if ansi.Strip(priorityHighlighted) != ansi.Strip(plain) {
+		t.Fatalf("priority search highlighting changed visible text")
+	}
+
+	step(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	if got := m.ultraTaskList()[m.ultraCursor].ID; got != filtered[1].ID {
+		t.Fatalf("n did not move to next filtered task: got %d want %d", got, filtered[1].ID)
+	}
+	step(tea.KeyPressMsg{Code: 'N', Text: "N"})
+	if got := m.ultraTaskList()[m.ultraCursor].ID; got != filtered[0].ID {
+		t.Fatalf("N did not move to previous filtered task: got %d want %d", got, filtered[0].ID)
+	}
+
+	prevFiltered := append([]int(nil), m.ultraFiltered...)
+	prevRegex := m.ultraSearchRegex
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	step(tea.KeyPressMsg{Code: '[', Text: "["})
+	if !m.ultraSearching {
+		t.Fatalf("invalid regex should keep ultra search open")
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !reflect.DeepEqual(m.ultraFiltered, prevFiltered) {
+		t.Fatalf("invalid regex changed filtered tasks: got %#v want %#v", m.ultraFiltered, prevFiltered)
+	}
+	if m.ultraSearchRegex != prevRegex {
+		t.Fatalf("invalid regex changed active regex: got %#v want %#v", m.ultraSearchRegex, prevRegex)
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEsc})
+
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "annotation" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := len(m.ultraTaskList()); got != 0 {
+		t.Fatalf("search matched invisible annotation label, got %d tasks", got)
+	}
+
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "beta bravo" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := len(m.ultraTaskList()); got != 1 {
+		t.Fatalf("multi-word ultra search match count = %d, want 1", got)
+	}
+	if got := m.ultraTaskList()[0].ID; got != 2 {
+		t.Fatalf("multi-word ultra search matched task %d, want 2", got)
+	}
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 24, Height: 24})
+	m = *mv.(*Model)
+	if got := len(m.ultraTaskList()); got != 1 {
+		t.Fatalf("resize changed multi-word ultra search match count = %d, want 1", got)
+	}
+	if got := m.ultraTaskList()[0].ID; got != 2 {
+		t.Fatalf("resize changed multi-word ultra search match to task %d, want 2", got)
+	}
+
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("empty ultra search did not clear regex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("empty ultra search did not clear filtered tasks")
+	}
+	if got := len(m.ultraTaskList()); got != len(m.tasks) {
+		t.Fatalf("empty ultra search did not restore all tasks, got %d want %d", got, len(m.tasks))
+	}
+}
+
 func TestUltraFocusedIDLifecycleAcrossNormalEditEntryAndReload(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupBasicTask(t, tmp)
@@ -852,6 +1174,61 @@ func TestUltraFocusedIDLifecycleAcrossNormalEditEntryAndReload(t *testing.T) {
 	}
 	if got := m.tbl.Cursor(); got != 1 {
 		t.Fatalf("table cursor after reload = %d, want 1", got)
+	}
+}
+
+func TestUltraSearchReloadRebuildsMatches(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, phaseFile := setupUltraSearchReloadTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	step := func(msg tea.KeyPressMsg) {
+		t.Helper()
+		mv, _ := (&m).Update(msg)
+		m = *mv.(*Model)
+	}
+
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "alpha" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if got := len(m.ultraTaskList()); got != 1 {
+		t.Fatalf("initial search match count = %d, want 1", got)
+	}
+	if got := m.ultraTaskList()[0].ID; got != 1 {
+		t.Fatalf("initial search matched task %d, want 1", got)
+	}
+
+	if err := os.WriteFile(phaseFile, []byte("2"), 0o644); err != nil {
+		t.Fatalf("WriteFile phase: %v", err)
+	}
+	if err := m.reload(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	expectedRow := m.taskIndexByID(2)
+	if expectedRow < 0 {
+		t.Fatalf("reloaded tasks missing task 2")
+	}
+	if !reflect.DeepEqual(m.ultraFiltered, []int{expectedRow}) {
+		t.Fatalf("reload did not rebuild search matches: got %#v want %#v", m.ultraFiltered, []int{expectedRow})
+	}
+	if got := len(m.ultraTaskList()); got != 1 {
+		t.Fatalf("reloaded search match count = %d, want 1", got)
+	}
+	if got := m.ultraTaskList()[m.ultraCursor].ID; got != 2 {
+		t.Fatalf("reload kept stale search match %d, want 2", got)
+	}
+	if got := m.tbl.Cursor(); got != expectedRow {
+		t.Fatalf("table cursor after search reload = %d, want %d", got, expectedRow)
 	}
 }
 
@@ -1230,5 +1607,62 @@ func TestSearchExitHotkeys(t *testing.T) {
 	m = *mv.(*Model)
 	if m.searchRegex != nil {
 		t.Fatalf("q did not clear search")
+	}
+}
+
+func TestUltraResizeSyncRefreshesNormalSearchSelection(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupSharedSearchTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	step := func(msg tea.Msg) {
+		t.Helper()
+		mv, _ := (&m).Update(msg)
+		m = *mv.(*Model)
+	}
+
+	step(tea.WindowSizeMsg{Width: 120, Height: 24})
+	step(tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "shared" {
+		step(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	step(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.searchRegex == nil {
+		t.Fatalf("normal search regex not set")
+	}
+	if got := m.tbl.Cursor(); got != 0 {
+		t.Fatalf("initial search cursor = %d, want 0", got)
+	}
+	if got := m.tbl.ColumnCursor(); got != 8 {
+		t.Fatalf("initial search column = %d, want 8", got)
+	}
+
+	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+	step(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if got := m.ultraCursor; got != 1 {
+		t.Fatalf("ultra cursor = %d, want 1", got)
+	}
+
+	step(tea.WindowSizeMsg{Width: 100, Height: 24})
+	if got := m.tbl.Cursor(); got != 1 {
+		t.Fatalf("hidden table cursor after ultra resize = %d, want 1", got)
+	}
+
+	rows := m.tbl.Rows()
+	wantPrev := m.taskToRowSearch(m.tasks[0], m.searchRegex, m.tblStyles, -1)
+	wantNew := m.taskToRowSearch(m.tasks[1], m.searchRegex, m.tblStyles, m.tbl.ColumnCursor())
+	if !reflect.DeepEqual(rows[0], wantPrev) {
+		t.Fatalf("previous row retained stale search selection after ultra resize")
+	}
+	if !reflect.DeepEqual(rows[1], wantNew) {
+		t.Fatalf("new row did not receive refreshed search selection after ultra resize")
 	}
 }

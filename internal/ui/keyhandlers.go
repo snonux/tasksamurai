@@ -140,12 +140,22 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 	}
 	m.helpViewport = viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	// Set the content immediately
-	content := m.buildHelpContent()
-	m.helpViewport.SetContent(content)
+	m.helpViewport.SetContent(m.activeHelpContent())
 	return m, nil
 }
 
 func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
+	if m.showHelp {
+		m.showHelp = false
+		// Clear help search state
+		m.helpSearchRegex = nil
+		m.helpSearchMatches = nil
+		m.helpSearchIndex = 0
+		m.helpSearchInput.SetValue("")
+		// Reset help viewport
+		m.helpViewport = viewport.Model{}
+		return m, nil
+	}
 	if m.showUltra {
 		m.ultraClearFocusedID()
 		m.showUltra = false
@@ -165,17 +175,6 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 	if m.cellExpanded {
 		m.cellExpanded = false
 		m.updateTableHeight()
-		return m, nil
-	}
-	if m.showHelp {
-		m.showHelp = false
-		// Clear help search state
-		m.helpSearchRegex = nil
-		m.helpSearchMatches = nil
-		m.helpSearchIndex = 0
-		m.helpSearchInput.SetValue("")
-		// Reset help viewport
-		m.helpViewport = viewport.Model{}
 		return m, nil
 	}
 	if m.searchRegex != nil {

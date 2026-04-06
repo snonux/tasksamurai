@@ -33,6 +33,16 @@ type cellMatch struct {
 	col int
 }
 
+type helpItem struct {
+	key  string
+	desc string
+}
+
+type helpSection struct {
+	title string
+	items []helpItem
+}
+
 // blinkState holds row-level blink animation state for the task table.
 // A blink cycles the selected row's highlight on/off after a modification.
 type blinkState struct {
@@ -434,7 +444,11 @@ func (m *Model) reload() error {
 	if len(m.searchMatches) > 0 {
 		m.searchIndex = 0
 	}
-	m.rebuildUltraFiltered(ultraFilterIDs)
+	if m.ultraSearchRegex != nil {
+		m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
+	} else {
+		m.rebuildUltraFiltered(ultraFilterIDs)
+	}
 
 	if m.tbl.Columns() == nil {
 		m.tbl, m.tblStyles = m.newTable(rows)
@@ -483,7 +497,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleTaskDetailMode(msg)
 		}
 
+		if m.showHelp {
+			if handled, model, cmd := m.handleEditingModes(msg); handled {
+				return model, cmd
+			}
+			return m.handleNormalMode(msg)
+		}
+
 		if m.showUltra {
+			if m.ultraSearching {
+				return m.handleUltraSearchMode(msg)
+			}
 			if handled, model, cmd := m.handleEditingModes(msg); handled {
 				return model, cmd
 			}
@@ -519,7 +543,11 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.computeColumnWidths()
 	m.updateTableHeight()
 	if m.showUltra {
+		if m.ultraSearchRegex != nil {
+			m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
+		}
 		m.ultraEnsureVisible()
+		m.syncUltraTableSelection()
 	}
 
 	// Update help viewport if active
@@ -709,96 +737,12 @@ func (m Model) appendInlineInputOverlay(view string) string {
 
 // updateHelpContent updates the help viewport content
 func (m *Model) updateHelpContent() {
-	content := m.buildHelpContent()
-	m.helpViewport.SetContent(content)
+	m.helpViewport.SetContent(m.activeHelpContent())
 }
 
 // buildHelpContent builds the help content
 func (m Model) buildHelpContent() string {
-	// Create styles using theme colors
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.HeaderFG)).
-		Background(lipgloss.Color(m.theme.SelectedBG)).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.SelectedFG))
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250")) // Light gray for readability
-
-	// Build help content with styled headers
-	var sections []string
-
-	// Navigation section
-	sections = append(sections, headerStyle.Render("Navigation"),
-		m.formatHelpLine("↑/k, ↓/j", "move up/down", keyStyle, descStyle),
-		m.formatHelpLine("←/h, →/l", "move left/right", keyStyle, descStyle),
-		m.formatHelpLine("0, g, Home", "go to start", keyStyle, descStyle),
-		m.formatHelpLine("G, End", "go to end", keyStyle, descStyle),
-		m.formatHelpLine("pgup/pgdn, b", "page up/down", keyStyle, descStyle),
-		m.formatHelpLine("1", "jump to random task", keyStyle, descStyle),
-		m.formatHelpLine("2", "jump to random task (no due date)", keyStyle, descStyle),
-		"")
-
-	// Task Management section
-	sections = append(sections, headerStyle.Render("Task Management"),
-		m.formatHelpLine("Enter", "view task details", keyStyle, descStyle),
-		m.formatHelpLine("+", "add new task", keyStyle, descStyle),
-		m.formatHelpLine("e, E", "edit entire task", keyStyle, descStyle),
-		m.formatHelpLine("d", "mark task done", keyStyle, descStyle),
-		m.formatHelpLine("U", "undo last done", keyStyle, descStyle),
-		m.formatHelpLine("s", "start/stop task", keyStyle, descStyle),
-		"")
-
-	// Task Fields section
-	sections = append(sections, headerStyle.Render("Task Fields"),
-		m.formatHelpLine("i", "edit current field", keyStyle, descStyle),
-		m.formatHelpLine("p", "set priority", keyStyle, descStyle),
-		m.formatHelpLine("w, W", "set/remove due date", keyStyle, descStyle),
-		m.formatHelpLine("r", "set random due date", keyStyle, descStyle),
-		m.formatHelpLine("R", "edit recurrence", keyStyle, descStyle),
-		m.formatHelpLine("t", "edit tags", keyStyle, descStyle),
-		m.formatHelpLine("J", "edit project", keyStyle, descStyle),
-		m.formatHelpLine("T", "convert first tag to project", keyStyle, descStyle),
-		m.formatHelpLine("a, A", "add/replace annotations", keyStyle, descStyle),
-		m.formatHelpLine("o", "open URL from description", keyStyle, descStyle),
-		"")
-
-	// View & Search section
-	sections = append(sections, headerStyle.Render("View & Search"),
-		m.formatHelpLine("f", "change filter", keyStyle, descStyle),
-		m.formatHelpLine("/, ?", "search", keyStyle, descStyle),
-		m.formatHelpLine("n, N", "next/previous match", keyStyle, descStyle),
-		m.formatHelpLine("space", "refresh tasks", keyStyle, descStyle),
-		"")
-
-	// Appearance section
-	sections = append(sections, headerStyle.Render("Appearance"),
-		m.formatHelpLine("c, C", "random/reset theme", keyStyle, descStyle),
-		m.formatHelpLine("x", "toggle disco mode", keyStyle, descStyle),
-		m.formatHelpLine("B", "toggle blinking", keyStyle, descStyle),
-		"")
-
-	// General section
-	sections = append(sections, headerStyle.Render("General"),
-		m.formatHelpLine("H", "toggle help", keyStyle, descStyle),
-		m.formatHelpLine("ESC", "close dialogs/cancel", keyStyle, descStyle),
-		m.formatHelpLine("q", "quit", keyStyle, descStyle))
-
-	// Apply search highlighting if active
-	if m.helpSearchRegex != nil {
-		for i, line := range sections {
-			if m.helpSearchRegex.MatchString(line) {
-				sections[i] = m.highlightHelpLine(line)
-			}
-		}
-	}
-
-	// Join all sections
-	return strings.Join(sections, "\n")
+	return m.buildRenderedHelpContent(m.helpSections())
 }
 
 // renderHelpScreen renders the help screen with optional search highlighting
@@ -860,52 +804,144 @@ func (m Model) highlightHelpLine(line string) string {
 
 // getHelpLines returns searchable help content as plain text lines
 func (m Model) getHelpLines() []string {
-	return []string{
-		"Navigation",
-		"↑/k, ↓/j: move up/down",
-		"←/h, →/l: move left/right",
-		"0, g, Home: go to start",
-		"G, End: go to end",
-		"pgup/pgdn, b: page up/down",
-		"1: jump to random task",
-		"2: jump to random task (no due date)",
-		"",
-		"Task Management",
-		"Enter: view task details",
-		"+: add new task",
-		"e, E: edit entire task",
-		"d: mark task done",
-		"U: undo last done",
-		"s: start/stop task",
-		"",
-		"Task Fields",
-		"i: edit current field",
-		"p: set priority",
-		"w, W: set/remove due date",
-		"r: set random due date",
-		"R: edit recurrence",
-		"t: edit tags",
-		"J: edit project",
-		"T: convert first tag to project",
-		"a, A: add/replace annotations",
-		"o: open URL from description",
-		"",
-		"View & Search",
-		"f: change filter",
-		"/, ?: search",
-		"n, N: next/previous match",
-		"space: refresh tasks",
-		"",
-		"Appearance",
-		"c, C: random/reset theme",
-		"x: toggle disco mode",
-		"B: toggle blinking",
-		"",
-		"General",
-		"H: toggle help",
-		"ESC: close dialogs/cancel",
-		"q: quit",
+	return flattenHelpSections(m.activeHelpSections())
+}
+
+func (m Model) activeHelpContent() string {
+	if m.showUltra {
+		return m.buildUltraHelpContent()
 	}
+	return m.buildHelpContent()
+}
+
+func (m Model) activeHelpSections() []helpSection {
+	if m.showUltra {
+		return m.ultraHelpSections()
+	}
+	return m.helpSections()
+}
+
+func (m Model) buildRenderedHelpContent(sections []helpSection) string {
+	headerStyle, keyStyle, descStyle := m.helpStyles()
+	lines := make([]string, 0, len(sections)*4)
+	for i, section := range sections {
+		lines = append(lines, headerStyle.Render(section.title))
+		for _, item := range section.items {
+			lines = append(lines, m.formatHelpLine(item.key, item.desc, keyStyle, descStyle))
+		}
+		if i < len(sections)-1 {
+			lines = append(lines, "")
+		}
+	}
+
+	if m.helpSearchRegex != nil {
+		for i, line := range lines {
+			if m.helpSearchRegex.MatchString(line) {
+				lines[i] = m.highlightHelpLine(line)
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) helpStyles() (lipgloss.Style, lipgloss.Style, lipgloss.Style) {
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.theme.HeaderFG)).
+		Background(lipgloss.Color(m.theme.SelectedBG)).
+		Padding(0, 1)
+
+	keyStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.theme.SelectedFG))
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("250"))
+
+	return headerStyle, keyStyle, descStyle
+}
+
+func (m Model) helpSections() []helpSection {
+	return []helpSection{
+		{
+			title: "Navigation",
+			items: []helpItem{
+				{key: "↑/k, ↓/j", desc: "move up/down"},
+				{key: "←/h, →/l", desc: "move left/right"},
+				{key: "0, g, Home", desc: "go to start"},
+				{key: "G, End", desc: "go to end"},
+				{key: "pgup/pgdn, b", desc: "page up/down"},
+				{key: "1", desc: "jump to random task"},
+				{key: "2", desc: "jump to random task (no due date)"},
+			},
+		},
+		{
+			title: "Task Management",
+			items: []helpItem{
+				{key: "Enter", desc: "view task details"},
+				{key: "+", desc: "add new task"},
+				{key: "e, E", desc: "edit entire task"},
+				{key: "d", desc: "mark task done"},
+				{key: "U", desc: "undo last done"},
+				{key: "s", desc: "start/stop task"},
+			},
+		},
+		{
+			title: "Task Fields",
+			items: []helpItem{
+				{key: "i", desc: "edit current field"},
+				{key: "p", desc: "set priority"},
+				{key: "w, W", desc: "set/remove due date"},
+				{key: "r", desc: "set random due date"},
+				{key: "R", desc: "edit recurrence"},
+				{key: "t", desc: "edit tags"},
+				{key: "J", desc: "edit project"},
+				{key: "T", desc: "convert first tag to project"},
+				{key: "a, A", desc: "add/replace annotations"},
+				{key: "o", desc: "open URL from description"},
+			},
+		},
+		{
+			title: "View & Search",
+			items: []helpItem{
+				{key: "f", desc: "change filter"},
+				{key: "/, ?", desc: "search"},
+				{key: "n, N", desc: "next/previous match"},
+				{key: "space", desc: "refresh tasks"},
+			},
+		},
+		{
+			title: "Appearance",
+			items: []helpItem{
+				{key: "c, C", desc: "random/reset theme"},
+				{key: "x", desc: "toggle disco mode"},
+				{key: "B", desc: "toggle blinking"},
+			},
+		},
+		{
+			title: "General",
+			items: []helpItem{
+				{key: "H", desc: "toggle help"},
+				{key: "ESC", desc: "close dialogs/cancel"},
+				{key: "q", desc: "quit"},
+			},
+		},
+	}
+}
+
+func flattenHelpSections(sections []helpSection) []string {
+	lines := make([]string, 0, len(sections)*4)
+	for i, section := range sections {
+		lines = append(lines, section.title)
+		for _, item := range section.items {
+			lines = append(lines, fmt.Sprintf("%s: %s", item.key, item.desc))
+		}
+		if i < len(sections)-1 {
+			lines = append(lines, "")
+		}
+	}
+	return lines
 }
 
 func (m Model) statusLine() string {
