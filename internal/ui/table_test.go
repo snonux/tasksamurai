@@ -1666,3 +1666,159 @@ func TestUltraResizeSyncRefreshesNormalSearchSelection(t *testing.T) {
 		t.Fatalf("new row did not receive refreshed search selection after ultra resize")
 	}
 }
+
+// setupSingleTask creates a fake task binary that returns exactly one task.
+func setupSingleTask(t *testing.T, tmp string) string {
+	t.Helper()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"only task\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
+// setupEmptyTasks creates a fake task binary that returns no tasks.
+func setupEmptyTasks(t *testing.T, tmp string) string {
+	t.Helper()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath
+}
+
+// TestUltraSingleTaskCursorStaysAtZero verifies that with one task the cursor
+// never advances beyond index 0 when navigating down or jumping to the end.
+func TestUltraSingleTaskCursorStaysAtZero(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupSingleTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Enter ultra mode.
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+	if len(m.ultraTaskList()) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(m.ultraTaskList()))
+	}
+
+	// Moving down on a single-task list must keep cursor at 0.
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = *mv.(*Model)
+	if got := m.ultraCursor; got != 0 {
+		t.Fatalf("j on single task: cursor = %d, want 0", got)
+	}
+
+	// Jump to end — still must be 0.
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	if got := m.ultraCursor; got != 0 {
+		t.Fatalf("G on single task: cursor = %d, want 0", got)
+	}
+
+	// Verify ultraVisibleCursor agrees.
+	if got := m.ultraVisibleCursor(m.ultraTaskList()); got != 0 {
+		t.Fatalf("ultraVisibleCursor on single task = %d, want 0", got)
+	}
+}
+
+// TestUltraNoTasksRender verifies that renderUltraModus does not panic and
+// returns a non-empty string containing "No tasks" when the task list is empty.
+func TestUltraNoTasksRender(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupEmptyTasks(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Give the model a window size so rendering has a budget.
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = *mv.(*Model)
+
+	// Enter ultra mode.
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+
+	// Force ultra mode on in case no tasks means it doesn't activate normally.
+	m.showUltra = true
+
+	if len(m.ultraTaskList()) != 0 {
+		t.Fatalf("expected 0 tasks, got %d", len(m.ultraTaskList()))
+	}
+
+	rendered := m.renderUltraModus()
+	if rendered == "" {
+		t.Fatal("renderUltraModus returned empty string for empty task list")
+	}
+	stripped := ansi.Strip(rendered)
+	if !strings.Contains(stripped, "No tasks") {
+		t.Fatalf("renderUltraModus did not contain 'No tasks', got:\n%s", stripped)
+	}
+}
+
+// TestUltraCursorClampAfterFilterZeroResults verifies that when a search filter
+// leaves zero results the cursor is clamped to 0 and remains in-bounds.
+func TestUltraCursorClampAfterFilterZeroResults(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Enter ultra mode.
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not enter ultra mode")
+	}
+
+	// Move cursor to the last task.
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	if got := m.ultraCursor; got != 2 {
+		t.Fatalf("G: cursor = %d, want 2", got)
+	}
+
+	// Apply a search that matches nothing — filter produces zero results.
+	m.ultraSearchRegex = regexp.MustCompile("zzznomatch")
+	m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
+	if len(m.ultraFiltered) != 0 {
+		t.Fatalf("expected zero filtered results, got %d", len(m.ultraFiltered))
+	}
+
+	// ultraEnsureVisible must clamp cursor to 0 for an empty list.
+	m.ultraEnsureVisible()
+	if got := m.ultraCursor; got != 0 {
+		t.Fatalf("cursor after zero-result filter = %d, want 0", got)
+	}
+	if got := m.ultraOffset; got != 0 {
+		t.Fatalf("offset after zero-result filter = %d, want 0", got)
+	}
+
+	// ultraVisibleCursor must return -1 for an empty task list.
+	if got := m.ultraVisibleCursor(m.ultraTaskList()); got != -1 {
+		t.Fatalf("ultraVisibleCursor for empty list = %d, want -1", got)
+	}
+}

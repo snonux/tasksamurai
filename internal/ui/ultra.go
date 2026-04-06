@@ -22,20 +22,52 @@ func (m *Model) renderUltraModus() string {
 
 	var lines []string
 	lines = append(lines, top)
-	lines = append(
-		lines,
-		m.ultraRenderCards(
-			tasks,
-			width,
-			m.ultraVisibleCursor(tasks),
-			m.ultraVisibleStart(len(tasks)),
-			m.ultraCardBudget(top, bottom, overlayHeight),
-		)...,
-	)
+
+	if len(tasks) == 0 {
+		// No tasks available — render a centered placeholder instead of an empty card area.
+		lines = append(lines, m.ultraNoTasksMessage(width, m.ultraCardBudget(top, bottom, overlayHeight)))
+	} else {
+		lines = append(
+			lines,
+			m.ultraRenderCards(
+				tasks,
+				width,
+				m.ultraVisibleCursor(tasks),
+				m.ultraVisibleStart(len(tasks)),
+				m.ultraCardBudget(top, bottom, overlayHeight),
+			)...,
+		)
+	}
+
 	lines = append(lines, bottom)
 	if overlay != "" {
 		lines = append(lines, overlay)
 	}
+	return strings.Join(lines, "\n")
+}
+
+// ultraNoTasksMessage renders a vertically and horizontally centered "No tasks" message
+// sized to fill the available card budget height.
+func (m *Model) ultraNoTasksMessage(width, budget int) string {
+	msg := lipgloss.NewStyle().
+		Width(width).
+		Align(lipgloss.Center).
+		Foreground(lipgloss.Color("240")).
+		Render("No tasks")
+
+	// Pad vertically so the message appears centered in the card area.
+	msgHeight := lipgloss.Height(msg)
+	paddingTop := (budget - msgHeight) / 2
+	if paddingTop < 0 {
+		paddingTop = 0
+	}
+
+	var lines []string
+	emptyLine := lipgloss.NewStyle().Width(width).Render("")
+	for range paddingTop {
+		lines = append(lines, emptyLine)
+	}
+	lines = append(lines, msg)
 	return strings.Join(lines, "\n")
 }
 
