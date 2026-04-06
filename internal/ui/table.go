@@ -1325,3 +1325,9 @@ func (m *Model) applyTheme() {
 func (m *Model) SetDisco(d bool) {
 	m.disco = d
 }
+
+// SetUltra enables or disables ultra mode, causing the UI to start directly
+// in the ultra task list view instead of the default table view.
+func (m *Model) SetUltra(u bool) {
+	m.showUltra = u
+}

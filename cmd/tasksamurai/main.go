@@ -25,6 +25,7 @@ func main() {
 	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
 	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
 	disco := flag.Bool("disco", false, "enable disco mode")
+	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
 
 	if err := task.SetDebugLog(*debugLog); err != nil {
@@ -43,6 +44,7 @@ func main() {
 	}
 
 	m.SetDisco(*disco)
+	m.SetUltra(*ultra)
 
 	// Clear the screen before starting the TUI to avoid leaving any
 	// previous command line artefacts behind.
