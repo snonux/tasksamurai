@@ -26,20 +26,20 @@ type Theme struct {
 // DefaultTheme returns the color theme used by Task Samurai.
 func DefaultTheme() Theme {
 	return Theme{
-		HeaderFG:   "205",
-		SelectedFG: "229",
-		SelectedBG: "57",
+		HeaderFG:   "75",  // steel blue — labels in ultra cards
+		SelectedFG: "255", // bright white — text on selected card
+		SelectedBG: "238", // dark grey — clean selection highlight on black background
 		RowFG:      "0",
 		RowBG:      "57",
-		StatusFG:   "229",
-		StatusBG:   "57",
+		StatusFG:   "229", // light yellow
+		StatusBG:   "57",  // dark purple — status bar background
 		StartBG:    "6",
 		OverdueBG:  "1",
-		PrioLowBG:  "10",
-		PrioMedBG:  "12",
-		PrioHighBG: "9",
-		SearchFG:   "21",
-		SearchBG:   "226",
+		PrioLowBG:  "28",  // dark green — subtler than bright 10
+		PrioMedBG:  "33",  // medium blue — subtler than bright 12
+		PrioHighBG: "160", // dark red — subtler than bright 9
+		SearchFG:   "16",
+		SearchBG:   "220", // amber — easier on eyes than pure yellow 226
 	}
 }
 

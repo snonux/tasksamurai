@@ -91,6 +91,7 @@ type detailViewState struct {
 // ultraState holds the state for the ultra mode task list and its search UI.
 type ultraState struct {
 	showUltra        bool
+	ultraStartup     bool // true when ultra was set via --ultra flag; q quits directly
 	ultraCursor      int
 	ultraOffset      int
 	ultraSearching   bool
@@ -1328,6 +1329,9 @@ func (m *Model) SetDisco(d bool) {
 
 // SetUltra enables or disables ultra mode, causing the UI to start directly
 // in the ultra task list view instead of the default table view.
+// When u is true, q/esc quits the application immediately rather than
+// returning to the table view, because there is no table view to return to.
 func (m *Model) SetUltra(u bool) {
 	m.showUltra = u
+	m.ultraStartup = u
 }

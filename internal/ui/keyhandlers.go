@@ -157,6 +157,11 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.showUltra {
+		// When started via --ultra flag there is no table view to return to,
+		// so q/esc exits the application directly.
+		if m.ultraStartup {
+			return m, tea.Quit
+		}
 		m.ultraClearFocusedID()
 		m.showUltra = false
 		m.ultraSearchRegex = nil

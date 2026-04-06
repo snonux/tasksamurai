@@ -626,7 +626,6 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 }
 
 func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Regexp) string {
-	_ = width
 	idText := fmt.Sprintf("#%d", t.ID)
 	priorityText := ultraOrDash(t.Priority)
 	statusText := ultraOrDash(t.Status)
@@ -634,14 +633,15 @@ func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Re
 	ageText := ultraTaskAge(t.Entry)
 	line := strings.Join([]string{idText, priorityText, statusText, urgencyText, ageText}, " | ")
 	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, idText, priorityText, statusText, urgencyText, ageText) {
-		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252")), re)
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), re)
 	}
 
-	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true), idText)
+	// Render header fields with distinct colors; no background so unselected cards stay on black.
+	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), idText)
 	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText)
-	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), statusText)
-	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), urgencyText)
-	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), ageText)
+	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText)
+	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText) // amber for urgency score
+	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("240")), ageText)
 	return strings.Join([]string{id, priority, status, urgency, age}, " | ")
 }
 
@@ -663,7 +663,7 @@ func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Rege
 		" | ",
 	)
 	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, "project:", project, "tags:", tags, "due:", due, "recur:", recur, "start:", start) {
-		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("252")), re)
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("253")), re)
 	}
 
 	parts := []string{
@@ -677,7 +677,8 @@ func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Rege
 }
 
 func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *regexp.Regexp) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	// Brighter foreground ("253") than annotations to give description visual priority.
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("253"))
 	var lines []string
 	for _, line := range m.ultraDescriptionLines(t, width) {
 		if re != nil && re.MatchString(line) {
@@ -694,7 +695,8 @@ func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *rege
 		return ""
 	}
 
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
+	// Dimmer than description ("244") to visually subordinate annotations.
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
 	for i, line := range lines {
 		if re != nil && re.MatchString(line) {
 			line = m.highlightMatches(line, re)
@@ -702,6 +704,11 @@ func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *rege
 		lines[i] = style.Render(line)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// ultraSeparator returns a full-width dim line used between cards.
+func ultraSeparator(width int) string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("237")).Render(strings.Repeat("─", width))
 }
 
 func (m *Model) ultraRenderCards(tasks []task.Task, width, selected, start, cardBudget int) []string {
@@ -712,6 +719,7 @@ func (m *Model) ultraRenderCards(tasks []task.Task, width, selected, start, card
 		start = len(tasks)
 	}
 
+	sep := ultraSeparator(width)
 	var lines []string
 	used := 0
 	for i := start; i < len(tasks); i++ {
@@ -721,11 +729,12 @@ func (m *Model) ultraRenderCards(tasks []task.Task, width, selected, start, card
 		}
 
 		cardHeight := lipgloss.Height(card)
+		// Account for separator line (1 line) between cards.
 		if len(lines) > 0 {
 			if used+1+cardHeight > cardBudget {
 				break
 			}
-			lines = append(lines, "")
+			lines = append(lines, sep)
 			used++
 		} else if cardHeight > cardBudget {
 			break
@@ -772,16 +781,18 @@ func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style
 }
 
 func ultraPriorityStyle(theme Theme, priority string) lipgloss.Style {
-	style := lipgloss.NewStyle().Width(1)
+	// Width(3) so the badge reads as a pill rather than a single character.
+	style := lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Bold(true).Foreground(lipgloss.Color("255"))
 	switch priority {
 	case "H":
-		style = style.Background(lipgloss.Color(theme.PrioHighBG))
+		return style.Background(lipgloss.Color(theme.PrioHighBG))
 	case "M":
-		style = style.Background(lipgloss.Color(theme.PrioMedBG))
+		return style.Background(lipgloss.Color(theme.PrioMedBG))
 	case "L":
-		style = style.Background(lipgloss.Color(theme.PrioLowBG))
+		return style.Background(lipgloss.Color(theme.PrioLowBG))
 	}
-	return style
+	// No priority — render dimly without a badge background.
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 }
 
 func ultraJoinSections(sections ...string) string {
@@ -906,6 +917,22 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleHelp()
 	case "q", "esc":
 		return m.handleQuitOrEscape()
+	case "u":
+		// Toggle back to the traditional table view (only available when not
+		// started via --ultra, where there is no table view to return to).
+		if !m.ultraStartup {
+			m.ultraClearFocusedID()
+			m.showUltra = false
+			m.ultraSearchRegex = nil
+			m.ultraFiltered = nil
+			m.ultraSearchInput.SetValue("")
+			// Sync the table cursor to the task we were on in ultra mode.
+			tasks := m.ultraTaskList()
+			if m.ultraCursor >= 0 && m.ultraCursor < len(tasks) {
+				m.tbl.SetCursor(m.ultraCursor)
+			}
+			return m, nil
+		}
 	case "/":
 		m.ultraSearching = true
 		m.ultraSearchInput.SetValue("")
