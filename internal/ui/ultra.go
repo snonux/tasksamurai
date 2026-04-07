@@ -548,24 +548,21 @@ func (m *Model) ultraCursorStatus(tasks []task.Task) string {
 	return fmt.Sprintf("%d/%d", cursor+1, len(tasks))
 }
 
-// ultraStatusText returns the plain-text representation of the single
-// consolidated status line shown per card: ID, priority, status, urgency,
-// due date, project, and tags. Age, recur, and start are omitted — started
-// tasks are highlighted in yellow, and the remaining fields are available in
-// the detail view.
+// ultraStatusText returns the plain-text representation of the consolidated
+// status line for search indexing. Priority is omitted when unset.
 func (m *Model) ultraStatusText(t task.Task) string {
-	return strings.Join(
-		[]string{
-			fmt.Sprintf("#%d", t.ID),
-			ultraOrDash(t.Priority),
-			ultraOrDash(t.Status),
-			fmt.Sprintf("%.1f", t.Urgency),
-			"due: " + ultraDueValue(m, t.Due),
-			"proj: " + ultraOrDash(t.Project),
-			"tags: " + ultraOrDash(strings.Join(t.Tags, " ")),
-		},
-		" | ",
+	parts := []string{fmt.Sprintf("#%d", t.ID)}
+	if t.Priority != "" {
+		parts = append(parts, t.Priority)
+	}
+	parts = append(parts,
+		ultraOrDash(t.Status),
+		fmt.Sprintf("%.1f", t.Urgency),
+		"due: "+ultraDueValue(m, t.Due),
+		"proj: "+ultraOrDash(t.Project),
+		"tags: "+ultraOrDash(strings.Join(t.Tags, " ")),
 	)
+	return strings.Join(parts, " | ")
 }
 
 func (m *Model) ultraDescriptionLines(t task.Task, width int) []string {
@@ -640,8 +637,7 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 		lines[0] = "! " + lines[0]
 		card = strings.Join(lines, "\n")
 	}
-	started := t.Start != ""
-	return ultraCardStyle(m.theme, width, selected, started, blink).Render(card)
+	return ultraCardStyle(m.theme, width, selected, blink).Render(card)
 }
 
 // renderUltraStatus renders the consolidated single-line card status (no selection bg).
@@ -659,56 +655,74 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 	return m.renderUltraAnnotationsWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-// renderUltraStatusWithRegex renders a single consolidated status line combining
-// the former header (ID, priority, status, urgency) and meta (due, project, tags)
-// fields. Age, recur, and start are omitted for compactness.
+// renderUltraStatusWithRegex renders a single consolidated status line:
+//
+//	#ID [pri] | status | urgency | due: X | proj: X | tags: X
+//
+// Priority is omitted when unset. When the task is started, the ID badge
+// gets a yellow background with black text for a subtle "in progress" cue
+// without flooding the whole card with colour.
+// Age, recur, and start are omitted for compactness.
 func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	_ = width
 	idText := fmt.Sprintf("#%d", t.ID)
-	priorityText := ultraOrDash(t.Priority)
 	statusText := ultraOrDash(t.Status)
 	urgencyText := fmt.Sprintf("%.1f", t.Urgency)
 	due := ultraDueValue(m, t.Due)
 	project := ultraOrDash(t.Project)
 	tags := ultraOrDash(strings.Join(t.Tags, " "))
 
-	// Priority badges render as 3-char wide pills in the styled path (Width(3)
-	// + Center). Pad the plain text to match so whole-line and styled paths
-	// produce the same visible text after ANSI stripping.
-	priorityPadded := priorityText
+	// Build plain-text line for whole-line search matching.
+	// Priority badges render as 3-char pills (Width(3)+Center) in the styled
+	// path, so pad the plain text to match for consistent ANSI-stripped output.
+	plainParts := []string{idText}
 	if t.Priority == "H" || t.Priority == "M" || t.Priority == "L" {
-		priorityPadded = " " + t.Priority + " "
+		plainParts = append(plainParts, " "+t.Priority+" ")
 	}
+	plainParts = append(plainParts, statusText, urgencyText,
+		"due: "+due, "proj: "+project, "tags: "+tags)
+	line := strings.Join(plainParts, " | ")
 
-	line := strings.Join([]string{
-		idText, priorityPadded, statusText, urgencyText,
-		"due: " + due, "proj: " + project, "tags: " + tags,
-	}, " | ")
-	// Fall back to whole-line rendering when the regex spans a field separator
-	// or a full "key: value" pair (e.g. "proj: home") that can't be matched by
-	// checking label and value individually.
+	// Fall back to whole-line rendering when the regex spans a separator or a
+	// full "key: value" pair that can't be matched by individual field checks.
 	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re,
-		idText, priorityText, statusText, urgencyText, due, project, tags,
+		idText, t.Priority, statusText, urgencyText, due, project, tags,
 	) {
 		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), re, bg)
 	}
 
 	sep := ultraFieldSep(bg)
-	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), idText, bg)
-	// H/M/L badges keep their own coloured background; plain "-" uses the card bg.
-	priorityBG := bg
-	if t.Priority == "H" || t.Priority == "M" || t.Priority == "L" {
-		priorityBG = ""
+
+	// ID badge: yellow bg + black text when the task is started; otherwise bold white.
+	var idStyle lipgloss.Style
+	if t.Start != "" {
+		idStyle = lipgloss.NewStyle().Bold(true).
+			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color(m.theme.UltraStartedBG))
+	} else {
+		idStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253"))
 	}
-	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, priorityBG)
+	// Don't pass bg into the started ID badge — it has its own background.
+	idRendered := idStyle.Render(idText)
+	if re != nil && re.MatchString(idText) {
+		idRendered = idStyle.Render(m.highlightMatches(idText, re))
+	}
+
 	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText, bg)
 	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText, bg)
-	parts := []string{
-		id, priority, status, urgency,
+
+	parts := []string{idRendered}
+	// Only include priority when it is actually set (H/M/L).
+	if t.Priority != "" {
+		priorityText := t.Priority
+		parts = append(parts, m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, ""))
+	}
+	parts = append(parts,
+		status, urgency,
 		m.ultraKeyValue(re, "due", due, bg),
 		m.ultraKeyValue(re, "proj", project, bg),
 		m.ultraKeyValue(re, "tags", tags, bg),
-	}
+	)
 	return strings.Join(parts, sep)
 }
 
@@ -837,16 +851,9 @@ func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value, bg string) string
 	return m.ultraStyledText(re, labelStyle, label+":", bg) + space + m.ultraStyledText(re, valueStyle, value, bg)
 }
 
-func ultraCardStyle(theme Theme, width int, selected, started, blink bool) lipgloss.Style {
+func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
 	style := lipgloss.NewStyle().Width(width)
-	if started {
-		// Amber yellow background marks in-progress tasks; selection overrides it
-		// when the cursor is also on this card.
-		fg := contrastColor(theme.UltraStartedBG)
-		style = style.Foreground(lipgloss.Color(fg)).Background(lipgloss.Color(theme.UltraStartedBG))
-	}
 	if selected {
-		// Selection highlight takes priority over the started colour.
 		style = style.Foreground(lipgloss.Color(theme.SelectedFG)).Background(lipgloss.Color(theme.SelectedBG))
 	}
 	if blink {
