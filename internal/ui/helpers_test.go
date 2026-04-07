@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -357,6 +358,85 @@ func TestValidateRecurrence(t *testing.T) {
 			err := validateRecurrence(tt.recur)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateRecurrence() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestParseFilterInput verifies that parseFilterInput correctly handles
+// taskwarrior filter expressions, including attribute filters (proj:xxx),
+// tag filters (+tag), quoted values (description:"some text"), and empty input.
+func TestParseFilterInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []string
+		wantErr bool
+	}{
+		{
+			name:    "empty input clears filter",
+			input:   "",
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name:    "project attribute filter",
+			input:   "proj:dtail",
+			want:    []string{"proj:dtail"},
+			wantErr: false,
+		},
+		{
+			name:    "tag filter",
+			input:   "+urgent",
+			want:    []string{"+urgent"},
+			wantErr: false,
+		},
+		{
+			name:    "multiple filters",
+			input:   "proj:dtail +urgent",
+			want:    []string{"proj:dtail", "+urgent"},
+			wantErr: false,
+		},
+		{
+			name:  "quoted description filter keeps value as single token",
+			input: `description:"my task"`,
+			// shlex strips the quotes and keeps the value as one argument
+			want:    []string{"description:my task"},
+			wantErr: false,
+		},
+		{
+			name:  "project filter with multiple words via quoting",
+			input: `project:"my project"`,
+			want:  []string{"project:my project"},
+		},
+		{
+			name:    "status filter",
+			input:   "status:pending",
+			want:    []string{"status:pending"},
+			wantErr: false,
+		},
+		{
+			name:    "whitespace-only input clears filter",
+			input:   "   ",
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name:    "unclosed quote returns error",
+			input:   `proj:"unclosed`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseFilterInput(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseFilterInput(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseFilterInput(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}

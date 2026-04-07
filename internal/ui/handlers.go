@@ -292,11 +292,28 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleFilterMode handles filter editing
+// handleFilterMode handles filter editing for both traditional and ultra mode.
+// The filter value is split using shell-quoting rules (via parseFilterInput)
+// so that expressions with quoted values (e.g. description:"my task") are
+// passed to taskwarrior as a single argument. Any taskwarrior filter expression
+// that is valid on the command line (proj:xxx, +tag, description:"...", etc.)
+// is therefore accepted here too. Taskwarrior errors are propagated back to
+// the user via the status bar rather than being silently discarded.
 func (m *Model) handleFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
-		m.filters = strings.Fields(value)
-		_ = m.reload()
+		fields, err := parseFilterInput(value)
+		if err != nil {
+			return err
+		}
+		m.filters = fields
+		// Propagate taskwarrior errors so the user sees feedback when a
+		// filter expression is rejected by taskwarrior.
+		if err := m.reload(); err != nil {
+			// Roll back the filters to avoid leaving the UI in a broken state
+			// where an empty task list is shown without any explanation.
+			m.filters = nil
+			return fmt.Errorf("filter error: %w", err)
+		}
 		return nil
 	}
 

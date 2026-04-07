@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
+
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
@@ -70,6 +72,27 @@ func compileAndCacheRegex(pattern string) (*regexp.Regexp, error) {
 	searchRegexCache[pattern] = re
 	
 	return re, nil
+}
+
+// parseFilterInput splits a raw filter string typed by the user into the
+// individual filter tokens that are passed to taskwarrior. Shell-quoting
+// rules are applied via shlex so that expressions like
+//
+//	description:"my task"
+//	proj:dtail +urgent
+//
+// are handled correctly: quoted values are kept as a single argument (with the
+// quotes stripped) rather than being split on whitespace. An empty input
+// returns a nil slice, which clears the current filter.
+func parseFilterInput(input string) ([]string, error) {
+	fields, err := shlex.Split(input)
+	if err != nil {
+		return nil, fmt.Errorf("invalid filter expression: %w", err)
+	}
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	return fields, nil
 }
 
 // Validation functions
