@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"codeberg.org/snonux/tasksamurai/internal"
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
@@ -434,7 +435,9 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 	} else if m.ultraFiltered != nil {
 		filter = "filtered"
 	}
-	return fmt.Sprintf("ULTRA MODE | filter: %s | %d tasks", filter, len(tasks))
+	// Mirror the normal-mode title format so the app name is always visible,
+	// with "(ultra)" appended to distinguish the view.
+	return fmt.Sprintf("Task Samurai %s (ultra) | filter: %s | %d tasks", internal.Version, filter, len(tasks))
 }
 
 func (m *Model) ultraSearchText(t task.Task) string {
@@ -1015,21 +1018,21 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "q", "esc":
 		return m.handleQuitOrEscape()
 	case "u":
-		// Toggle back to the traditional table view (only available when not
-		// started via --ultra, where there is no table view to return to).
-		if !m.ultraStartup {
-			m.ultraClearFocusedID()
-			m.showUltra = false
-			m.ultraSearchRegex = nil
-			m.ultraFiltered = nil
-			m.ultraSearchInput.SetValue("")
-			// Sync the table cursor to the task we were on in ultra mode.
-			tasks := m.ultraTaskList()
-			if m.ultraCursor >= 0 && m.ultraCursor < len(tasks) {
-				m.tbl.SetCursor(m.ultraCursor)
-			}
-			return m, nil
+		// Toggle back to the traditional table view. Works even when started
+		// via --ultra because the table model always exists; it was just never
+		// shown. The user can press u again to return to ultra mode.
+		m.ultraClearFocusedID()
+		m.showUltra = false
+		m.ultraStartup = false // no longer forced into ultra-only mode
+		m.ultraSearchRegex = nil
+		m.ultraFiltered = nil
+		m.ultraSearchInput.SetValue("")
+		// Sync the table cursor to the task we were on in ultra mode.
+		tasks := m.ultraTaskList()
+		if m.ultraCursor >= 0 && m.ultraCursor < len(tasks) {
+			m.tbl.SetCursor(m.ultraCursor)
 		}
+		return m, nil
 	case "/":
 		m.ultraSearching = true
 		m.ultraSearchInput.SetValue("")
