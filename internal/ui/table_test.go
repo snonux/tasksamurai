@@ -803,8 +803,9 @@ func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	if !strings.Contains(view, "exit ultra mode") {
 		t.Fatalf("ultra help content missing ultra exit binding: %q", view)
 	}
-	if strings.Contains(view, "open URL from description") {
-		t.Fatalf("ultra help rendered normal-mode binding: %q", view)
+	// "open URL from description" is now available in ultra mode (o key).
+	if !strings.Contains(view, "open URL from description") {
+		t.Fatalf("ultra help missing o/open-URL binding: %q", view)
 	}
 	if strings.Contains(view, "edit current field") {
 		t.Fatalf("ultra help rendered normal-only inline edit binding: %q", view)
@@ -856,8 +857,9 @@ func TestUltraHelpSearchUsesUltraHelpLines(t *testing.T) {
 		step(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	step(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if got := len(m.helpSearchMatches); got != 0 {
-		t.Fatalf("ultra help search matched normal help content, got %d matches", got)
+	// "URL" now appears in ultra help since the o key (open URL) is available.
+	if got := len(m.helpSearchMatches); got == 0 {
+		t.Fatalf("ultra help search for 'URL' should match (o key added), got 0 matches")
 	}
 
 	step(tea.KeyPressMsg{Code: '/', Text: "/"})

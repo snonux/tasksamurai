@@ -84,6 +84,7 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "j, k", desc: "move down/up"},
 				{key: "pgup, pgdn", desc: "page up/down"},
 				{key: "g, G", desc: "go to start/end"},
+				{key: "space", desc: "refresh tasks"},
 			},
 		},
 		{
@@ -94,6 +95,7 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "d", desc: "mark task done"},
 				{key: "U", desc: "undo last done"},
 				{key: "+", desc: "add new task"},
+				{key: "o", desc: "open URL from description"},
 			},
 		},
 		{
@@ -102,6 +104,7 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "p", desc: "set priority"},
 				{key: "w", desc: "set due date"},
 				{key: "W", desc: "remove due date"},
+				{key: "r", desc: "set random due date"},
 				{key: "t", desc: "edit tags"},
 				{key: "a, A", desc: "add/replace annotations"},
 				{key: "J", desc: "edit project"},
@@ -1038,10 +1041,12 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraMoveSearchMatch(1)
 	case "N":
 		m.ultraMoveSearchMatch(-1)
-	case "pgdn", "pgdown", "space":
+	case "pgdn", "pgdown":
 		m.ultraMoveCursor(m.ultraVisibleCount())
 	case "pgup", "b":
 		m.ultraMoveCursor(-m.ultraVisibleCount())
+	case "space":
+		return m.handleRefresh()
 	case "g", "home":
 		m.ultraGoHome()
 	case "G", "end":
@@ -1058,6 +1063,10 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUltraSetDueDate()
 	case "W":
 		return m.handleUltraRemoveDueDate()
+	case "r":
+		return m.handleRandomDueDate()
+	case "o":
+		return m.handleOpenURL()
 	case "t":
 		return m.handleUltraEditTags()
 	case "a":
