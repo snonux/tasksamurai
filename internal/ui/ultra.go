@@ -631,15 +631,11 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 		bg = m.theme.SelectedBG
 	}
 
-	// Blank line between sections must also carry bg; otherwise the terminal
-	// default (black) shows through on the empty separator line.
-	blankLine := lipgloss.NewStyle().Width(width).Background(lipgloss.Color(bg)).Render("")
-	if bg == "" {
-		blankLine = ""
-	}
-
-	card := ultraJoinSectionsWithBlank(
-		blankLine,
+	// No blank lines between sections — ultraJoinSections passes "" so
+	// ultraJoinSectionsWithBlank skips the separator entirely. The outer
+	// ultraCardStyle already fills the selected background across all lines,
+	// so per-section bg-coloured blank rows are not needed.
+	card := ultraJoinSections(
 		m.renderUltraHeaderWithRegex(t, width, re, bg),
 		m.renderUltraMetaWithRegex(t, width, re, bg),
 		m.renderUltraDescriptionWithRegex(t, width, re, bg),
