@@ -460,34 +460,66 @@ func (m *Model) ultraFilteredIndexes(re *regexp.Regexp) []int {
 	return indexes
 }
 
+// handleUltraSearchMode handles keystrokes while the ultra search input is open.
+// Results are filtered live on every keystroke; Enter confirms (keeps the
+// filter, closes the input); Esc cancels (clears the filter, closes the input).
+// The search term is treated as a regular expression.
 func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		if value == "" {
+	switch msg.String() {
+	case "enter":
+		// Empty input clears the filter; non-empty confirms and keeps it.
+		if strings.TrimSpace(m.ultraSearchInput.Value()) == "" {
 			m.ultraSearchRegex = nil
 			m.ultraFiltered = nil
 			m.ultraCursor = 0
 			m.ultraOffset = 0
-			return nil
 		}
-
-		re, err := compileAndCacheRegex(value)
-		if err != nil {
-			return err
-		}
-
-		m.ultraSearchRegex = re
-		m.ultraFiltered = m.ultraFilteredIndexes(re)
-		m.ultraCursor = 0
-		m.ultraOffset = 0
-		return nil
-	}
-
-	onExit := func() {
+		m.ultraSearching = false
+		m.ultraSearchInput.Blur()
+		return m, nil
+	case "esc":
+		// Cancel: clear the filter and close the search input.
 		m.ultraSearching = false
 		m.ultraSearchInput.SetValue("")
+		m.ultraSearchInput.Blur()
+		m.ultraSearchRegex = nil
+		m.ultraFiltered = nil
+		m.ultraCursor = 0
+		m.ultraOffset = 0
+		return m, nil
 	}
 
-	return m.handleTextInput(msg, &m.ultraSearchInput, onEnter, onExit)
+	// Forward the keystroke to the text input widget.
+	var cmd tea.Cmd
+	m.ultraSearchInput, cmd = m.ultraSearchInput.Update(msg)
+
+	// Recompile and refilter on every change for live results.
+	m.ultraApplySearch(m.ultraSearchInput.Value())
+	return m, cmd
+}
+
+// ultraApplySearch compiles value as a regex and updates the filtered task
+// index. If value is empty the filter is cleared. If the regex is invalid
+// (e.g. mid-typing an incomplete pattern) the existing filter is left
+// unchanged so the display does not flicker.
+func (m *Model) ultraApplySearch(value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		m.ultraSearchRegex = nil
+		m.ultraFiltered = nil
+		m.ultraCursor = 0
+		m.ultraOffset = 0
+		return
+	}
+	re, err := compileAndCacheRegex(value)
+	if err != nil {
+		// Keep the previous filter while the regex is incomplete.
+		return
+	}
+	m.ultraSearchRegex = re
+	m.ultraFiltered = m.ultraFilteredIndexes(re)
+	m.ultraCursor = 0
+	m.ultraOffset = 0
 }
 
 func (m *Model) ultraMoveSearchMatch(delta int) {
