@@ -1019,7 +1019,7 @@ func TestUltraSearchFiltersNavigatesAndHighlights(t *testing.T) {
 	if m.ultraCursor != 0 || m.ultraOffset != 0 {
 		t.Fatalf("search did not reset cursor/offset, got cursor=%d offset=%d", m.ultraCursor, m.ultraOffset)
 	}
-	if structured := m.ultraSearchText(m.tasks[0]); !regexp.MustCompile(`(?m)^project:`).MatchString(structured) {
+	if structured := m.ultraSearchText(m.tasks[0]); !regexp.MustCompile(`proj:`).MatchString(structured) {
 		t.Fatalf("ultra search text lost card line structure: %q", structured)
 	}
 
@@ -1035,14 +1035,14 @@ func TestUltraSearchFiltersNavigatesAndHighlights(t *testing.T) {
 	if ansi.Strip(plain) != ansi.Strip(highlighted) {
 		t.Fatalf("search highlighting changed visible text")
 	}
-	labelHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`project:`))
+	labelHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`proj:`))
 	if labelHighlighted == plain {
 		t.Fatalf("label search did not change rendered card")
 	}
 	if ansi.Strip(labelHighlighted) != ansi.Strip(plain) {
 		t.Fatalf("label search highlighting changed visible text")
 	}
-	combinedHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`project: home`))
+	combinedHighlighted := m.renderUltraCard(filtered[0], 80, true, regexp.MustCompile(`proj: home`))
 	if combinedHighlighted == plain {
 		t.Fatalf("combined meta search did not change rendered card")
 	}
@@ -1291,7 +1291,7 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 	if m.ultraCursor != 2 {
 		t.Fatalf("u: cursor = %d, want 2", m.ultraCursor)
 	}
-	// Compact cards (3 lines each) all fit at offset 0 in a 60×16 window.
+	// 2-line cards (status + description) all fit at offset 0 in a 60×16 window.
 	if m.ultraOffset != 0 {
 		t.Fatalf("u: offset = %d, want 0", m.ultraOffset)
 	}
@@ -1302,12 +1302,14 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 		t.Fatalf("u: cursor %d not visible at offset %d", m.ultraCursor, m.ultraOffset)
 	}
 
+	// At 60×7 budget=5: 2-line cards with 1-line separator → 2 cards fit (2+1+2=5).
+	// cursor=2 → ultraEnsureVisible scrolls offset to 1 so cards 1 and 2 are shown.
 	resize(60, 7)
-	if m.ultraOffset != 2 {
-		t.Fatalf("resize: offset = %d, want 2", m.ultraOffset)
+	if m.ultraOffset != 1 {
+		t.Fatalf("resize: offset = %d, want 1", m.ultraOffset)
 	}
-	if got := m.ultraVisibleCount(); got != 1 {
-		t.Fatalf("resize: visible count = %d, want 1", got)
+	if got := m.ultraVisibleCount(); got != 2 {
+		t.Fatalf("resize: visible count = %d, want 2", got)
 	}
 	if start := m.ultraVisibleStart(len(m.ultraTaskList())); m.ultraCursor < start || m.ultraCursor >= start+m.ultraVisibleCount() {
 		t.Fatalf("resize: cursor %d not visible at offset %d", m.ultraCursor, m.ultraOffset)
@@ -1321,20 +1323,22 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 		t.Fatalf("k: offset = %d, want 1", m.ultraOffset)
 	}
 
+	// pgdn += visibleCount(2): cursor 1→3 clamped to 2; still visible at offset 1.
 	step(tea.KeyPressMsg{Code: tea.KeyPgDown, Text: "pgdn"})
 	if m.ultraCursor != 2 {
 		t.Fatalf("pgdn: cursor = %d, want 2", m.ultraCursor)
 	}
-	if m.ultraOffset != 2 {
-		t.Fatalf("pgdn: offset = %d, want 2", m.ultraOffset)
+	if m.ultraOffset != 1 {
+		t.Fatalf("pgdn: offset = %d, want 1", m.ultraOffset)
 	}
 
+	// pgup -= visibleCount(2): cursor 2→0; ultraEnsureVisible scrolls offset to 0.
 	step(tea.KeyPressMsg{Code: tea.KeyPgUp, Text: "pgup"})
-	if m.ultraCursor != 1 {
-		t.Fatalf("pgup: cursor = %d, want 1", m.ultraCursor)
+	if m.ultraCursor != 0 {
+		t.Fatalf("pgup: cursor = %d, want 0", m.ultraCursor)
 	}
-	if m.ultraOffset != 1 {
-		t.Fatalf("pgup: offset = %d, want 1", m.ultraOffset)
+	if m.ultraOffset != 0 {
+		t.Fatalf("pgup: offset = %d, want 0", m.ultraOffset)
 	}
 
 	step(tea.KeyPressMsg{Code: 'g', Text: "g"})
@@ -1345,12 +1349,13 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 		t.Fatalf("g: offset = %d, want 0", m.ultraOffset)
 	}
 
+	// G goes to last task (2); ultraEnsureVisible scrolls offset to 1.
 	step(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	if m.ultraCursor != 2 {
 		t.Fatalf("G: cursor = %d, want 2", m.ultraCursor)
 	}
-	if m.ultraOffset != 2 {
-		t.Fatalf("G: offset = %d, want 2", m.ultraOffset)
+	if m.ultraOffset != 1 {
+		t.Fatalf("G: offset = %d, want 1", m.ultraOffset)
 	}
 }
 

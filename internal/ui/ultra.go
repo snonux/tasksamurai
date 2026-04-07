@@ -442,8 +442,7 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 
 func (m *Model) ultraSearchText(t task.Task) string {
 	return ultraJoinSections(
-		m.ultraHeaderText(t),
-		m.ultraMetaText(t),
+		m.ultraStatusText(t),
 		ultraOrDash(strings.TrimSpace(t.Description)),
 		m.ultraAnnotationsSearchText(t),
 	)
@@ -549,27 +548,21 @@ func (m *Model) ultraCursorStatus(tasks []task.Task) string {
 	return fmt.Sprintf("%d/%d", cursor+1, len(tasks))
 }
 
-func (m *Model) ultraHeaderText(t task.Task) string {
+// ultraStatusText returns the plain-text representation of the single
+// consolidated status line shown per card: ID, priority, status, urgency,
+// due date, project, and tags. Age, recur, and start are omitted — started
+// tasks are highlighted in yellow, and the remaining fields are available in
+// the detail view.
+func (m *Model) ultraStatusText(t task.Task) string {
 	return strings.Join(
 		[]string{
 			fmt.Sprintf("#%d", t.ID),
 			ultraOrDash(t.Priority),
 			ultraOrDash(t.Status),
 			fmt.Sprintf("%.1f", t.Urgency),
-			ultraTaskAge(t.Entry),
-		},
-		" | ",
-	)
-}
-
-func (m *Model) ultraMetaText(t task.Task) string {
-	return strings.Join(
-		[]string{
-			"project: " + ultraOrDash(t.Project),
-			"tags: " + ultraOrDash(strings.Join(t.Tags, " ")),
 			"due: " + ultraDueValue(m, t.Due),
-			"recur: " + ultraOrDash(t.Recur),
-			"start: " + ultraOrDash(m.formatTaskDate(t.Start)),
+			"proj: " + ultraOrDash(t.Project),
+			"tags: " + ultraOrDash(strings.Join(t.Tags, " ")),
 		},
 		" | ",
 	)
@@ -631,13 +624,10 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 		bg = m.theme.SelectedBG
 	}
 
-	// No blank lines between sections — ultraJoinSections passes "" so
-	// ultraJoinSectionsWithBlank skips the separator entirely. The outer
-	// ultraCardStyle already fills the selected background across all lines,
-	// so per-section bg-coloured blank rows are not needed.
+	// Single status line (ID, priority, status, urgency, due, proj, tags)
+	// followed by description and annotations — no blank lines between sections.
 	card := ultraJoinSections(
-		m.renderUltraHeaderWithRegex(t, width, re, bg),
-		m.renderUltraMetaWithRegex(t, width, re, bg),
+		m.renderUltraStatusWithRegex(t, width, re, bg),
 		m.renderUltraDescriptionWithRegex(t, width, re, bg),
 		m.renderUltraAnnotationsWithRegex(t, width, re, bg),
 	)
@@ -654,14 +644,9 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 	return ultraCardStyle(m.theme, width, selected, started, blink).Render(card)
 }
 
-// renderUltraHeader renders the task's primary state line (no selection bg).
-func (m *Model) renderUltraHeader(t task.Task, width int) string {
-	return m.renderUltraHeaderWithRegex(t, width, m.ultraSearchRegex, "")
-}
-
-// renderUltraMeta renders the task's secondary metadata line (no selection bg).
-func (m *Model) renderUltraMeta(t task.Task, width int) string {
-	return m.renderUltraMetaWithRegex(t, width, m.ultraSearchRegex, "")
+// renderUltraStatus renders the consolidated single-line card status (no selection bg).
+func (m *Model) renderUltraStatus(t task.Task, width int) string {
+	return m.renderUltraStatusWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
 // renderUltraDescription renders the wrapped task description body (no selection bg).
@@ -674,14 +659,37 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 	return m.renderUltraAnnotationsWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
+// renderUltraStatusWithRegex renders a single consolidated status line combining
+// the former header (ID, priority, status, urgency) and meta (due, project, tags)
+// fields. Age, recur, and start are omitted for compactness.
+func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
+	_ = width
 	idText := fmt.Sprintf("#%d", t.ID)
 	priorityText := ultraOrDash(t.Priority)
 	statusText := ultraOrDash(t.Status)
 	urgencyText := fmt.Sprintf("%.1f", t.Urgency)
-	ageText := ultraTaskAge(t.Entry)
-	line := strings.Join([]string{idText, priorityText, statusText, urgencyText, ageText}, " | ")
-	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, idText, priorityText, statusText, urgencyText, ageText) {
+	due := ultraDueValue(m, t.Due)
+	project := ultraOrDash(t.Project)
+	tags := ultraOrDash(strings.Join(t.Tags, " "))
+
+	// Priority badges render as 3-char wide pills in the styled path (Width(3)
+	// + Center). Pad the plain text to match so whole-line and styled paths
+	// produce the same visible text after ANSI stripping.
+	priorityPadded := priorityText
+	if t.Priority == "H" || t.Priority == "M" || t.Priority == "L" {
+		priorityPadded = " " + t.Priority + " "
+	}
+
+	line := strings.Join([]string{
+		idText, priorityPadded, statusText, urgencyText,
+		"due: " + due, "proj: " + project, "tags: " + tags,
+	}, " | ")
+	// Fall back to whole-line rendering when the regex spans a field separator
+	// or a full "key: value" pair (e.g. "proj: home") that can't be matched by
+	// checking label and value individually.
+	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re,
+		idText, priorityText, statusText, urgencyText, due, project, tags,
+	) {
 		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), re, bg)
 	}
 
@@ -695,38 +703,11 @@ func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Re
 	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, priorityBG)
 	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText, bg)
 	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText, bg)
-	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("240")), ageText, bg)
-	return strings.Join([]string{id, priority, status, urgency, age}, sep)
-}
-
-func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
-	_ = width
-	project := ultraOrDash(t.Project)
-	tags := ultraOrDash(strings.Join(t.Tags, " "))
-	due := ultraDueValue(m, t.Due)
-	recur := ultraOrDash(t.Recur)
-	start := ultraOrDash(m.formatTaskDate(t.Start))
-	line := strings.Join(
-		[]string{
-			"project: " + project,
-			"tags: " + tags,
-			"due: " + due,
-			"recur: " + recur,
-			"start: " + start,
-		},
-		" | ",
-	)
-	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, "project:", project, "tags:", tags, "due:", due, "recur:", recur, "start:", start) {
-		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("253")), re, bg)
-	}
-
-	sep := ultraFieldSep(bg)
 	parts := []string{
-		m.ultraKeyValue(re, "project", project, bg),
-		m.ultraKeyValue(re, "tags", tags, bg),
+		id, priority, status, urgency,
 		m.ultraKeyValue(re, "due", due, bg),
-		m.ultraKeyValue(re, "recur", recur, bg),
-		m.ultraKeyValue(re, "start", start, bg),
+		m.ultraKeyValue(re, "proj", project, bg),
+		m.ultraKeyValue(re, "tags", tags, bg),
 	}
 	return strings.Join(parts, sep)
 }
