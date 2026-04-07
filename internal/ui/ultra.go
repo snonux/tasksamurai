@@ -650,7 +650,8 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 		lines[0] = "! " + lines[0]
 		card = strings.Join(lines, "\n")
 	}
-	return ultraCardStyle(m.theme, width, selected, blink).Render(card)
+	started := t.Start != ""
+	return ultraCardStyle(m.theme, width, selected, started, blink).Render(card)
 }
 
 // renderUltraHeader renders the task's primary state line (no selection bg).
@@ -855,9 +856,16 @@ func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value, bg string) string
 	return m.ultraStyledText(re, labelStyle, label+":", bg) + space + m.ultraStyledText(re, valueStyle, value, bg)
 }
 
-func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
+func ultraCardStyle(theme Theme, width int, selected, started, blink bool) lipgloss.Style {
 	style := lipgloss.NewStyle().Width(width)
+	if started {
+		// Amber yellow background marks in-progress tasks; selection overrides it
+		// when the cursor is also on this card.
+		fg := contrastColor(theme.UltraStartedBG)
+		style = style.Foreground(lipgloss.Color(fg)).Background(lipgloss.Color(theme.UltraStartedBG))
+	}
 	if selected {
+		// Selection highlight takes priority over the started colour.
 		style = style.Foreground(lipgloss.Color(theme.SelectedFG)).Background(lipgloss.Color(theme.SelectedBG))
 	}
 	if blink {

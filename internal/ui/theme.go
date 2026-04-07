@@ -7,20 +7,21 @@ import (
 
 // Theme holds color configuration for the UI.
 type Theme struct {
-	HeaderFG   string
-	SelectedFG string
-	SelectedBG string
-	RowFG      string
-	RowBG      string
-	StatusFG   string
-	StatusBG   string
-	StartBG    string
-	OverdueBG  string
-	PrioLowBG  string
-	PrioMedBG  string
-	PrioHighBG string
-	SearchFG   string
-	SearchBG   string
+	HeaderFG      string
+	SelectedFG    string
+	SelectedBG    string
+	RowFG         string
+	RowBG         string
+	StatusFG      string
+	StatusBG      string
+	StartBG       string
+	UltraStartedBG string // background for started tasks in ultra mode
+	OverdueBG     string
+	PrioLowBG     string
+	PrioMedBG     string
+	PrioHighBG    string
+	SearchFG      string
+	SearchBG      string
 }
 
 // DefaultTheme returns the color theme used by Task Samurai.
@@ -33,7 +34,8 @@ func DefaultTheme() Theme {
 		RowBG:      "57",
 		StatusFG:   "229", // light yellow
 		StatusBG:   "57",  // dark purple — status bar background
-		StartBG:    "6",
+		StartBG:        "6",
+		UltraStartedBG: "220", // amber yellow — visually distinct "in progress" indicator
 		OverdueBG:  "1",
 		PrioLowBG:  "28",  // dark green — subtler than bright 10
 		PrioMedBG:  "33",  // medium blue — subtler than bright 12
@@ -49,7 +51,8 @@ func RandomTheme() Theme {
 		SelectedBG: randColor(),
 		RowBG:      randColor(),
 		StatusBG:   randColor(),
-		StartBG:    randColor(),
+		StartBG:        randColor(),
+		UltraStartedBG: randColor(),
 		OverdueBG:  randColor(),
 		PrioLowBG:  randColor(),
 		PrioMedBG:  randColor(),
