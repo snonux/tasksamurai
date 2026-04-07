@@ -809,7 +809,13 @@ func ultraFieldSep(bg string) string {
 func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value, bg string) string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.HeaderFG))
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	return m.ultraStyledText(re, labelStyle, label+":", bg) + " " + m.ultraStyledText(re, valueStyle, value, bg)
+	// The space between label and value must also carry bg; a plain " " would
+	// expose the terminal default (black) between the two styled spans.
+	space := lipgloss.NewStyle().Background(lipgloss.Color(bg)).Render(" ")
+	if bg == "" {
+		space = " "
+	}
+	return m.ultraStyledText(re, labelStyle, label+":", bg) + space + m.ultraStyledText(re, valueStyle, value, bg)
 }
 
 func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
