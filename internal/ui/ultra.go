@@ -594,7 +594,16 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 	if selected {
 		bg = m.theme.SelectedBG
 	}
-	card := ultraJoinSections(
+
+	// Blank line between sections must also carry bg; otherwise the terminal
+	// default (black) shows through on the empty separator line.
+	blankLine := lipgloss.NewStyle().Width(width).Background(lipgloss.Color(bg)).Render("")
+	if bg == "" {
+		blankLine = ""
+	}
+
+	card := ultraJoinSectionsWithBlank(
+		blankLine,
 		m.renderUltraHeaderWithRegex(t, width, re, bg),
 		m.renderUltraMetaWithRegex(t, width, re, bg),
 		m.renderUltraDescriptionWithRegex(t, width, re, bg),
@@ -830,13 +839,21 @@ func ultraPriorityStyle(theme Theme, priority string) lipgloss.Style {
 }
 
 func ultraJoinSections(sections ...string) string {
+	return ultraJoinSectionsWithBlank("", sections...)
+}
+
+// ultraJoinSectionsWithBlank joins non-empty sections separated by blankLine.
+// When blankLine is a styled empty string (e.g. with a background colour),
+// the inter-section gap carries that style instead of falling back to the
+// terminal default.
+func ultraJoinSectionsWithBlank(blankLine string, sections ...string) string {
 	var parts []string
 	for _, sec := range sections {
 		if sec == "" {
 			continue
 		}
 		if len(parts) > 0 {
-			parts = append(parts, "")
+			parts = append(parts, blankLine)
 		}
 		parts = append(parts, sec)
 	}
