@@ -1291,11 +1291,12 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 	if m.ultraCursor != 2 {
 		t.Fatalf("u: cursor = %d, want 2", m.ultraCursor)
 	}
-	if m.ultraOffset != 1 {
-		t.Fatalf("u: offset = %d, want 1", m.ultraOffset)
+	// Compact cards (3 lines each) all fit at offset 0 in a 60×16 window.
+	if m.ultraOffset != 0 {
+		t.Fatalf("u: offset = %d, want 0", m.ultraOffset)
 	}
-	if got := m.ultraVisibleCount(); got != 2 {
-		t.Fatalf("u: visible count = %d, want 2", got)
+	if got := m.ultraVisibleCount(); got != 3 {
+		t.Fatalf("u: visible count = %d, want 3", got)
 	}
 	if start := m.ultraVisibleStart(len(m.ultraTaskList())); m.ultraCursor < start || m.ultraCursor >= start+m.ultraVisibleCount() {
 		t.Fatalf("u: cursor %d not visible at offset %d", m.ultraCursor, m.ultraOffset)

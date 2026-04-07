@@ -498,10 +498,12 @@ func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	return m, cmd
 }
 
-// ultraApplySearch compiles value as a regex and updates the filtered task
-// index. If value is empty the filter is cleared. If the regex is invalid
-// (e.g. mid-typing an incomplete pattern) the existing filter is left
-// unchanged so the display does not flicker.
+// ultraApplySearch compiles value as a case-insensitive regex and updates the
+// filtered task index. The pattern is automatically wrapped with (?i) so plain
+// text searches like "foo" match "Foo" and "FOO" without extra effort. Explicit
+// flags (e.g. (?-i)) in the pattern override this default. If value is empty
+// the filter is cleared. If the regex is invalid (e.g. mid-typing an incomplete
+// pattern) the existing filter is left unchanged so the display does not flicker.
 func (m *Model) ultraApplySearch(value string) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -511,7 +513,13 @@ func (m *Model) ultraApplySearch(value string) {
 		m.ultraOffset = 0
 		return
 	}
-	re, err := compileAndCacheRegex(value)
+	// Prepend (?i) for case-insensitive matching unless the user already
+	// supplied inline flags (patterns starting with "(?" opt in explicitly).
+	pattern := value
+	if !strings.HasPrefix(pattern, "(?") {
+		pattern = "(?i)" + pattern
+	}
+	re, err := compileAndCacheRegex(pattern)
 	if err != nil {
 		// Keep the previous filter while the regex is incomplete.
 		return
@@ -570,11 +578,8 @@ func (m *Model) ultraDescriptionLines(t task.Task, width int) []string {
 		text = "-"
 	}
 
-	lines := wordWrap(text, ultraBodyWidth(width))
-	for i, line := range lines {
-		lines[i] = "  " + line
-	}
-	return lines
+	// No leading indent — keep description flush with the card edge for a compact layout.
+	return wordWrap(text, ultraBodyWidth(width))
 }
 
 func (m *Model) ultraDescriptionText(t task.Task, width int) string {
@@ -590,12 +595,8 @@ func (m *Model) ultraAnnotationsLines(t task.Task, width int) []string {
 	var lines []string
 	for _, ann := range t.Annotations {
 		text := fmt.Sprintf("[%s] %s", m.formatTaskDate(ann.Entry), ultraOrDash(strings.TrimSpace(ann.Description)))
-		for i, line := range wordWrap(text, bodyWidth) {
-			if i > 0 {
-				line = "  " + line
-			}
-			lines = append(lines, line)
-		}
+		// No indent on continuation lines — keep annotations flush for a compact layout.
+		lines = append(lines, wordWrap(text, bodyWidth)...)
 	}
 	return lines
 }
@@ -888,14 +889,16 @@ func ultraJoinSections(sections ...string) string {
 // ultraJoinSectionsWithBlank joins non-empty sections separated by blankLine.
 // When blankLine is a styled empty string (e.g. with a background colour),
 // the inter-section gap carries that style instead of falling back to the
-// terminal default.
+// terminal default. A blankLine of "" means no separator — sections are joined
+// with a plain newline for a compact, gap-free layout.
 func ultraJoinSectionsWithBlank(blankLine string, sections ...string) string {
 	var parts []string
 	for _, sec := range sections {
 		if sec == "" {
 			continue
 		}
-		if len(parts) > 0 {
+		if len(parts) > 0 && blankLine != "" {
+			// Only insert the blank line when one was explicitly provided.
 			parts = append(parts, blankLine)
 		}
 		parts = append(parts, sec)
