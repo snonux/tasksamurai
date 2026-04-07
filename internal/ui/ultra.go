@@ -586,12 +586,19 @@ func (m *Model) ultraAnnotationsSearchText(t task.Task) string {
 }
 
 // renderUltraCard assembles the card sections and applies the outer selection style.
+// bg is threaded through all inner render calls so that ANSI resets emitted by
+// per-field styles do not expose the terminal-default black background inside a
+// selected (grey) card.
 func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regexp.Regexp) string {
+	bg := ""
+	if selected {
+		bg = m.theme.SelectedBG
+	}
 	card := ultraJoinSections(
-		m.renderUltraHeaderWithRegex(t, width, re),
-		m.renderUltraMetaWithRegex(t, width, re),
-		m.renderUltraDescriptionWithRegex(t, width, re),
-		m.renderUltraAnnotationsWithRegex(t, width, re),
+		m.renderUltraHeaderWithRegex(t, width, re, bg),
+		m.renderUltraMetaWithRegex(t, width, re, bg),
+		m.renderUltraDescriptionWithRegex(t, width, re, bg),
+		m.renderUltraAnnotationsWithRegex(t, width, re, bg),
 	)
 	if card == "" {
 		return ""
@@ -605,27 +612,27 @@ func (m *Model) renderUltraCard(t task.Task, width int, selected bool, re *regex
 	return ultraCardStyle(m.theme, width, selected, blink).Render(card)
 }
 
-// renderUltraHeader renders the task's primary state line.
+// renderUltraHeader renders the task's primary state line (no selection bg).
 func (m *Model) renderUltraHeader(t task.Task, width int) string {
-	return m.renderUltraHeaderWithRegex(t, width, m.ultraSearchRegex)
+	return m.renderUltraHeaderWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-// renderUltraMeta renders the task's secondary metadata line.
+// renderUltraMeta renders the task's secondary metadata line (no selection bg).
 func (m *Model) renderUltraMeta(t task.Task, width int) string {
-	return m.renderUltraMetaWithRegex(t, width, m.ultraSearchRegex)
+	return m.renderUltraMetaWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-// renderUltraDescription renders the wrapped task description body.
+// renderUltraDescription renders the wrapped task description body (no selection bg).
 func (m *Model) renderUltraDescription(t task.Task, width int) string {
-	return m.renderUltraDescriptionWithRegex(t, width, m.ultraSearchRegex)
+	return m.renderUltraDescriptionWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-// renderUltraAnnotations renders wrapped annotation lines with timestamps.
+// renderUltraAnnotations renders wrapped annotation lines with timestamps (no selection bg).
 func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
-	return m.renderUltraAnnotationsWithRegex(t, width, m.ultraSearchRegex)
+	return m.renderUltraAnnotationsWithRegex(t, width, m.ultraSearchRegex, "")
 }
 
-func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Regexp) string {
+func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	idText := fmt.Sprintf("#%d", t.ID)
 	priorityText := ultraOrDash(t.Priority)
 	statusText := ultraOrDash(t.Status)
@@ -633,19 +640,19 @@ func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Re
 	ageText := ultraTaskAge(t.Entry)
 	line := strings.Join([]string{idText, priorityText, statusText, urgencyText, ageText}, " | ")
 	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, idText, priorityText, statusText, urgencyText, ageText) {
-		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), re)
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), re, bg)
 	}
 
-	// Render header fields with distinct colors; no background so unselected cards stay on black.
-	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), idText)
-	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText)
-	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText)
-	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText) // amber for urgency score
-	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("240")), ageText)
-	return strings.Join([]string{id, priority, status, urgency, age}, " | ")
+	sep := ultraFieldSep(bg)
+	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), idText, bg)
+	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, "") // priority badge keeps its own bg
+	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText, bg)
+	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText, bg)
+	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("240")), ageText, bg)
+	return strings.Join([]string{id, priority, status, urgency, age}, sep)
 }
 
-func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Regexp) string {
+func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	_ = width
 	project := ultraOrDash(t.Project)
 	tags := ultraOrDash(strings.Join(t.Tags, " "))
@@ -663,22 +670,26 @@ func (m *Model) renderUltraMetaWithRegex(t task.Task, width int, re *regexp.Rege
 		" | ",
 	)
 	if re != nil && re.MatchString(line) && !ultraRegexMatchesAny(re, "project:", project, "tags:", tags, "due:", due, "recur:", recur, "start:", start) {
-		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("253")), re)
+		return m.renderUltraSearchLine(line, lipgloss.NewStyle().Foreground(lipgloss.Color("253")), re, bg)
 	}
 
+	sep := ultraFieldSep(bg)
 	parts := []string{
-		m.ultraKeyValue(re, "project", project),
-		m.ultraKeyValue(re, "tags", tags),
-		m.ultraKeyValue(re, "due", due),
-		m.ultraKeyValue(re, "recur", recur),
-		m.ultraKeyValue(re, "start", start),
+		m.ultraKeyValue(re, "project", project, bg),
+		m.ultraKeyValue(re, "tags", tags, bg),
+		m.ultraKeyValue(re, "due", due, bg),
+		m.ultraKeyValue(re, "recur", recur, bg),
+		m.ultraKeyValue(re, "start", start, bg),
 	}
-	return strings.Join(parts, " | ")
+	return strings.Join(parts, sep)
 }
 
-func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *regexp.Regexp) string {
+func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	// Brighter foreground ("253") than annotations to give description visual priority.
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("253"))
+	if bg != "" {
+		style = style.Background(lipgloss.Color(bg))
+	}
 	var lines []string
 	for _, line := range m.ultraDescriptionLines(t, width) {
 		if re != nil && re.MatchString(line) {
@@ -689,7 +700,7 @@ func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *rege
 	return strings.Join(lines, "\n")
 }
 
-func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *regexp.Regexp) string {
+func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	lines := m.ultraAnnotationsLines(t, width)
 	if len(lines) == 0 {
 		return ""
@@ -697,6 +708,9 @@ func (m *Model) renderUltraAnnotationsWithRegex(t task.Task, width int, re *rege
 
 	// Dimmer than description ("244") to visually subordinate annotations.
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
+	if bg != "" {
+		style = style.Background(lipgloss.Color(bg))
+	}
 	for i, line := range lines {
 		if re != nil && re.MatchString(line) {
 			line = m.highlightMatches(line, re)
@@ -749,24 +763,44 @@ func (m *Model) ultraRenderCards(tasks []task.Task, width, selected, start, card
 	return lines
 }
 
-func (m *Model) ultraStyledText(re *regexp.Regexp, style lipgloss.Style, text string) string {
+// ultraStyledText renders text with style, applying bg as the background so
+// ANSI resets emitted by the inner Render call do not expose the terminal
+// default (black) inside a selected card.
+func (m *Model) ultraStyledText(re *regexp.Regexp, style lipgloss.Style, text, bg string) string {
+	if bg != "" {
+		style = style.Background(lipgloss.Color(bg))
+	}
 	if re != nil && re.MatchString(text) {
 		text = m.highlightMatches(text, re)
 	}
 	return style.Render(ultraOrDash(text))
 }
 
-func (m *Model) renderUltraSearchLine(text string, style lipgloss.Style, re *regexp.Regexp) string {
+// renderUltraSearchLine renders a full-line search match, applying bg when set.
+func (m *Model) renderUltraSearchLine(text string, style lipgloss.Style, re *regexp.Regexp, bg string) string {
+	if bg != "" {
+		style = style.Background(lipgloss.Color(bg))
+	}
 	if re != nil && re.MatchString(text) {
 		text = m.highlightMatches(text, re)
 	}
 	return style.Render(text)
 }
 
-func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value string) string {
+// ultraFieldSep returns the field separator with bg applied so it stays on the
+// card background even between styled spans.
+func ultraFieldSep(bg string) string {
+	sep := " | "
+	if bg != "" {
+		return lipgloss.NewStyle().Background(lipgloss.Color(bg)).Render(sep)
+	}
+	return sep
+}
+
+func (m *Model) ultraKeyValue(re *regexp.Regexp, label, value, bg string) string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.HeaderFG))
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	return m.ultraStyledText(re, labelStyle, label+":") + " " + m.ultraStyledText(re, valueStyle, value)
+	return m.ultraStyledText(re, labelStyle, label+":", bg) + " " + m.ultraStyledText(re, valueStyle, value, bg)
 }
 
 func ultraCardStyle(theme Theme, width int, selected, blink bool) lipgloss.Style {
