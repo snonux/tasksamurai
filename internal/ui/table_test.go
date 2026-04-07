@@ -898,22 +898,30 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	m.ultraSearchInput.SetValue("ultra needle")
 	m.ultraFocusedID = 17
 
+	// First q clears the active search but stays in ultra mode.
 	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd != nil {
-		t.Fatalf("q in ultra mode unexpectedly returned a command")
+		t.Fatalf("q with active search unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("q with active search should stay in ultra mode")
+	}
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("first q did not clear ultraSearchRegex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("first q did not clear ultraFiltered")
+	}
+
+	// Second q (no active search) exits ultra mode.
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd != nil {
+		t.Fatalf("q in ultra mode (no search) unexpectedly returned a command")
 	}
 	m = *mv.(*Model)
 	if m.showUltra {
-		t.Fatalf("q did not exit ultra mode")
-	}
-	if m.ultraSearchRegex != nil {
-		t.Fatalf("q did not clear ultraSearchRegex")
-	}
-	if m.ultraFiltered != nil {
-		t.Fatalf("q did not clear ultraFiltered")
-	}
-	if got := m.ultraSearchInput.Value(); got != "" {
-		t.Fatalf("q did not clear ultraSearchInput, got %q", got)
+		t.Fatalf("second q did not exit ultra mode")
 	}
 	if m.ultraFocusedID != 0 {
 		t.Fatalf("q did not clear ultraFocusedID, got %d", m.ultraFocusedID)
@@ -929,22 +937,30 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	m.ultraFiltered = []int{2}
 	m.ultraSearchInput.SetValue("second needle")
 
+	// First esc clears the active search, stays in ultra.
 	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if cmd != nil {
-		t.Fatalf("esc in ultra mode unexpectedly returned a command")
+		t.Fatalf("esc with active search unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("esc with active search should stay in ultra mode")
+	}
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("first esc did not clear ultraSearchRegex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("first esc did not clear ultraFiltered")
+	}
+
+	// Second esc (no active search) exits ultra mode.
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc in ultra mode (no search) unexpectedly returned a command")
 	}
 	m = *mv.(*Model)
 	if m.showUltra {
-		t.Fatalf("esc did not exit ultra mode")
-	}
-	if m.ultraSearchRegex != nil {
-		t.Fatalf("esc did not clear ultraSearchRegex")
-	}
-	if m.ultraFiltered != nil {
-		t.Fatalf("esc did not clear ultraFiltered")
-	}
-	if got := m.ultraSearchInput.Value(); got != "" {
-		t.Fatalf("esc did not clear ultraSearchInput, got %q", got)
+		t.Fatalf("second esc did not exit ultra mode")
 	}
 	if m.ultraFocusedID != 0 {
 		t.Fatalf("esc did not clear ultraFocusedID, got %d", m.ultraFocusedID)

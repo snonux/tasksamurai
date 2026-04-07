@@ -654,7 +654,12 @@ func (m *Model) renderUltraHeaderWithRegex(t task.Task, width int, re *regexp.Re
 
 	sep := ultraFieldSep(bg)
 	id := m.ultraStyledText(re, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253")), idText, bg)
-	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, "") // priority badge keeps its own bg
+	// H/M/L badges keep their own coloured background; plain "-" uses the card bg.
+	priorityBG := bg
+	if t.Priority == "H" || t.Priority == "M" || t.Priority == "L" {
+		priorityBG = ""
+	}
+	priority := m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, priorityBG)
 	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText, bg)
 	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText, bg)
 	age := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("240")), ageText, bg)
