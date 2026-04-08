@@ -30,7 +30,7 @@ func daysUntil(t time.Time) int {
 	// Normalize both times to midnight UTC to avoid timezone and fractional day issues
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	target := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
-	return int(target.Sub(today).Hours() / 24)
+	return int(target.Sub(today) / (24 * time.Hour))
 }
 
 // formatDueText returns a human-readable due date string
