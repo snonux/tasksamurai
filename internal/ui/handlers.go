@@ -582,6 +582,24 @@ func (m *Model) getTaskAtCursor() *task.Task {
 	return &m.tasks[cursor]
 }
 
+// getTaskForOpenURL returns the task that should be used by the open-URL
+// hotkey, honoring the active view's highlighted task.
+func (m *Model) getTaskForOpenURL() *task.Task {
+	if m.showTaskDetail && m.currentTaskDetail != nil {
+		return m.currentTaskDetail
+	}
+
+	if m.showUltra {
+		tasks := m.ultraTaskList()
+		if m.ultraCursor < 0 || m.ultraCursor >= len(tasks) {
+			return nil
+		}
+		return &tasks[m.ultraCursor]
+	}
+
+	return m.getTaskAtCursor()
+}
+
 // handleTaskDetailMode handles keyboard input in task detail view
 func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailSearching {

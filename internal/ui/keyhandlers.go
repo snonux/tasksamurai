@@ -307,7 +307,7 @@ func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
-	task := m.getTaskAtCursor()
+	task := m.getTaskForOpenURL()
 	if task == nil {
 		return m, nil
 	}

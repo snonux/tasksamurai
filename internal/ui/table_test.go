@@ -877,9 +877,8 @@ func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	if !strings.Contains(view, "exit ultra mode") {
 		t.Fatalf("ultra help content missing ultra exit binding: %q", view)
 	}
-	// "open URL from description" is now available in ultra mode (o key).
 	if !strings.Contains(view, "open URL from description") {
-		t.Fatalf("ultra help missing o/open-URL binding: %q", view)
+		t.Fatalf("ultra help content missing open-url binding: %q", view)
 	}
 	if strings.Contains(view, "edit current field") {
 		t.Fatalf("ultra help rendered normal-only inline edit binding: %q", view)
@@ -927,7 +926,7 @@ func TestUltraHelpSearchUsesUltraHelpLines(t *testing.T) {
 	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	step(tea.KeyPressMsg{Code: 'H', Text: "H"})
 	step(tea.KeyPressMsg{Code: '/', Text: "/"})
-	for _, r := range "URL" {
+	for _, r := range "view task details" {
 		step(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	step(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1524,6 +1523,74 @@ func TestUltraPriorityOpUsesUltraSelection(t *testing.T) {
 	}
 	if !m.prioritySelecting {
 		t.Fatalf("priority editor was not activated")
+	}
+}
+
+func TestUltraOpenURLHotkeyUsesUltraSelection(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	openLog := filepath.Join(tmp, "open.log")
+	browserPath := filepath.Join(tmp, "browser")
+
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"2\",\"description\":\"beta https://example.com\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	browserScript := "#!/bin/sh\n" +
+		"echo \"$1\" >> " + openLog + "\n"
+	if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, browserPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	m.showUltra = true
+	m.tbl.SetCursor(0)
+	m.ultraCursor = 1
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		// Opening a URL starts the blink animation, so a command is expected.
+		t.Fatalf("ultra open URL unexpectedly returned no command")
+	}
+	m = *mv.(*Model)
+
+	data, err := os.ReadFile(openLog)
+	if err != nil {
+		t.Fatalf("read open log: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "https://example.com" {
+		t.Fatalf("browser not called with ultra-selected url: %q", data)
+	}
+
+	// Clear the blink state so we can test the no-URL path with a second keypress.
+	m.blinkID = 0
+	m.blinkOn = false
+	m.ultraCursor = 0
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd != nil {
+		t.Fatalf("ultra open URL for task without url unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+
+	data, err = os.ReadFile(openLog)
+	if err != nil {
+		t.Fatalf("read open log after no-url task: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "https://example.com" {
+		t.Fatalf("browser was called for task without url: %q", data)
 	}
 }
 

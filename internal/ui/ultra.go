@@ -91,6 +91,7 @@ func (m Model) ultraHelpSections() []helpSection {
 			title: "Task Management",
 			items: []helpItem{
 				{key: "Enter, e, E", desc: "edit selected task"},
+				{key: "o", desc: "open URL from description"},
 				{key: "s", desc: "start/stop task"},
 				{key: "d", desc: "mark task done"},
 				{key: "U", desc: "undo last done"},
@@ -1059,6 +1060,8 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUltraToggleStart()
 	case "d":
 		return m.handleUltraMarkDone()
+	case "o":
+		return m.handleOpenURL()
 	case "p":
 		return m.handleUltraSetPriority()
 	case "w":
