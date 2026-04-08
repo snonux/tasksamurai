@@ -41,6 +41,42 @@ type Task struct {
 	Annotations []Annotation `json:"annotations"`
 }
 
+func run(args ...string) error {
+	if dbg.writer != nil {
+		fmt.Fprintln(dbg.writer, "task "+strings.Join(args, " "))
+	}
+	cmd := exec.Command("task", args...)
+
+	// Capture stderr to provide better error messages
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		// Include stderr output in the error message
+		if stderr.Len() > 0 {
+			return fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+		}
+		return err
+	}
+	return nil
+}
+
+// modifyTask runs a modify command with validation
+func modifyTask(id int, args ...string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
+	return run(append([]string{strconv.Itoa(id), "modify"}, args...)...)
+}
+
+// simpleTaskCommand runs a simple command on a task with validation
+func simpleTaskCommand(id int, command string) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid task ID: %d", id)
+	}
+	return run(strconv.Itoa(id), command)
+}
+
 // debugConfig groups the optional debug-logging state for the task package.
 // Collecting related vars into a struct makes the mutable state explicit and
 // allows the logger to be swapped or reset cleanly without touching unrelated
@@ -147,42 +183,6 @@ func Export(filters ...string) ([]Task, error) {
 		return nil, err
 	}
 	return tasks, nil
-}
-
-func run(args ...string) error {
-	if dbg.writer != nil {
-		fmt.Fprintln(dbg.writer, "task "+strings.Join(args, " "))
-	}
-	cmd := exec.Command("task", args...)
-
-	// Capture stderr to provide better error messages
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// Include stderr output in the error message
-		if stderr.Len() > 0 {
-			return fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return err
-	}
-	return nil
-}
-
-// modifyTask runs a modify command with validation
-func modifyTask(id int, args ...string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(append([]string{strconv.Itoa(id), "modify"}, args...)...)
-}
-
-// simpleTaskCommand runs a simple command on a task with validation
-func simpleTaskCommand(id int, command string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
-	}
-	return run(strconv.Itoa(id), command)
 }
 
 // SetStatus changes the status of the task with the given id.
