@@ -58,7 +58,9 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return err
 			}
 		}
-		_ = m.reload()
+		if err := m.reload(); err != nil {
+			return fmt.Errorf("reloading tasks: %w", err)
+		}
 		return nil
 	}
 
@@ -84,7 +86,9 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if err := task.SetDescription(m.descID, value); err != nil {
 			return err
 		}
-		_ = m.reload()
+		if err := m.reload(); err != nil {
+			return fmt.Errorf("reloading tasks: %w", err)
+		}
 		return nil
 	}
 
@@ -133,7 +137,9 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return err
 			}
 		}
-		_ = m.reload()
+		if err := m.reload(); err != nil {
+			return fmt.Errorf("reloading tasks: %w", err)
+		}
 		return nil
 	}
 
@@ -164,7 +170,9 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		m.dueEditing = false
-		m.reload()
+		if !m.reloadAndReport() {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		if m.showTaskDetail {
 			// In detail view, blink the due field
@@ -202,7 +210,9 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if err := task.SetRecurrence(m.recurID, value); err != nil {
 			return err
 		}
-		_ = m.reload()
+		if err := m.reload(); err != nil {
+			return fmt.Errorf("reloading tasks: %w", err)
+		}
 		return nil
 	}
 
@@ -233,7 +243,7 @@ func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	onExit := func() {
 		m.projEditing = false
-		m.reload()
+		m.reloadAndReport()
 	}
 
 	model, cmd := m.handleTextInput(msg, &m.projInput, onEnter, onExit)
@@ -267,7 +277,9 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		m.prioritySelecting = false
-		m.reload()
+		if !m.reloadAndReport() {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		if m.showTaskDetail {
 			// In detail view, blink the priority field
@@ -343,7 +355,9 @@ func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		m.addingTask = false
 		m.addInput.Blur()
-		m.reload()
+		if !m.reloadAndReport() {
+			return m, nil
+		}
 
 		// Find the newly added task
 		var newID int
@@ -408,7 +422,9 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.searching = false
 		m.searchInput.Blur()
-		m.reload()
+		if !m.reloadAndReport() {
+			return m, nil
+		}
 		m.updateTableHeight()
 
 		if len(m.searchMatches) > 0 {

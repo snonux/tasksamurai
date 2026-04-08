@@ -197,7 +197,7 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		m.reload()
+		m.reloadAndReport()
 		return m, nil
 	}
 	return m, tea.Quit
@@ -252,7 +252,7 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		m.reload()
+		m.reloadAndReport()
 		return m, nil
 	}
 	return m, nil
@@ -294,7 +294,9 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.reload()
+	if !m.reloadAndReport() {
+		return m, nil
+	}
 	return m, m.startBlink(id, false)
 }
 
@@ -420,7 +422,9 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.reload()
+	if !m.reloadAndReport() {
+		return m, nil
+	}
 	return m, m.startBlink(id, false)
 }
 
@@ -438,7 +442,9 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.reload()
+	if !m.reloadAndReport() {
+		return m, nil
+	}
 	return m, m.startBlink(id, false)
 }
 
@@ -575,7 +581,9 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.reload()
+	if !m.reloadAndReport() {
+		return m, nil
+	}
 	return m, m.startBlink(id, false)
 }
 
@@ -607,7 +615,7 @@ func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
-	m.reload()
+	m.reloadAndReport()
 	return m, nil
 }
 

@@ -307,7 +307,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 		}
 		m.blinkID = 0
 		m.blinkMarkDone = false
-		m.reload()
+		m.reloadAndReport()
 		return nil
 	}
 
@@ -462,6 +462,14 @@ func (m *Model) reload() error {
 	return nil
 }
 
+func (m *Model) reloadAndReport() bool {
+	if err := m.reload(); err != nil {
+		m.showError(fmt.Errorf("reloading tasks: %w", err))
+		return false
+	}
+	return true
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd { return nil }
 
@@ -572,7 +580,10 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 	if m.showUltra {
 		m.ultraFocusedID = m.editID
 	}
-	m.reload()
+	if !m.reloadAndReport() {
+		m.editID = 0
+		return m, nil
+	}
 	cmd := m.startBlink(m.editID, false)
 	m.editID = 0
 	return m, cmd
@@ -616,7 +627,9 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		}
 
 		// Reload and start blinking
-		m.reload()
+		if !m.reloadAndReport() {
+			return m, nil
+		}
 		return m, m.startDetailBlink(m.detailDescriptionFieldIndex())
 	}
 
@@ -667,7 +680,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 				m.showError(err)
 			}
 		}
-		m.reload()
+		m.reloadAndReport()
 		return m, nil
 	}
 

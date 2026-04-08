@@ -228,6 +228,65 @@ func TestHandleDescEditDoneRemovesTempFileOnEditorError(t *testing.T) {
 	}
 }
 
+func TestHandleFilterModeReportsReloadError(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	failFlag := filepath.Join(tmp, "fail-reload")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  if [ -f " + failFlag + " ]; then\n" +
+		"    echo 'reload failed' >&2\n" +
+		"    exit 42\n" +
+		"  fi\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"annotations\":[]}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := os.WriteFile(failFlag, []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m.filterEditing = true
+	m.filterInput.SetValue("project:alpha")
+
+	mv, cmd := (&m).handleFilterMode(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if !m.filterEditing {
+		t.Fatalf("filter editing was cleared after reload failure")
+	}
+	if cmd == nil {
+		t.Fatalf("reload failure did not return a clear-status command")
+	}
+	if !strings.Contains(m.statusMsg, "reloading tasks") {
+		t.Fatalf("unexpected status message: %q", m.statusMsg)
+	}
+	if got := strings.Join(m.filters, " "); got != "project:alpha" {
+		t.Fatalf("filters not applied before reload attempt: %q", got)
+	}
+}
+
 func TestDoneHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
