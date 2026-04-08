@@ -25,7 +25,7 @@ var priorityOptions = []string{"H", "M", "L", ""}
 
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
-	searchRegexCache = make(map[string]*regexp.Regexp)
+	searchRegexCache = make(map[string]*regexp.Regexp, 16)
 )
 
 type cellMatch struct {

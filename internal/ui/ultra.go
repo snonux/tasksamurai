@@ -1055,8 +1055,6 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUltraRemoveDueDate()
 	case "r":
 		return m.handleRandomDueDate()
-	case "o":
-		return m.handleOpenURL()
 	case "t":
 		return m.handleUltraEditTags()
 	case "a":
