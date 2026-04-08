@@ -317,7 +317,8 @@ func (m *Model) UpdateViewport() {
 	)
 }
 
-// SelectedRow returns the selected row.
+// SelectedRow returns the selected row, or nil when the cursor is out of range
+// and no row is selected.
 // You can cast it to your own implementation.
 func (m Model) SelectedRow() Row {
 	if m.cursor < 0 || m.cursor >= len(m.rows) {
