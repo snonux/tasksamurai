@@ -1,9 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestParseTaskDate(t *testing.T) {
@@ -227,6 +232,53 @@ func TestValidateDescription(t *testing.T) {
 	}
 }
 
+func TestHandleTextInputKeepsStateOnEnterError(t *testing.T) {
+	input := textinput.New()
+	input.SetValue("value")
+	input.Focus()
+
+	m := Model{windowHeight: 20}
+	called := false
+
+	mv, cmd := (&m).handleTextInput(tea.KeyPressMsg{Code: tea.KeyEnter}, &input, func(string) error {
+		return fmt.Errorf("boom")
+	}, func() {
+		called = true
+	})
+	m = *mv.(*Model)
+
+	if cmd == nil {
+		t.Fatalf("expected clear-status command on enter error")
+	}
+	if called {
+		t.Fatalf("onExit should not run on enter error")
+	}
+	if !input.Focused() {
+		t.Fatalf("input should stay focused on enter error")
+	}
+	if !strings.Contains(m.statusMsg, "boom") {
+		t.Fatalf("unexpected status message: %q", m.statusMsg)
+	}
+}
+
+func TestActivateDueEditFallsBackToNowOnInvalidDate(t *testing.T) {
+	m := Model{windowHeight: 20}
+	before := time.Now().Add(-time.Second)
+
+	m.activateDueEdit(7, "not-a-date")
+
+	if !m.dueEditing {
+		t.Fatalf("due editing was not enabled")
+	}
+	if m.dueID != 7 {
+		t.Fatalf("due ID = %d, want 7", m.dueID)
+	}
+	after := time.Now().Add(time.Second)
+	if m.dueDate.Before(before) || m.dueDate.After(after) {
+		t.Fatalf("due date fallback was not based on now: %v", m.dueDate)
+	}
+}
+
 func TestValidateDueDate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -362,7 +414,6 @@ func TestValidateRecurrence(t *testing.T) {
 		})
 	}
 }
-
 // TestParseFilterInput verifies that parseFilterInput correctly handles
 // taskwarrior filter expressions, including attribute filters (proj:xxx),
 // tag filters (+tag), quoted values (description:"some text"), and empty input.
