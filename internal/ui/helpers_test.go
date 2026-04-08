@@ -2,8 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -535,7 +535,7 @@ func TestParseFilterInput(t *testing.T) {
 				t.Errorf("parseFilterInput(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 				return
 			}
-			if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
+			if !tt.wantErr && !slices.Equal(got, tt.want) {
 				t.Errorf("parseFilterInput(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
