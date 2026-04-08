@@ -85,15 +85,11 @@ type detailViewState struct {
 	detailBlinkField  int  // field currently blinking (-1 = none)
 	detailBlinkOn     bool // whether the blink is currently on
 	detailBlinkCount  int  // number of blink cycles completed so far
-	// detailDescEditing lives here (not in editState) because it drives an
-	// external-editor launch from the detail overlay, not inline text input.
-	detailDescEditing bool // whether the description editor is open
 }
 
 // ultraState holds the state for the ultra mode task list and its search UI.
 type ultraState struct {
 	showUltra        bool
-	ultraStartup     bool // true when ultra was set via --ultra flag; q quits directly, esc never does
 	ultraCursor      int
 	ultraOffset      int
 	ultraSearching   bool
@@ -101,6 +97,18 @@ type ultraState struct {
 	ultraSearchRegex *regexp.Regexp
 	ultraFiltered    []int
 	ultraFocusedID   int
+}
+
+// detailEditState holds detail-overlay state that belongs to the external
+// description editor flow instead of the overlay itself.
+type detailEditState struct {
+	detailDescEditing bool
+}
+
+// ultraModeState holds ultra-mode lifecycle flags that are separate from the
+// cursor, search, and filter state.
+type ultraModeState struct {
+	ultraStartup bool
 }
 
 // editState holds inline field-editing state for the task table.
@@ -158,6 +166,8 @@ type Model struct {
 	searchState     // task-table and help-screen search (see searchState)
 	detailViewState // task detail overlay (see detailViewState)
 	ultraState      // ultra mode task list and search state (see ultraState)
+	detailEditState // detail-overlay external description editor state
+	ultraModeState  // ultra-mode lifecycle flags
 	editState       // inline field editing (see editState)
 
 	cellExpanded bool

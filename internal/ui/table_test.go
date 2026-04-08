@@ -228,7 +228,7 @@ func TestHandleDescEditDoneRemovesTempFileOnEditorError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := Model{detailViewState: detailViewState{detailDescEditing: true}}
+	m := Model{detailEditState: detailEditState{detailDescEditing: true}}
 	mv, cmd := (&m).handleDescEditDone(descEditDoneMsg{
 		err:      fmt.Errorf("editor failed"),
 		tempFile: tempFile,
