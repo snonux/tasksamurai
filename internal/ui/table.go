@@ -204,6 +204,12 @@ type descEditDoneMsg struct {
 
 type blinkMsg struct{}
 
+type descriptionTempFile interface {
+	Name() string
+	WriteString(string) (int, error)
+	Close() error
+}
+
 // blinkInterval controls how quickly the row flashes when a task changes.
 // A shorter interval results in a faster blink.
 const blinkInterval = 150 * time.Millisecond
@@ -211,6 +217,28 @@ const blinkInterval = 150 * time.Millisecond
 // blinkCycles is the number of times to blink before stopping.
 // The total blink duration is blinkInterval * blinkCycles.
 const blinkCycles = 8
+
+func prepareDescriptionTempFile(description string, newTempFile func() (descriptionTempFile, error)) (string, error) {
+	tmpFile, err := newTempFile()
+	if err != nil {
+		return "", err
+	}
+
+	tmpPath := tmpFile.Name()
+
+	_, writeErr := tmpFile.WriteString(description)
+	closeErr := tmpFile.Close()
+	if writeErr != nil {
+		_ = os.Remove(tmpPath)
+		return "", writeErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmpPath)
+		return "", closeErr
+	}
+
+	return tmpPath, nil
+}
 
 // editCmd returns a command that edits the task and sends an
 // editDoneMsg once the process is complete.
@@ -222,18 +250,10 @@ func editCmd(id int) tea.Cmd {
 // editDescriptionCmd returns a command that opens the description in external editor
 func editDescriptionCmd(description string) tea.Cmd {
 	return func() tea.Msg {
-		// Create temp file
-		tmpFile, err := os.CreateTemp("", "tasksamurai-desc-*.txt")
+		tmpPath, err := prepareDescriptionTempFile(description, func() (descriptionTempFile, error) {
+			return os.CreateTemp("", "tasksamurai-desc-*.txt")
+		})
 		if err != nil {
-			return descEditDoneMsg{err: err, tempFile: ""}
-		}
-		tmpPath := tmpFile.Name()
-
-		// Write current description to temp file
-		_, err = tmpFile.WriteString(description)
-		_ = tmpFile.Close()
-		if err != nil {
-			_ = os.Remove(tmpPath)
 			return descEditDoneMsg{err: err, tempFile: ""}
 		}
 

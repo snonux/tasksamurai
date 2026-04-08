@@ -200,6 +200,27 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	}
 }
 
+func TestPrepareDescriptionTempFileRemovesTempFileOnWriteError(t *testing.T) {
+	tmp := t.TempDir()
+	tempFile := filepath.Join(tmp, "desc.txt")
+	if err := os.WriteFile(tempFile, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := prepareDescriptionTempFile("updated description", func() (descriptionTempFile, error) {
+		return &failingDescriptionTempFile{path: tempFile}, nil
+	})
+	if err == nil {
+		t.Fatalf("prepareDescriptionTempFile succeeded unexpectedly: %q", path)
+	}
+	if path != "" {
+		t.Fatalf("expected empty path on error, got %q", path)
+	}
+	if _, statErr := os.Stat(tempFile); !os.IsNotExist(statErr) {
+		t.Fatalf("temp file still exists after write error: %v", statErr)
+	}
+}
+
 func TestHandleDescEditDoneRemovesTempFileOnEditorError(t *testing.T) {
 	tmp := t.TempDir()
 	tempFile := filepath.Join(tmp, "desc.txt")
@@ -226,6 +247,22 @@ func TestHandleDescEditDoneRemovesTempFileOnEditorError(t *testing.T) {
 	if !strings.Contains(m.statusMsg, "Edit error: editor failed") {
 		t.Fatalf("unexpected status message: %q", m.statusMsg)
 	}
+}
+
+type failingDescriptionTempFile struct {
+	path string
+}
+
+func (f *failingDescriptionTempFile) Name() string {
+	return f.path
+}
+
+func (f *failingDescriptionTempFile) WriteString(string) (int, error) {
+	return 0, fmt.Errorf("write failed")
+}
+
+func (f *failingDescriptionTempFile) Close() error {
+	return nil
 }
 
 func TestHandleFilterModeReportsReloadError(t *testing.T) {
