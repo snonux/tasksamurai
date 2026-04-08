@@ -762,6 +762,80 @@ func TestEscClosesHelp(t *testing.T) {
 	}
 }
 
+func TestEscDoesNotQuitFromTable(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc in table mode unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showHelp || m.showTaskDetail || m.showUltra {
+		t.Fatalf("esc changed mode unexpectedly: help=%v detail=%v ultra=%v", m.showHelp, m.showTaskDetail, m.showUltra)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd == nil {
+		t.Fatalf("q in table mode did not return a quit command")
+	}
+	m = *mv.(*Model)
+	if m.showHelp || m.showTaskDetail || m.showUltra {
+		t.Fatalf("q changed mode unexpectedly: help=%v detail=%v ultra=%v", m.showHelp, m.showTaskDetail, m.showUltra)
+	}
+}
+
+func TestEscDoesNotQuitUltraStartup(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.SetUltra(true)
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc in ultra startup unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("esc in ultra startup exited ultra mode")
+	}
+
+	m.ultraSearchRegex = regexp.MustCompile("alpha")
+	m.ultraFiltered = []int{0}
+	m.ultraSearchInput.SetValue("alpha")
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd != nil {
+		t.Fatalf("esc in ultra startup with search unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("esc in ultra startup with search exited ultra mode")
+	}
+	if m.ultraSearchRegex != nil {
+		t.Fatalf("esc in ultra startup with search did not clear ultraSearchRegex")
+	}
+	if m.ultraFiltered != nil {
+		t.Fatalf("esc in ultra startup with search did not clear ultraFiltered")
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd == nil {
+		t.Fatalf("q in ultra startup did not return a quit command")
+	}
+}
+
 func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupBasicTask(t, tmp)

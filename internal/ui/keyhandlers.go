@@ -19,8 +19,10 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If help is shown, handle special cases
 	if m.showHelp {
 		switch msg.String() {
-		case "H", "esc", "q":
-			return m.handleQuitOrEscape()
+		case "H", "q":
+			return m.handleQuitKey()
+		case "esc":
+			return m.handleEscapeKey()
 		case "/", "?":
 			return m.handleHelpSearch()
 		case "n":
@@ -54,8 +56,10 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()
-	case "q", "esc":
-		return m.handleQuitOrEscape()
+	case "q":
+		return m.handleQuitKey()
+	case "esc":
+		return m.handleEscapeKey()
 	case "e", "E":
 		return m.handleEditTask()
 	case "s":
@@ -144,7 +148,7 @@ func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
+func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 	if m.showHelp {
 		m.showHelp = false
 		// Clear help search state
@@ -157,8 +161,8 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.showUltra {
-		// Active search: q/esc clears the search filter first, same as in
-		// normal table mode. Only proceed to exit/quit when no search is active.
+		// Active search: q clears the search filter first, same as in normal
+		// table mode. Only proceed to exit/quit when no search is active.
 		if m.ultraSearchRegex != nil {
 			m.ultraSearchRegex = nil
 			m.ultraFiltered = nil
@@ -167,7 +171,7 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// When started via --ultra flag there is no table view to return to,
-		// so q/esc exits the application directly.
+		// so q exits the application directly.
 		if m.ultraStartup {
 			return m, tea.Quit
 		}
@@ -197,6 +201,61 @@ func (m *Model) handleQuitOrEscape() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, tea.Quit
+}
+
+func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
+	if m.showHelp {
+		m.showHelp = false
+		// Clear help search state
+		m.helpSearchRegex = nil
+		m.helpSearchMatches = nil
+		m.helpSearchIndex = 0
+		m.helpSearchInput.SetValue("")
+		// Reset help viewport
+		m.helpViewport = viewport.Model{}
+		return m, nil
+	}
+	if m.showUltra {
+		// Active search: esc clears the search filter first, same as in
+		// normal table mode. It never quits the application.
+		if m.ultraSearchRegex != nil {
+			m.ultraSearchRegex = nil
+			m.ultraFiltered = nil
+			m.ultraCursor = 0
+			m.ultraOffset = 0
+			return m, nil
+		}
+		// When started via --ultra flag there is no table view to return to,
+		// so esc just stays in ultra mode.
+		if m.ultraStartup {
+			return m, nil
+		}
+		m.ultraClearFocusedID()
+		m.showUltra = false
+		m.ultraSearchInput.SetValue("")
+		return m, nil
+	}
+	if m.showTaskDetail {
+		m.showTaskDetail = false
+		m.currentTaskDetail = nil
+		m.detailSearching = false
+		m.detailSearchRegex = nil
+		m.detailSearchInput.SetValue("")
+		return m, nil
+	}
+	if m.cellExpanded {
+		m.cellExpanded = false
+		m.updateTableHeight()
+		return m, nil
+	}
+	if m.searchRegex != nil {
+		m.searchRegex = nil
+		m.searchMatches = nil
+		m.searchIndex = 0
+		m.reload()
+		return m, nil
+	}
+	return m, nil
 }
 
 func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {

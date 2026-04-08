@@ -615,8 +615,10 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Normal task detail view mode
 	switch msg.String() {
-	case "q", "esc":
-		return m.handleQuitOrEscape()
+	case "q":
+		return m.handleQuitKey()
+	case "esc":
+		return m.handleEscapeKey()
 	case "/", "?":
 		m.detailSearching = true
 		m.detailSearchInput.SetValue("")

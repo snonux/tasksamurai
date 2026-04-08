@@ -1010,8 +1010,10 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()
-	case "q", "esc":
-		return m.handleQuitOrEscape()
+	case "q":
+		return m.handleQuitKey()
+	case "esc":
+		return m.handleEscapeKey()
 	case "u":
 		// Toggle back to the traditional table view. Works even when started
 		// via --ultra because the table model always exists; it was just never
