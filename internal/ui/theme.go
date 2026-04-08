@@ -1,63 +1,64 @@
 package ui
 
 import (
+	"math"
 	"math/rand"
 	"strconv"
 )
 
 // Theme holds color configuration for the UI.
 type Theme struct {
-	HeaderFG      string
-	SelectedFG    string
-	SelectedBG    string
-	RowFG         string
-	RowBG         string
-	StatusFG      string
-	StatusBG      string
-	StartBG       string
+	HeaderFG       string
+	SelectedFG     string
+	SelectedBG     string
+	RowFG          string
+	RowBG          string
+	StatusFG       string
+	StatusBG       string
+	StartBG        string
 	UltraStartedBG string // background for started tasks in ultra mode
-	OverdueBG     string
-	PrioLowBG     string
-	PrioMedBG     string
-	PrioHighBG    string
-	SearchFG      string
-	SearchBG      string
+	OverdueBG      string
+	PrioLowBG      string
+	PrioMedBG      string
+	PrioHighBG     string
+	SearchFG       string
+	SearchBG       string
 }
 
 // DefaultTheme returns the color theme used by Task Samurai.
 func DefaultTheme() Theme {
 	return Theme{
-		HeaderFG:   "75",  // steel blue — labels in ultra cards
-		SelectedFG: "255", // bright white — text on selected card
-		SelectedBG: "238", // dark grey — clean selection highlight on black background
-		RowFG:      "0",
-		RowBG:      "57",
-		StatusFG:   "229", // light yellow
-		StatusBG:   "57",  // dark purple — status bar background
+		HeaderFG:       "75",  // steel blue — labels in ultra cards
+		SelectedFG:     "255", // bright white — text on selected card
+		SelectedBG:     "238", // dark grey — clean selection highlight on black background
+		RowFG:          "0",
+		RowBG:          "57",
+		StatusFG:       "229", // light yellow
+		StatusBG:       "57",  // dark purple — status bar background
 		StartBG:        "6",
 		UltraStartedBG: "220", // amber yellow — visually distinct "in progress" indicator
-		OverdueBG:  "1",
-		PrioLowBG:  "28",  // dark green — subtler than bright 10
-		PrioMedBG:  "33",  // medium blue — subtler than bright 12
-		PrioHighBG: "160", // dark red — subtler than bright 9
-		SearchFG:   "16",
-		SearchBG:   "220", // amber — easier on eyes than pure yellow 226
+		OverdueBG:      "1",
+		PrioLowBG:      "28",  // dark green — subtler than bright 10
+		PrioMedBG:      "33",  // medium blue — subtler than bright 12
+		PrioHighBG:     "160", // dark red — subtler than bright 9
+		SearchFG:       "16",
+		SearchBG:       "220", // amber — easier on eyes than pure yellow 226
 	}
 }
 
 func RandomTheme() Theme {
 	th := Theme{
-		HeaderFG:   randColor(),
-		SelectedBG: randColor(),
-		RowBG:      randColor(),
-		StatusBG:   randColor(),
+		HeaderFG:       randColor(),
+		SelectedBG:     randColor(),
+		RowBG:          randColor(),
+		StatusBG:       randColor(),
 		StartBG:        randColor(),
 		UltraStartedBG: randColor(),
-		OverdueBG:  randColor(),
-		PrioLowBG:  randColor(),
-		PrioMedBG:  randColor(),
-		PrioHighBG: randColor(),
-		SearchBG:   randColor(),
+		OverdueBG:      randColor(),
+		PrioLowBG:      randColor(),
+		PrioMedBG:      randColor(),
+		PrioHighBG:     randColor(),
+		SearchBG:       randColor(),
 	}
 	th.SelectedFG = contrastColor(th.SelectedBG)
 	th.RowFG = contrastColor(th.RowBG)
@@ -72,18 +73,37 @@ func randColor() string {
 
 func contrastColor(bg string) string {
 	i, err := strconv.Atoi(bg)
-	if err != nil {
-		return "0"
+	if err != nil || i < 0 || i > 255 {
+		return "15"
 	}
-	if brightness(i) > 128 {
+	r, g, b := xtermRGB(i)
+	if contrastRatio(r, g, b, 0, 0, 0) >= contrastRatio(r, g, b, 255, 255, 255) {
 		return "0"
 	}
 	return "15"
 }
 
-func brightness(i int) float64 {
-	r, g, b := xtermRGB(i)
-	return 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+func contrastRatio(r1, g1, b1, r2, g2, b2 int) float64 {
+	l1 := relativeLuminance(r1, g1, b1)
+	l2 := relativeLuminance(r2, g2, b2)
+	if l1 < l2 {
+		l1, l2 = l2, l1
+	}
+	return (l1 + 0.05) / (l2 + 0.05)
+}
+
+func relativeLuminance(r, g, b int) float64 {
+	return 0.2126*linearizeColorChannel(r) +
+		0.7152*linearizeColorChannel(g) +
+		0.0722*linearizeColorChannel(b)
+}
+
+func linearizeColorChannel(v int) float64 {
+	c := float64(v) / 255.0
+	if c <= 0.04045 {
+		return c / 12.92
+	}
+	return math.Pow((c+0.055)/1.055, 2.4)
 }
 
 func xtermRGB(i int) (int, int, int) {
