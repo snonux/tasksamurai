@@ -8,10 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/shlex"
 )
@@ -392,98 +390,4 @@ func Edit(id int) error {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
 	return EditCmd(id).Run()
-}
-
-// SortTasks orders tasks by start status, priority, due date, tag names and id.
-// Started tasks are always placed before non-started ones. Tasks without a due
-// date are placed after tasks with a due date. Overdue tasks are placed at the
-// very top regardless of other properties.
-//
-// The sort order is:
-// 1. Overdue tasks (oldest due date first)
-// 2. Started tasks (not completed)
-// 3. High priority tasks
-// 4. Tasks with earlier due dates
-// 5. Tasks sorted alphabetically by tags
-// 6. Tasks sorted by ID (oldest first)
-func SortTasks(tasks []Task) {
-	// Helper to join tags in a consistent order for comparison
-	joinTags := func(tags []string) string {
-		if len(tags) == 0 {
-			return ""
-		}
-		cpy := append([]string(nil), tags...)
-		sort.Strings(cpy)
-		return strings.Join(cpy, " ")
-	}
-
-	// Convert priority to numeric value for comparison (higher = more important)
-	priVal := func(p string) int {
-		switch p {
-		case "H":
-			return 3
-		case "M":
-			return 2
-		case "L":
-			return 1
-		default:
-			return 0
-		}
-	}
-
-	// Parse due date string into time.Time
-	parseDue := func(s string) (time.Time, bool) {
-		if s == "" {
-			return time.Time{}, false
-		}
-		t, err := time.Parse(DateFormat, s)
-		if err != nil {
-			return time.Time{}, false
-		}
-		return t, true
-	}
-
-	// Check if a task is overdue
-	overdue := func(t Task) bool {
-		du, ok := parseDue(t.Due)
-		return ok && time.Now().After(du)
-	}
-
-	sort.Slice(tasks, func(i, j int) bool {
-		ti, tj := tasks[i], tasks[j]
-
-		if oi, oj := overdue(ti), overdue(tj); oi != oj {
-			return oi
-		}
-
-		startedI := ti.Start != "" && ti.Status != "completed"
-		startedJ := tj.Start != "" && tj.Status != "completed"
-		if startedI != startedJ {
-			return startedI
-		}
-
-		pi, pj := priVal(ti.Priority), priVal(tj.Priority)
-		if pi != pj {
-			return pi > pj
-		}
-
-		di, iok := parseDue(ti.Due)
-		dj, jok := parseDue(tj.Due)
-		if iok && !jok {
-			return true
-		}
-		if !iok && jok {
-			return false
-		}
-		if iok && jok && !di.Equal(dj) {
-			return di.Before(dj)
-		}
-
-		tgI, tgJ := joinTags(ti.Tags), joinTags(tj.Tags)
-		if tgI != tgJ {
-			return tgI < tgJ
-		}
-
-		return ti.ID < tj.ID
-	})
 }
