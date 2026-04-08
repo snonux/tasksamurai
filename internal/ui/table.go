@@ -684,26 +684,16 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 // View renders the table UI.
 func (m Model) View() tea.View {
 	var content string
-	if m.showHelp {
+	switch {
+	case m.showHelp:
 		m.updateHelpContent()
 		content = m.renderHelpScreen()
-	} else if m.showTaskDetail {
-		content = m.renderTaskDetail()
-	} else if m.showUltra {
-		content = m.renderUltraModus()
-	} else {
-		// expandedCellView is only appended when the user has toggled the
-		// expanded-cell panel open; including it unconditionally caused a
-		// double-render whenever cellExpanded was true.
-		view := lipgloss.JoinVertical(lipgloss.Left,
-			m.topStatusLine(),
-			m.tbl.View(),
-			m.statusLine(),
-		)
-		if m.cellExpanded {
-			view = lipgloss.JoinVertical(lipgloss.Left, view, m.expandedCellView())
-		}
-		content = m.appendInlineInputOverlay(view)
+	case m.showTaskDetail:
+		content = m.renderDetailScreen()
+	case m.showUltra:
+		content = m.renderUltraScreen()
+	default:
+		content = m.renderTableScreen()
 	}
 
 	v := tea.NewView(content)
@@ -743,6 +733,29 @@ func (m Model) appendInlineInputOverlay(view string) string {
 		view = lipgloss.JoinVertical(lipgloss.Left, view, overlay)
 	}
 	return view
+}
+
+func (m Model) renderDetailScreen() string {
+	return m.renderTaskDetail()
+}
+
+func (m Model) renderUltraScreen() string {
+	return m.renderUltraModus()
+}
+
+func (m Model) renderTableScreen() string {
+	// expandedCellView is only appended when the user has toggled the
+	// expanded-cell panel open; including it unconditionally caused a
+	// double-render whenever cellExpanded was true.
+	view := lipgloss.JoinVertical(lipgloss.Left,
+		m.topStatusLine(),
+		m.tbl.View(),
+		m.statusLine(),
+	)
+	if m.cellExpanded {
+		view = lipgloss.JoinVertical(lipgloss.Left, view, m.expandedCellView())
+	}
+	return m.appendInlineInputOverlay(view)
 }
 
 // updateHelpContent updates the help viewport content
