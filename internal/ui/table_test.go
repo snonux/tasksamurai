@@ -12,6 +12,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 func TestAnnotateHotkey(t *testing.T) {
@@ -133,6 +135,96 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 
 	if !strings.Contains(string(logData), "denotate") {
 		t.Fatalf("denotate not called: %s", logData)
+	}
+}
+
+func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"old description\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"printf '%s\\n' \"$@\" >> " + logFile + "\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.currentTaskDetail = &task.Task{ID: 1, Description: "old description"}
+	m.showTaskDetail = true
+	m.detailDescEditing = true
+
+	tempFile := filepath.Join(tmp, "desc.txt")
+	if err := os.WriteFile(tempFile, []byte("updated description\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mv, cmd := (&m).handleDescEditDone(descEditDoneMsg{tempFile: tempFile})
+	m = *mv.(*Model)
+
+	if m.detailDescEditing {
+		t.Fatalf("description editor state was not cleared")
+	}
+	if cmd == nil {
+		t.Fatalf("handleDescEditDone did not return a reload command")
+	}
+	if _, err := os.Stat(tempFile); !os.IsNotExist(err) {
+		t.Fatalf("temp file still exists after handler: %v", err)
+	}
+
+	logData, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(logData), "1\nmodify\ndescription:updated description") {
+		t.Fatalf("description update did not reach task command: %s", logData)
+	}
+}
+
+func TestHandleDescEditDoneRemovesTempFileOnEditorError(t *testing.T) {
+	tmp := t.TempDir()
+	tempFile := filepath.Join(tmp, "desc.txt")
+	if err := os.WriteFile(tempFile, []byte("ignored"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{detailViewState: detailViewState{detailDescEditing: true}}
+	mv, cmd := (&m).handleDescEditDone(descEditDoneMsg{
+		err:      fmt.Errorf("editor failed"),
+		tempFile: tempFile,
+	})
+	m = *mv.(*Model)
+
+	if m.detailDescEditing {
+		t.Fatalf("description editor state was not cleared after error")
+	}
+	if cmd == nil {
+		t.Fatalf("error path did not return a status-clear command")
+	}
+	if _, err := os.Stat(tempFile); !os.IsNotExist(err) {
+		t.Fatalf("temp file still exists after error path: %v", err)
+	}
+	if !strings.Contains(m.statusMsg, "Edit error: editor failed") {
+		t.Fatalf("unexpected status message: %q", m.statusMsg)
 	}
 }
 

@@ -581,7 +581,9 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 // handleDescEditDone handles the completion of description editing
 func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	m.detailDescEditing = false
-	_ = os.Remove(msg.tempFile) // Clean up temp file
+	if msg.tempFile != "" {
+		defer func() { _ = os.Remove(msg.tempFile) }()
+	}
 
 	if msg.err != nil {
 		m.statusMsg = fmt.Sprintf("Edit error: %v", msg.err)
