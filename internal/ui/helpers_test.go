@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,6 +97,52 @@ func TestFormatDueText(t *testing.T) {
 				t.Errorf("formatDueText() = %v, want %v", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestSearchRegexCacheConcurrentAccess(t *testing.T) {
+	searchRegexMu.Lock()
+	searchRegexCache = make(map[string]*regexp.Regexp)
+	searchRegexMu.Unlock()
+	t.Cleanup(func() {
+		searchRegexMu.Lock()
+		searchRegexCache = make(map[string]*regexp.Regexp)
+		searchRegexMu.Unlock()
+	})
+
+	patterns := []string{`alpha`, `beta`}
+	var wg sync.WaitGroup
+	errCh := make(chan error, 128)
+
+	for i := 0; i < 16; i++ {
+		for _, pattern := range patterns {
+			wg.Add(1)
+			go func(pattern string) {
+				defer wg.Done()
+
+				re, err := compileAndCacheRegex(pattern)
+				if err != nil {
+					errCh <- err
+					return
+				}
+				if re == nil || !re.MatchString(pattern) {
+					errCh <- fmt.Errorf("compiled regex for %q did not match", pattern)
+					return
+				}
+				if cached, ok := cachedSearchRegex(pattern); !ok || cached == nil {
+					errCh <- fmt.Errorf("missing cached regex for %q", pattern)
+				}
+			}(pattern)
+		}
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -414,6 +462,7 @@ func TestValidateRecurrence(t *testing.T) {
 		})
 	}
 }
+
 // TestParseFilterInput verifies that parseFilterInput correctly handles
 // taskwarrior filter expressions, including attribute filters (proj:xxx),
 // tag filters (+tag), quoted values (description:"some text"), and empty input.

@@ -38,12 +38,12 @@ func formatDueText(dueStr string) string {
 	if dueStr == "" {
 		return ""
 	}
-	
+
 	ts, err := parseTaskDate(dueStr)
 	if err != nil {
 		return dueStr
 	}
-	
+
 	days := daysUntil(ts)
 	switch days {
 	case 0:
@@ -63,15 +63,28 @@ func compileAndCacheRegex(pattern string) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	
-	// Limit cache size to prevent memory leak
+	storeSearchRegex(pattern, re)
+	return re, nil
+}
+
+// cachedSearchRegex returns a compiled regex from the cache if present.
+func cachedSearchRegex(pattern string) (*regexp.Regexp, bool) {
+	searchRegexMu.RLock()
+	re, ok := searchRegexCache[pattern]
+	searchRegexMu.RUnlock()
+	return re, ok
+}
+
+// storeSearchRegex records a compiled regex in the cache.
+func storeSearchRegex(pattern string, re *regexp.Regexp) {
+	searchRegexMu.Lock()
+	defer searchRegexMu.Unlock()
+
+	// Limit cache size to prevent memory leak.
 	if len(searchRegexCache) > 100 {
-		// Clear cache when it gets too large
 		searchRegexCache = make(map[string]*regexp.Regexp)
 	}
 	searchRegexCache[pattern] = re
-	
-	return re, nil
 }
 
 // parseFilterInput splits a raw filter string typed by the user into the
@@ -102,15 +115,15 @@ func validateTagName(tag string) error {
 	if tag == "" {
 		return fmt.Errorf("tag cannot be empty")
 	}
-	
+
 	// Remove leading + or - for validation
 	tag = strings.TrimPrefix(strings.TrimPrefix(tag, "+"), "-")
-	
+
 	// Check for invalid characters
 	if strings.ContainsAny(tag, " \t\n\r") {
 		return fmt.Errorf("tag cannot contain whitespace")
 	}
-	
+
 	return nil
 }
 
@@ -119,7 +132,7 @@ func validateDueDate(due string) error {
 	if due == "" {
 		return nil // Empty due date is valid
 	}
-	
+
 	// Try common formats
 	formats := []string{
 		"2006-01-02",
@@ -127,24 +140,24 @@ func validateDueDate(due string) error {
 		"2006-01-02T15:04:05Z",
 		taskDateFormat,
 	}
-	
+
 	for _, format := range formats {
 		if _, err := time.Parse(format, due); err == nil {
 			return nil
 		}
 	}
-	
+
 	// Check for relative dates that taskwarrior understands
-	relatives := []string{"now", "today", "tomorrow", "yesterday", "monday", "tuesday", 
+	relatives := []string{"now", "today", "tomorrow", "yesterday", "monday", "tuesday",
 		"wednesday", "thursday", "friday", "saturday", "sunday", "eod", "eow", "eom", "eoy"}
-	
+
 	due = strings.ToLower(due)
 	for _, rel := range relatives {
 		if due == rel || strings.HasPrefix(due, rel+"+") || strings.HasPrefix(due, rel+"-") {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("invalid due date format: %s", due)
 }
 
@@ -163,12 +176,12 @@ func validateRecurrence(recur string) error {
 	if recur == "" {
 		return nil // Empty recurrence is valid
 	}
-	
+
 	// Basic validation - taskwarrior will do the full validation
 	if len(recur) < 2 {
 		return fmt.Errorf("recurrence too short")
 	}
-	
+
 	// Check for common patterns
 	validPrefixes := []string{"daily", "weekly", "monthly", "yearly", "biweekly", "bimonthly"}
 	for _, prefix := range validPrefixes {
@@ -176,16 +189,16 @@ func validateRecurrence(recur string) error {
 			return nil
 		}
 	}
-	
+
 	// Check for duration format (e.g., "3d", "2w", "1m")
 	if len(recur) >= 2 {
 		last := recur[len(recur)-1]
-		if (last == 'd' || last == 'w' || last == 'm' || last == 'y') && 
+		if (last == 'd' || last == 'w' || last == 'm' || last == 'y') &&
 			recur[:len(recur)-1] != "" {
 			return nil
 		}
 	}
-	
+
 	return nil // Let taskwarrior handle complex validation
 }
 

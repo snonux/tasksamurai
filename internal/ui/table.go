@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -26,6 +27,7 @@ var priorityOptions = []string{"H", "M", "L", ""}
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
 	searchRegexCache = make(map[string]*regexp.Regexp, 16)
+	searchRegexMu    sync.RWMutex
 )
 
 type cellMatch struct {

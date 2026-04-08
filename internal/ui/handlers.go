@@ -403,7 +403,7 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		pattern := m.searchInput.Value()
 		if pattern != "" {
 			// Check cache first
-			if cached, ok := searchRegexCache[pattern]; ok {
+			if cached, ok := cachedSearchRegex(pattern); ok {
 				m.searchRegex = cached
 			} else {
 				// Compile and cache if not found
@@ -454,7 +454,7 @@ func (m *Model) handleHelpSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		pattern := m.helpSearchInput.Value()
 		if pattern != "" {
 			// Check cache first
-			if cached, ok := searchRegexCache[pattern]; ok {
+			if cached, ok := cachedSearchRegex(pattern); ok {
 				m.helpSearchRegex = cached
 			} else {
 				// Compile and cache if not found
