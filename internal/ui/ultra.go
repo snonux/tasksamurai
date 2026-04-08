@@ -96,7 +96,6 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "d", desc: "mark task done"},
 				{key: "U", desc: "undo last done"},
 				{key: "+", desc: "add new task"},
-				{key: "o", desc: "open URL from description"},
 			},
 		},
 		{

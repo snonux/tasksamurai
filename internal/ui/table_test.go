@@ -279,11 +279,11 @@ func TestHandleFilterModeReportsReloadError(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("reload failure did not return a clear-status command")
 	}
-	if !strings.Contains(m.statusMsg, "reloading tasks") {
-		t.Fatalf("unexpected status message: %q", m.statusMsg)
+	if got := len(m.filters); got != 0 {
+		t.Fatalf("filters were not rolled back after reload failure: %#v", m.filters)
 	}
-	if got := strings.Join(m.filters, " "); got != "project:alpha" {
-		t.Fatalf("filters not applied before reload attempt: %q", got)
+	if got := m.statusMsg; got != "Error: filter error: exit status 42: reload failed" {
+		t.Fatalf("unexpected status message: %q", got)
 	}
 }
 
@@ -1077,13 +1077,12 @@ func TestUltraHelpSearchUsesUltraHelpLines(t *testing.T) {
 	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	step(tea.KeyPressMsg{Code: 'H', Text: "H"})
 	step(tea.KeyPressMsg{Code: '/', Text: "/"})
-	for _, r := range "view task details" {
+	for _, r := range "URL" {
 		step(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	step(tea.KeyPressMsg{Code: tea.KeyEnter})
-	// "URL" now appears in ultra help since the o key (open URL) is available.
 	if got := len(m.helpSearchMatches); got == 0 {
-		t.Fatalf("ultra help search for 'URL' should match (o key added), got 0 matches")
+		t.Fatalf("ultra help search for 'URL' should match, got 0 matches")
 	}
 
 	step(tea.KeyPressMsg{Code: '/', Text: "/"})
