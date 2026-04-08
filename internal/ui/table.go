@@ -220,6 +220,11 @@ type descriptionTempFile interface {
 	Close() error
 }
 
+type reloadData struct {
+	tasks          []task.Task
+	ultraFilterIDs []int
+}
+
 // blinkInterval controls how quickly the row flashes when a task changes.
 // A shorter interval results in a faster blink.
 const blinkInterval = 150 * time.Millisecond
@@ -428,70 +433,91 @@ func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
 }
 
 func (m *Model) reload() error {
-	// Always show only pending tasks by default.
-	filters := append([]string(nil), m.filters...)
-	filters = append(filters, "status:pending")
-	ultraFilterIDs := m.ultraFilteredTaskIDs()
-	tasks, err := task.Export(filters...)
+	data, err := m.fetchTasks()
 	if err != nil {
 		return err
 	}
 
+	m.processTasks(&data)
+	m.renderTasks(data)
+	return nil
+}
+
+func (m *Model) fetchTasks() (reloadData, error) {
+	// Always show only pending tasks by default.
+	filters := append([]string(nil), m.filters...)
+	filters = append(filters, "status:pending")
+	tasks, err := task.Export(filters...)
+	if err != nil {
+		return reloadData{}, err
+	}
+
 	task.SortTasks(tasks)
+	return reloadData{
+		tasks:          tasks,
+		ultraFilterIDs: m.ultraFilteredTaskIDs(),
+	}, nil
+}
 
-	m.tasks = tasks
-	m.total = task.TotalTasks(tasks)
-	m.inProgress = task.InProgressTasks(tasks)
-	m.due = task.DueTasks(tasks, time.Now())
+func (m *Model) processTasks(data *reloadData) {
+	m.tasks = data.tasks
+	m.total = task.TotalTasks(data.tasks)
+	m.inProgress = task.InProgressTasks(data.tasks)
+	m.due = task.DueTasks(data.tasks, time.Now())
 
-	// Refresh current task detail if in detail view
 	if m.showTaskDetail {
 		m.refreshCurrentTaskDetail()
 	}
 
 	m.computeColumnWidths()
 
-	var rows []atable.Row
+	if m.ultraSearchRegex != nil {
+		m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
+	} else {
+		m.rebuildUltraFiltered(data.ultraFilterIDs)
+	}
+}
+
+func (m *Model) renderTasks(data reloadData) {
+	rows := m.buildTaskRows(data.tasks)
+	if m.tbl.Columns() == nil {
+		m.tbl, m.tblStyles = m.newTable(rows)
+	} else {
+		m.tbl.SetRows(rows)
+	}
+	m.reconcileUltraSelection()
+	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
+}
+
+func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
+	rows := make([]atable.Row, 0, len(tasks))
 	m.searchMatches = nil
 	for i, tsk := range tasks {
 		rows = append(rows, m.taskToRowSearch(tsk, m.searchRegex, m.tblStyles, -1))
-		if m.searchRegex != nil {
-			if m.searchRegex.MatchString(tsk.Project) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
-			}
-			tags := strings.Join(tsk.Tags, " ")
-			if m.searchRegex.MatchString(tags) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
-			}
-			if m.searchRegex.MatchString(tsk.Description) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 8})
-			}
-			for _, a := range tsk.Annotations {
-				if m.searchRegex.MatchString(a.Description) {
-					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
-					break
-				}
+		if m.searchRegex == nil {
+			continue
+		}
+		if m.searchRegex.MatchString(tsk.Project) {
+			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
+		}
+		tags := strings.Join(tsk.Tags, " ")
+		if m.searchRegex.MatchString(tags) {
+			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
+		}
+		if m.searchRegex.MatchString(tsk.Description) {
+			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 8})
+		}
+		for _, a := range tsk.Annotations {
+			if m.searchRegex.MatchString(a.Description) {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
+				break
 			}
 		}
 	}
 	if len(m.searchMatches) > 0 {
 		m.searchIndex = 0
 	}
-	if m.ultraSearchRegex != nil {
-		m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
-	} else {
-		m.rebuildUltraFiltered(ultraFilterIDs)
-	}
-
-	if m.tbl.Columns() == nil {
-		m.tbl, m.tblStyles = m.newTable(rows)
-	} else {
-		m.tbl.SetRows(rows)
-		m.applyColumns()
-	}
-	m.reconcileUltraSelection()
-	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
-	return nil
+	return rows
 }
 
 func (m *Model) reloadAndReport() bool {
