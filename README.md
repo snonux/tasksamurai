@@ -69,7 +69,7 @@ If Task Samurai appears to hang or freeze, you can capture runtime diagnostics u
 
 ### Signal Handlers (Unix/Linux/macOS only)
 
-Task Samurai supports two debugging signals:
+Task Samurai supports two debugging signals when built with the `debugsignals` build tag:
 
 #### SIGUSR1 - Quick Goroutine Dump
 
@@ -99,6 +99,8 @@ This creates multiple files:
 - `tasksamurai-TIMESTAMP-heap.pprof` - Memory allocations
 - `tasksamurai-TIMESTAMP-cpu.pprof` - CPU profile (5 second sample)
 - `tasksamurai-TIMESTAMP-block.pprof` - Lock contention events
+
+Build with `-tags debugsignals` to enable these handlers in a local or debug build.
 
 ### Analyzing Profiles
 

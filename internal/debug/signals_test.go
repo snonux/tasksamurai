@@ -1,4 +1,5 @@
-// +build !windows
+//go:build debugsignals && !windows
+// +build debugsignals,!windows
 
 package debug
 
@@ -55,7 +56,7 @@ func TestDumpGoroutines(t *testing.T) {
 
 func TestWriteProfile(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Test goroutine profile (text format)
 	goroutineFile := filepath.Join(tmpDir, "test-goroutine.txt")
 	if err := writeProfile(goroutineFile, "goroutine", 1); err != nil {
