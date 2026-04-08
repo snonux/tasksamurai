@@ -1098,7 +1098,7 @@ func TestUltraHelpSearchUsesUltraHelpLines(t *testing.T) {
 
 func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	tmp := t.TempDir()
-	taskPath := setupBasicTask(t, tmp)
+	taskPath := setupUltraTaskSet(t, tmp)
 	setupEnv(t, taskPath)
 
 	m, err := New(nil, "firefox")
@@ -1190,6 +1190,32 @@ func TestUltraExitHotkeysClearUltraState(t *testing.T) {
 	}
 	if m.ultraFocusedID != 0 {
 		t.Fatalf("esc did not clear ultraFocusedID, got %d", m.ultraFocusedID)
+	}
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if !m.showUltra {
+		t.Fatalf("u did not re-enter ultra mode")
+	}
+	m.ultraCursor = 2
+	m.ultraFocusedID = 31
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	if cmd != nil {
+		t.Fatalf("u in ultra mode unexpectedly returned a command")
+	}
+	m = *mv.(*Model)
+	if m.showUltra {
+		t.Fatalf("u did not exit ultra mode")
+	}
+	if got := m.tbl.Cursor(); got != 2 {
+		t.Fatalf("u did not preserve table cursor: got %d want 2", got)
+	}
+	if m.ultraFocusedID != 0 {
+		t.Fatalf("u did not clear ultraFocusedID, got %d", m.ultraFocusedID)
 	}
 }
 

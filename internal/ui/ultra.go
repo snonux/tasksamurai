@@ -475,10 +475,7 @@ func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case "enter":
 		// Empty input clears the filter; non-empty confirms and keeps it.
 		if strings.TrimSpace(m.ultraSearchInput.Value()) == "" {
-			m.ultraSearchRegex = nil
-			m.ultraFiltered = nil
-			m.ultraCursor = 0
-			m.ultraOffset = 0
+			m.clearUltraSearchState()
 		}
 		m.ultraSearching = false
 		m.ultraSearchInput.Blur()
@@ -488,10 +485,7 @@ func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.ultraSearching = false
 		m.ultraSearchInput.SetValue("")
 		m.ultraSearchInput.Blur()
-		m.ultraSearchRegex = nil
-		m.ultraFiltered = nil
-		m.ultraCursor = 0
-		m.ultraOffset = 0
+		m.clearUltraSearchState()
 		return m, nil
 	}
 
@@ -513,10 +507,7 @@ func (m *Model) handleUltraSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 func (m *Model) ultraApplySearch(value string) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		m.ultraSearchRegex = nil
-		m.ultraFiltered = nil
-		m.ultraCursor = 0
-		m.ultraOffset = 0
+		m.clearUltraSearchState()
 		return
 	}
 	// Prepend (?i) for case-insensitive matching unless the user already
@@ -1016,19 +1007,13 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		return m.handleEscapeKey()
 	case "u":
-		// Toggle back to the traditional table view. Works even when started
-		// via --ultra because the table model always exists; it was just never
-		// shown. The user can press u again to return to ultra mode.
-		m.ultraClearFocusedID()
-		m.showUltra = false
-		m.ultraStartup = false // no longer forced into ultra-only mode
-		m.ultraSearchRegex = nil
-		m.ultraFiltered = nil
-		m.ultraSearchInput.SetValue("")
+		cursor := m.ultraCursor
+		m.leaveUltraMode()
+		m.ultraStartup = false
 		// Sync the table cursor to the task we were on in ultra mode.
 		tasks := m.ultraTaskList()
-		if m.ultraCursor >= 0 && m.ultraCursor < len(tasks) {
-			m.tbl.SetCursor(m.ultraCursor)
+		if cursor >= 0 && cursor < len(tasks) {
+			m.tbl.SetCursor(cursor)
 		}
 		return m, nil
 	case "/":
@@ -1140,6 +1125,35 @@ func (m *Model) ultraGoEnd() {
 
 func (m *Model) ultraClearFocusedID() {
 	m.ultraFocusedID = 0
+}
+
+func (m *Model) clearUltraSearchState() {
+	m.ultraSearchRegex = nil
+	m.ultraFiltered = nil
+	m.ultraCursor = 0
+	m.ultraOffset = 0
+}
+
+func (m *Model) leaveUltraMode() {
+	m.ultraClearFocusedID()
+	m.showUltra = false
+	m.ultraSearchInput.SetValue("")
+	m.clearUltraSearchState()
+}
+
+func (m *Model) handleUltraExitKey(quit bool) (tea.Model, tea.Cmd) {
+	if m.ultraSearchRegex != nil {
+		m.clearUltraSearchState()
+		return m, nil
+	}
+	if m.ultraStartup {
+		if quit {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	m.leaveUltraMode()
+	return m, nil
 }
 
 func (m *Model) ultraPrepareSelectedTask() (int, bool) {

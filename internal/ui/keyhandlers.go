@@ -152,24 +152,7 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.showUltra {
-		// Active search: q clears the search filter first, same as in normal
-		// table mode. Only proceed to exit/quit when no search is active.
-		if m.ultraSearchRegex != nil {
-			m.ultraSearchRegex = nil
-			m.ultraFiltered = nil
-			m.ultraCursor = 0
-			m.ultraOffset = 0
-			return m, nil
-		}
-		// When started via --ultra flag there is no table view to return to,
-		// so q exits the application directly.
-		if m.ultraStartup {
-			return m, tea.Quit
-		}
-		m.ultraClearFocusedID()
-		m.showUltra = false
-		m.ultraSearchInput.SetValue("")
-		return m, nil
+		return m.handleUltraExitKey(true)
 	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
@@ -207,24 +190,7 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.showUltra {
-		// Active search: esc clears the search filter first, same as in
-		// normal table mode. It never quits the application.
-		if m.ultraSearchRegex != nil {
-			m.ultraSearchRegex = nil
-			m.ultraFiltered = nil
-			m.ultraCursor = 0
-			m.ultraOffset = 0
-			return m, nil
-		}
-		// When started via --ultra flag there is no table view to return to,
-		// so esc just stays in ultra mode.
-		if m.ultraStartup {
-			return m, nil
-		}
-		m.ultraClearFocusedID()
-		m.showUltra = false
-		m.ultraSearchInput.SetValue("")
-		return m, nil
+		return m.handleUltraExitKey(false)
 	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
