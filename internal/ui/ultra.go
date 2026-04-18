@@ -83,7 +83,7 @@ func (m Model) ultraHelpSections() []helpSection {
 			items: []helpItem{
 				{key: "j, k", desc: "move down/up"},
 				{key: "pgup, pgdn", desc: "page up/down"},
-				{key: "g, G", desc: "go to start/end"},
+				{key: "g, G, 0", desc: "go to start/end"},
 				{key: "space", desc: "refresh tasks"},
 			},
 		},
@@ -1038,6 +1038,8 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraGoHome()
 	case "G", "end":
 		m.ultraGoEnd()
+	case "0":
+		m.ultraGoHome()
 	case "enter", "e", "E":
 		return m.handleUltraEditTask()
 	case "s":
