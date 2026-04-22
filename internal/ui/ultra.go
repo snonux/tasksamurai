@@ -109,6 +109,7 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "a, A", desc: "add/replace annotations"},
 				{key: "J", desc: "edit project"},
 				{key: "R", desc: "edit recurrence"},
+				{key: m.agentFilterHotkeyLabel(), desc: "toggle +agent/-agent filter"},
 				{key: "f", desc: "change filter"},
 			},
 		},
@@ -998,6 +999,10 @@ func (m *Model) ultraEnsureVisible() {
 
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == m.agentFilterHotkeyLabel() {
+		return m.handleToggleAgentFilter()
+	}
+
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()

@@ -59,6 +59,7 @@ tasksamurai -- -excludetag +includetag
 ### Flags
 
 - `--browser-cmd <command>`: command used to open URLs (default: firefox on Linux, open on macOS)
+- `--agent-hotkey <key>`: hotkey used to toggle the `+agent` / `-agent` filter (default: `3`)
 - `--debug-log <path>`: path to debug log file for Taskwarrior commands
 - `--debug-dir <directory>`: directory for runtime debug output (goroutine dumps, profiles)
 - `--disco`: start Task Samurai in disco mode, changing the theme every time a task is modified

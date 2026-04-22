@@ -262,6 +262,14 @@ func (m *Model) handleFilter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleToggleAgentFilter() (tea.Model, tea.Cmd) {
+	m.filters = toggleAgentFilter(m.filters)
+	if !m.reloadAndReport() {
+		return m, nil
+	}
+	return m, nil
+}
+
 func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
 	m.clearEditingModes()
 	m.addingTask = true
@@ -367,6 +375,34 @@ func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 		m.statusMsg = "Blinking disabled"
 	}
 	return m, nil
+}
+
+func toggleAgentFilter(filters []string) []string {
+	next := "+agent"
+	hasPositive := false
+	hasNegative := false
+
+	filtered := make([]string, 0, len(filters)+1)
+	for _, filter := range filters {
+		switch filter {
+		case "+agent":
+			hasPositive = true
+			continue
+		case "-agent":
+			hasNegative = true
+			continue
+		}
+		filtered = append(filtered, filter)
+	}
+
+	switch {
+	case hasPositive && !hasNegative:
+		next = "-agent"
+	case hasNegative && !hasPositive:
+		next = "+agent"
+	}
+
+	return append(filtered, next)
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {

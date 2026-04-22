@@ -189,10 +189,11 @@ type Model struct {
 	inProgress int
 	due        int
 
-	filters    []string
-	tasks      []task.Task
-	undoStack  []string
-	browserCmd string
+	filters           []string
+	tasks             []task.Task
+	undoStack         []string
+	browserCmd        string
+	agentFilterHotkey string
 
 	theme        Theme
 	defaultTheme Theme
@@ -370,7 +371,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 
 // New creates a new UI model with the provided rows.
 func New(filters []string, browserCmd string) (Model, error) {
-	m := Model{filters: filters, browserCmd: browserCmd, blinkState: blinkState{blinkEnabled: true}}
+	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", blinkState: blinkState{blinkEnabled: true}}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
@@ -928,6 +929,7 @@ func (m Model) helpSections() []helpSection {
 		{
 			title: "View & Search",
 			items: []helpItem{
+				{key: m.agentFilterHotkeyLabel(), desc: "toggle +agent/-agent filter"},
 				{key: "f", desc: "change filter"},
 				{key: "/, ?", desc: "search"},
 				{key: "n, N", desc: "next/previous match"},
@@ -1357,4 +1359,19 @@ func (m *Model) SetDisco(d bool) {
 func (m *Model) SetUltra(u bool) {
 	m.showUltra = u
 	m.ultraStartup = u
+}
+
+// SetAgentFilterHotkey configures the key that toggles the agent filter.
+func (m *Model) SetAgentFilterHotkey(key string) {
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	m.agentFilterHotkey = key
+}
+
+func (m Model) agentFilterHotkeyLabel() string {
+	if strings.TrimSpace(m.agentFilterHotkey) == "" {
+		return "3"
+	}
+	return m.agentFilterHotkey
 }

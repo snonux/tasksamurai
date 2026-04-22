@@ -44,6 +44,10 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if msg.String() == m.agentFilterHotkeyLabel() {
+		return m.handleToggleAgentFilter()
+	}
+
 	switch msg.String() {
 	case "H":
 		return m.handleToggleHelp()

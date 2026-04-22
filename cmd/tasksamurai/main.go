@@ -24,6 +24,7 @@ func main() {
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
 	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
+	agentHotkey := flag.String("agent-hotkey", "3", "key used to toggle the +agent/-agent filter")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
@@ -43,6 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	m.SetAgentFilterHotkey(*agentHotkey)
 	m.SetDisco(*disco)
 	m.SetUltra(*ultra)
 

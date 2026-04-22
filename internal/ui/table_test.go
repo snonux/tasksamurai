@@ -798,6 +798,139 @@ func TestNavigationHotkeys(t *testing.T) {
 	}
 }
 
+func TestToggleAgentFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []string
+		expect []string
+	}{
+		{
+			name:   "nil filter starts with agent",
+			input:  nil,
+			expect: []string{"+agent"},
+		},
+		{
+			name:   "preserves unrelated filters",
+			input:  []string{"project:home"},
+			expect: []string{"project:home", "+agent"},
+		},
+		{
+			name:   "switches +agent to -agent",
+			input:  []string{"project:home", "+agent"},
+			expect: []string{"project:home", "-agent"},
+		},
+		{
+			name:   "switches -agent to +agent",
+			input:  []string{"project:home", "-agent"},
+			expect: []string{"project:home", "+agent"},
+		},
+		{
+			name:   "normalizes contradictory agent filters",
+			input:  []string{"+agent", "-agent", "status:pending"},
+			expect: []string{"status:pending", "+agent"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := toggleAgentFilter(tc.input)
+			if !reflect.DeepEqual(got, tc.expect) {
+				t.Fatalf("toggleAgentFilter(%v) = %v, want %v", tc.input, got, tc.expect)
+			}
+		})
+	}
+}
+
+func TestAgentFilterHotkeyDefaultsToThree(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '3', Text: "3"})
+	m = *mv.(*Model)
+	if !reflect.DeepEqual(m.filters, []string{"+agent"}) {
+		t.Fatalf("3 did not toggle agent filter: %#v", m.filters)
+	}
+}
+
+func TestAgentFilterHotkeyCanBeRebound(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := "#!/bin/sh\n" +
+		"printf '%s ' \"$@\" >> " + logFile + "\n" +
+		"printf '\\n' >> " + logFile + "\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New([]string{"project:home"}, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.SetAgentFilterHotkey("7")
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '3', Text: "3"})
+	m = *mv.(*Model)
+	if !reflect.DeepEqual(m.filters, []string{"project:home"}) {
+		t.Fatalf("3 unexpectedly changed filters: %#v", m.filters)
+	}
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: '7', Text: "7"})
+	m = *mv.(*Model)
+	if !reflect.DeepEqual(m.filters, []string{"project:home", "+agent"}) {
+		t.Fatalf("7 did not toggle agent filter: %#v", m.filters)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(data), "project:home +agent status:pending export") {
+		t.Fatalf("toggle did not reload with +agent filter: %s", data)
+	}
+}
+
 func setupUltraTaskSet(t *testing.T, tmp string) string {
 	taskPath := filepath.Join(tmp, "task")
 	script := "#!/bin/sh\n" +
