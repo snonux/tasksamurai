@@ -1362,11 +1362,19 @@ func (m *Model) SetUltra(u bool) {
 }
 
 // SetAgentFilterHotkey configures the key that toggles the agent filter.
-func (m *Model) SetAgentFilterHotkey(key string) {
-	if strings.TrimSpace(key) == "" {
-		return
+// The chosen key must not collide with any existing command in normal or
+// ultra mode. If it does, the current hotkey is left unchanged and an error is
+// returned so callers can surface the conflict.
+func (m *Model) SetAgentFilterHotkey(key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	if err := validateAgentFilterHotkey(key); err != nil {
+		return err
 	}
 	m.agentFilterHotkey = key
+	return nil
 }
 
 func (m Model) agentFilterHotkeyLabel() string {
@@ -1374,4 +1382,70 @@ func (m Model) agentFilterHotkeyLabel() string {
 		return "3"
 	}
 	return m.agentFilterHotkey
+}
+
+func validateAgentFilterHotkey(key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	if _, ok := reservedAgentHotkeys[key]; ok {
+		return fmt.Errorf("agent hotkey %q conflicts with an existing command", key)
+	}
+	return nil
+}
+
+var reservedAgentHotkeys = map[string]struct{}{
+	"+":      {},
+	"0":      {},
+	"1":      {},
+	"2":      {},
+	"A":      {},
+	"B":      {},
+	"C":      {},
+	"E":      {},
+	"G":      {},
+	"H":      {},
+	"J":      {},
+	"N":      {},
+	"R":      {},
+	"T":      {},
+	"U":      {},
+	"W":      {},
+	"a":      {},
+	"b":      {},
+	"c":      {},
+	"d":      {},
+	"down":   {},
+	"e":      {},
+	"end":    {},
+	"enter":  {},
+	"esc":    {},
+	"f":      {},
+	"g":      {},
+	"home":   {},
+	"i":      {},
+	"h":      {},
+	"j":      {},
+	"k":      {},
+	"l":      {},
+	"left":   {},
+	"n":      {},
+	"o":      {},
+	"p":      {},
+	"pgdn":   {},
+	"pgdown": {},
+	"pgup":   {},
+	"q":      {},
+	"r":      {},
+	"right":  {},
+	"s":      {},
+	"space":  {},
+	"t":      {},
+	"u":      {},
+	"up":     {},
+	"w":      {},
+	"x":      {},
+	"?":      {},
+	"/":      {},
 }

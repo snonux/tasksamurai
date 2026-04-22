@@ -44,7 +44,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	m.SetAgentFilterHotkey(*agentHotkey)
+	if err := m.SetAgentFilterHotkey(*agentHotkey); err != nil {
+		fmt.Fprintln(os.Stderr, "invalid --agent-hotkey:", err)
+		fmt.Fprintln(os.Stderr, "using default hotkey 3")
+	}
 	m.SetDisco(*disco)
 	m.SetUltra(*ultra)
 

@@ -379,30 +379,30 @@ func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 
 func toggleAgentFilter(filters []string) []string {
 	next := "+agent"
-	hasPositive := false
-	hasNegative := false
+	index := -1
 
-	filtered := make([]string, 0, len(filters)+1)
-	for _, filter := range filters {
+	for i, filter := range filters {
 		switch filter {
 		case "+agent":
-			hasPositive = true
-			continue
+			next = "-agent"
+			index = i
 		case "-agent":
-			hasNegative = true
-			continue
+			next = "+agent"
+			index = i
 		}
-		filtered = append(filtered, filter)
+		if index != -1 {
+			break
+		}
 	}
 
-	switch {
-	case hasPositive && !hasNegative:
-		next = "-agent"
-	case hasNegative && !hasPositive:
-		next = "+agent"
+	if index == -1 {
+		out := append([]string(nil), filters...)
+		return append(out, next)
 	}
 
-	return append(filtered, next)
+	out := append([]string(nil), filters...)
+	out[index] = next
+	return out
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
