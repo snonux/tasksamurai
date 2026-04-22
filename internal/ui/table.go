@@ -1366,7 +1366,7 @@ func (m *Model) SetUltra(u bool) {
 // ultra mode. If it does, the current hotkey is left unchanged and an error is
 // returned so callers can surface the conflict.
 func (m *Model) SetAgentFilterHotkey(key string) error {
-	key = strings.TrimSpace(key)
+	key = normalizeAgentFilterHotkey(key)
 	if key == "" {
 		return nil
 	}
@@ -1393,6 +1393,40 @@ func validateAgentFilterHotkey(key string) error {
 		return fmt.Errorf("agent hotkey %q conflicts with an existing command", key)
 	}
 	return nil
+}
+
+func normalizeAgentFilterHotkey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" || len(key) == 1 {
+		return key
+	}
+	switch strings.ToLower(key) {
+	case "down":
+		return "down"
+	case "end":
+		return "end"
+	case "enter":
+		return "enter"
+	case "esc", "escape":
+		return "esc"
+	case "home":
+		return "home"
+	case "left":
+		return "left"
+	case "pgdn", "pgdown":
+		return "pgdn"
+	case "pgup":
+		return "pgup"
+	case "right":
+		return "right"
+	case "space":
+		return "space"
+	case "tab":
+		return "tab"
+	case "up":
+		return "up"
+	}
+	return key
 }
 
 var reservedAgentHotkeys = map[string]struct{}{

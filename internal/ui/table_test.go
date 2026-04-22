@@ -937,6 +937,96 @@ func TestAgentFilterHotkeyCanBeRebound(t *testing.T) {
 	}
 }
 
+func TestAgentFilterHotkeyNamedKeysAreCanonicalized(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := "#!/bin/sh\n" +
+		"printf '%s ' \"$@\" >> " + logFile + "\n" +
+		"printf '\\n' >> " + logFile + "\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := m.SetAgentFilterHotkey("Tab"); err != nil {
+		t.Fatalf("SetAgentFilterHotkey: %v", err)
+	}
+	if got := m.agentFilterHotkeyLabel(); got != "tab" {
+		t.Fatalf("canonical hotkey label: got %q want %q", got, "tab")
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
+	m = *mv.(*Model)
+	if !reflect.DeepEqual(m.filters, []string{"+agent"}) {
+		t.Fatalf("tab did not toggle agent filter: %#v", m.filters)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(data), "+agent status:pending export") {
+		t.Fatalf("toggle did not reload with +agent filter: %s", data)
+	}
+}
+
+func TestAgentFilterHotkeyRejectsUppercaseNamedKeyCollision(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := m.SetAgentFilterHotkey("Enter"); err == nil {
+		t.Fatalf("expected collision for named hotkey Enter")
+	}
+	if got := m.agentFilterHotkeyLabel(); got != "3" {
+		t.Fatalf("colliding named hotkey changed label: got %q want %q", got, "3")
+	}
+}
+
 func TestAgentFilterHotkeyCollisionIsRejected(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
