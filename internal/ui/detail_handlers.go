@@ -77,12 +77,52 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "o":
 		return m.handleOpenURL()
+	case "d":
+		return m.handleDetailMarkDone()
+	case "U":
+		return m.handleDetailUndo()
 	case "i", "enter":
 		// Check if current field is editable
 		return m.handleDetailFieldEdit()
 	}
 
 	return m, nil
+}
+
+// handleDetailMarkDone marks the task currently displayed in the detail view
+// as done. The detail view is closed first so the underlying table is visible
+// for the blink animation and so the (now-completed) task isn't shown as
+// pending after the reload triggered by startBlink.
+func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
+	if m.currentTaskDetail == nil {
+		return m, nil
+	}
+	id := m.currentTaskDetail.ID
+	m.closeDetailView()
+	return m, m.startBlink(id, true)
+}
+
+// handleDetailUndo restores the most recently completed task from the undo
+// stack. The detail view is closed first because the undone task generally
+// differs from the one currently displayed, and handleUndo blinks the
+// restored row in the table.
+func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
+	if len(m.undoStack) == 0 {
+		return m, nil
+	}
+	m.closeDetailView()
+	return m.handleUndo()
+}
+
+// closeDetailView resets the detail-view state so the table view is shown
+// again. Used by detail-view actions that intentionally exit the view (mark
+// done, undo).
+func (m *Model) closeDetailView() {
+	m.showTaskDetail = false
+	m.currentTaskDetail = nil
+	m.detailSearching = false
+	m.detailSearchRegex = nil
+	m.detailSearchInput.SetValue("")
 }
 
 // handleDetailFieldEdit starts editing for the currently-selected field in the
