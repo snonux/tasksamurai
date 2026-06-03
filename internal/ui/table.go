@@ -983,6 +983,9 @@ func (m Model) statusLine() string {
 
 func (m Model) topStatusLine() string {
 	line := fmt.Sprintf("Task Samurai %s", internal.Version)
+	if len(m.filters) > 0 {
+		line += " | filter: " + strings.Join(m.filters, " ")
+	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).
 		Background(lipgloss.Color(m.theme.StatusBG)).

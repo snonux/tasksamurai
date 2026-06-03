@@ -441,7 +441,11 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 	}
 	// Mirror the normal-mode title format so the app name is always visible,
 	// with "(ultra)" appended to distinguish the view.
-	return fmt.Sprintf("Task Samurai %s (ultra) | filter: %s | %d tasks", internal.Version, filter, len(tasks))
+	title := fmt.Sprintf("Task Samurai %s (ultra)", internal.Version)
+	if len(m.filters) > 0 {
+		title += " | filter: " + strings.Join(m.filters, " ")
+	}
+	return fmt.Sprintf("%s | search: %s | %d tasks", title, filter, len(tasks))
 }
 
 func (m *Model) ultraSearchText(t task.Task) string {
