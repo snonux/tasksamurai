@@ -11,7 +11,41 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
+
+func useSofiaLocalTime(t *testing.T) (*time.Location, time.Time) {
+	t.Helper()
+
+	loc, err := time.LoadLocation("Europe/Sofia")
+	if err != nil {
+		t.Skipf("load Europe/Sofia location: %v", err)
+	}
+
+	oldLocal := time.Local
+	time.Local = loc
+	t.Cleanup(func() {
+		time.Local = oldLocal
+	})
+
+	return loc, time.Now().In(loc)
+}
+
+func taskwarriorDateOnlyDue(base time.Time, loc *time.Location, dayOffset int) string {
+	day := base.AddDate(0, 0, dayOffset)
+	due := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	return due.UTC().Format(task.DateFormat)
+}
+
+func skipIfLocalDateChanged(t *testing.T, loc *time.Location, base time.Time) {
+	t.Helper()
+
+	later := time.Now().In(loc)
+	if later.Year() != base.Year() || later.YearDay() != base.YearDay() {
+		t.Skip("local date changed during due-date test")
+	}
+}
 
 func TestParseTaskDate(t *testing.T) {
 	tests := []struct {
@@ -47,7 +81,7 @@ func TestParseTaskDate(t *testing.T) {
 }
 
 func TestFormatDueText(t *testing.T) {
-	now := time.Now()
+	loc, now := useSofiaLocalTime(t)
 	tests := []struct {
 		name     string
 		input    string
@@ -60,27 +94,27 @@ func TestFormatDueText(t *testing.T) {
 		},
 		{
 			name:     "today",
-			input:    now.UTC().Format("20060102T150405Z"),
+			input:    taskwarriorDateOnlyDue(now, loc, 0),
 			expected: "today",
 		},
 		{
 			name:     "tomorrow",
-			input:    now.Add(24 * time.Hour).UTC().Format("20060102T150405Z"),
+			input:    taskwarriorDateOnlyDue(now, loc, 1),
 			expected: "tomorrow",
 		},
 		{
 			name:     "yesterday",
-			input:    now.Add(-24 * time.Hour).UTC().Format("20060102T150405Z"),
+			input:    taskwarriorDateOnlyDue(now, loc, -1),
 			expected: "yesterday",
 		},
 		{
 			name:     "future",
-			input:    now.Add(5 * 24 * time.Hour).UTC().Format("20060102T150405Z"),
+			input:    taskwarriorDateOnlyDue(now, loc, 5),
 			expected: "5d",
 		},
 		{
 			name:     "past",
-			input:    now.Add(-3 * 24 * time.Hour).UTC().Format("20060102T150405Z"),
+			input:    taskwarriorDateOnlyDue(now, loc, -3),
 			expected: "-3d",
 		},
 		{
@@ -93,6 +127,7 @@ func TestFormatDueText(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := formatDueText(tt.input)
+			skipIfLocalDateChanged(t, loc, now)
 			if got != tt.expected {
 				t.Errorf("formatDueText() = %v, want %v", got, tt.expected)
 			}

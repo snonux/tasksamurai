@@ -26,10 +26,14 @@ func parseTaskDate(dateStr string) (time.Time, error) {
 
 // daysUntil returns the number of days until the given time
 func daysUntil(t time.Time) int {
-	now := time.Now()
-	// Normalize both times to midnight UTC to avoid timezone and fractional day issues
+	now := time.Now().In(time.Local)
+	targetLocal := t.In(time.Local)
+
+	// Taskwarrior exports date-only due values as the local midnight instant in
+	// UTC. Compare local calendar dates, then use UTC midnights for stable
+	// whole-day arithmetic across DST transitions.
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	target := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	target := time.Date(targetLocal.Year(), targetLocal.Month(), targetLocal.Day(), 0, 0, 0, 0, time.UTC)
 	return int(target.Sub(today) / (24 * time.Hour))
 }
 
