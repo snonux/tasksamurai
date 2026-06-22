@@ -228,6 +228,8 @@ type Model struct {
 	cancelTaskContext context.CancelFunc
 }
 
+var _ tea.Model = (*Model)(nil)
+
 // editDoneMsg is emitted when the external editor process finishes.
 type editDoneMsg struct{ err error }
 
@@ -603,7 +605,7 @@ func (m *Model) reloadAndReport() bool {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return nil }
 
 // Update handles key and window events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -779,7 +781,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 }
 
 // View renders the table UI.
-func (m Model) View() tea.View {
+func (m *Model) View() tea.View {
 	var content string
 	switch {
 	case m.showHelp:
@@ -803,7 +805,7 @@ func (m Model) View() tea.View {
 // appendInlineInputOverlay appends whichever active inline-editing widget
 // (annotate, due, priority, desc, tags, recur, project, filter, add, search)
 // should be displayed below the table. At most one is active at a time.
-func (m Model) appendInlineInputOverlay(view string) string {
+func (m *Model) appendInlineInputOverlay(view string) string {
 	var overlay string
 	switch {
 	case m.annotating:
@@ -836,15 +838,15 @@ func (m Model) appendInlineInputOverlay(view string) string {
 	return view
 }
 
-func (m Model) renderDetailScreen() string {
+func (m *Model) renderDetailScreen() string {
 	return m.renderTaskDetail()
 }
 
-func (m Model) renderUltraScreen() string {
+func (m *Model) renderUltraScreen() string {
 	return m.renderUltraModus()
 }
 
-func (m Model) renderTableScreen() string {
+func (m *Model) renderTableScreen() string {
 	// expandedCellView is only appended when the user has toggled the
 	// expanded-cell panel open; including it unconditionally caused a
 	// double-render whenever cellExpanded was true.
@@ -865,12 +867,12 @@ func (m *Model) updateHelpContent() {
 }
 
 // buildHelpContent builds the help content
-func (m Model) buildHelpContent() string {
+func (m *Model) buildHelpContent() string {
 	return uihelp.Render(m.helpSections(), m.helpPalette(), m.helpSearchRegex)
 }
 
 // renderHelpScreen renders the help screen with optional search highlighting
-func (m Model) renderHelpScreen() string {
+func (m *Model) renderHelpScreen() string {
 	containerStyle := lipgloss.NewStyle().
 		Padding(1, 2)
 
@@ -893,25 +895,25 @@ func (m Model) renderHelpScreen() string {
 }
 
 // getHelpLines returns searchable help content as plain text lines
-func (m Model) getHelpLines() []string {
+func (m *Model) getHelpLines() []string {
 	return uihelp.Lines(m.activeHelpSections())
 }
 
-func (m Model) activeHelpContent() string {
+func (m *Model) activeHelpContent() string {
 	if m.showUltra {
 		return m.buildUltraHelpContent()
 	}
 	return m.buildHelpContent()
 }
 
-func (m Model) activeHelpSections() []uihelp.Section {
+func (m *Model) activeHelpSections() []uihelp.Section {
 	if m.showUltra {
 		return m.ultraHelpSections()
 	}
 	return m.helpSections()
 }
 
-func (m Model) helpPalette() uihelp.Palette {
+func (m *Model) helpPalette() uihelp.Palette {
 	return uihelp.Palette{
 		HeaderFG: m.theme.HeaderFG,
 		HeaderBG: m.theme.SelectedBG,
@@ -922,7 +924,7 @@ func (m Model) helpPalette() uihelp.Palette {
 	}
 }
 
-func (m Model) helpSections() []uihelp.Section {
+func (m *Model) helpSections() []uihelp.Section {
 	return []uihelp.Section{
 		{
 			Title: "Navigation",
@@ -994,7 +996,7 @@ func (m Model) helpSections() []uihelp.Section {
 	}
 }
 
-func (m Model) statusLine() string {
+func (m *Model) statusLine() string {
 	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d | press H for help", m.total, m.inProgress, m.due)
 	if m.statusMsg != "" {
 		status = m.statusMsg
@@ -1006,7 +1008,7 @@ func (m Model) statusLine() string {
 		Render(status)
 }
 
-func (m Model) topStatusLine() string {
+func (m *Model) topStatusLine() string {
 	line := fmt.Sprintf("Task Samurai %s", internal.Version)
 	if len(m.filters) > 0 {
 		line += " | filter: " + strings.Join(m.filters, " ")
@@ -1021,7 +1023,7 @@ func (m Model) topStatusLine() string {
 // formatDue returns a formatted due date string. Dates due today or tomorrow
 // are returned as "today" or "tomorrow" respectively. Past due dates are
 // highlighted in red.
-func (m Model) formatDue(s string, width int) string {
+func (m *Model) formatDue(s string, width int) string {
 	if s == "" {
 		return ""
 	}
@@ -1039,7 +1041,7 @@ func (m Model) formatDue(s string, width int) string {
 	return style.Render(val)
 }
 
-func (m Model) formatPriority(p string, width int) string {
+func (m *Model) formatPriority(p string, width int) string {
 	style := lipgloss.NewStyle().Width(width)
 	switch p {
 	case "L":
@@ -1054,21 +1056,21 @@ func (m Model) formatPriority(p string, width int) string {
 	return style.Render(p)
 }
 
-func (m Model) formatUrgency(u string, width int) string {
+func (m *Model) formatUrgency(u string, width int) string {
 	if w := width - len(u); w > 0 {
 		u = strings.Repeat(" ", w) + u
 	}
 	return u
 }
 
-func (m Model) dueView(showLabel bool) string {
+func (m *Model) dueView(showLabel bool) string {
 	if showLabel {
 		return fmt.Sprintf("due: %s", m.dueDate.Format("2006-01-02"))
 	}
 	return m.dueDate.Format("2006-01-02")
 }
 
-func (m Model) priorityView(showLabel bool) string {
+func (m *Model) priorityView(showLabel bool) string {
 	var parts []string
 	for i, p := range priorityOptions {
 		label := p
@@ -1087,7 +1089,7 @@ func (m Model) priorityView(showLabel bool) string {
 	return strings.Join(parts, " ")
 }
 
-func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
+func (m *Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string) string {
 	if re == nil || !re.MatchString(raw) {
 		return base.Render(raw)
 	}
@@ -1108,7 +1110,7 @@ func (m Model) highlightCell(base lipgloss.Style, re *regexp.Regexp, raw string)
 	return b.String()
 }
 
-func (m Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
+func (m *Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, display string) string {
 	if re != nil && re.MatchString(raw) {
 		highlight := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.SearchBG)).Foreground(lipgloss.Color(m.theme.SearchFG))
 		return highlight.Inherit(base).Render(display)
@@ -1116,7 +1118,7 @@ func (m Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, d
 	return base.Render(display)
 }
 
-func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
+func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
 	rowStyle := lipgloss.NewStyle()
 	if t.Start != "" {
 		rowStyle = rowStyle.Background(lipgloss.Color(m.theme.StartBG))
@@ -1180,7 +1182,7 @@ func (m Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Sty
 	}
 }
 
-func (m Model) expandedCellView() string {
+func (m *Model) expandedCellView() string {
 	row := m.tbl.Cursor()
 	col := m.tbl.ColumnCursor()
 	if row < 0 || row >= len(m.tasks) || col < 0 || col > 9 {
@@ -1395,7 +1397,7 @@ func (m *Model) SetAgentFilterHotkey(key string) error {
 	return nil
 }
 
-func (m Model) agentFilterHotkeyLabel() string {
+func (m *Model) agentFilterHotkeyLabel() string {
 	if strings.TrimSpace(m.agentFilterHotkey) == "" {
 		return "3"
 	}

@@ -73,11 +73,11 @@ func (m *Model) ultraNoTasksMessage(width, budget int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) buildUltraHelpContent() string {
+func (m *Model) buildUltraHelpContent() string {
 	return uihelp.Render(m.ultraHelpSections(), m.helpPalette(), m.helpSearchRegex)
 }
 
-func (m Model) ultraHelpSections() []uihelp.Section {
+func (m *Model) ultraHelpSections() []uihelp.Section {
 	return []uihelp.Section{
 		{
 			Title: "Navigation",
@@ -422,7 +422,7 @@ func (m *Model) ultraVisibleCursor(tasks []task.Task) int {
 	return m.ultraCursor
 }
 
-func (m Model) ultraStatusLine(text string, width int) string {
+func (m *Model) ultraStatusLine(text string, width int) string {
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).
 		Background(lipgloss.Color(m.theme.StatusBG)).
