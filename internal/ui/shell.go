@@ -16,14 +16,19 @@ import (
 
 const shellCommandTimeout = 2 * time.Minute
 
-func shellRunCmd(line string, selectedID int) tea.Cmd {
+func shellRunCmd(parent context.Context, line string, selectedID int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), shellCommandTimeout)
+		ctx, cancel := context.WithTimeout(parent, shellCommandTimeout)
 		defer cancel()
 
 		result, err := task.RunShellLine(ctx, line)
 		return shellDoneMsg{result: result, err: err, selectedID: selectedID}
 	}
+}
+
+func (m *Model) shellCommandContext() context.Context {
+	m.initTaskContext()
+	return m.taskContext
 }
 
 func (m *Model) handleShellPrompt() (tea.Model, tea.Cmd) {
@@ -65,7 +70,7 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shellActive = false
 		m.shellInput.Blur()
 		m.updateTableHeight()
-		return m, shellRunCmd(line, selectedID)
+		return m, shellRunCmd(m.shellCommandContext(), line, selectedID)
 	case "esc":
 		m.shellActive = false
 		m.shellInput.Blur()

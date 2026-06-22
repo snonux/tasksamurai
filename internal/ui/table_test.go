@@ -1517,6 +1517,86 @@ func TestQuitCancelsTaskExportContext(t *testing.T) {
 	}
 }
 
+func TestQuitCancelsRunningShellCommand(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	startedFile := filepath.Join(tmp, "started")
+	finishedFile := filepath.Join(tmp, "finished")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"printf started > %q\n"+
+		"sleep 10\n"+
+		"printf finished > %q\n", startedFile, finishedFile)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = *mv.(*Model)
+	for _, r := range "projects" {
+		mv, _ = (&m).Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = *mv.(*Model)
+	}
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatalf("enter did not return shell command")
+	}
+
+	done := make(chan tea.Msg, 1)
+	go func() {
+		done <- cmd()
+	}()
+
+	if !waitForFile(startedFile, 2*time.Second) {
+		m.cancelTaskOperations()
+		t.Fatalf("shell command did not start")
+	}
+
+	_, quitCmd := m.handleQuitKey()
+	if quitCmd == nil {
+		t.Fatalf("quit returned nil command; want tea.Quit")
+	}
+
+	select {
+	case msg := <-done:
+		doneMsg, ok := msg.(shellDoneMsg)
+		if !ok {
+			t.Fatalf("shell command returned %T, want shellDoneMsg", msg)
+		}
+		if !errors.Is(doneMsg.err, context.Canceled) {
+			t.Fatalf("shell command error = %v, want context canceled", doneMsg.err)
+		}
+	case <-time.After(2 * time.Second):
+		m.cancelTaskOperations()
+		t.Fatal("shell command did not stop after quit canceled task operations")
+	}
+
+	if _, err := os.Stat(finishedFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("shell command reached finish marker after quit; stat error = %v", err)
+	}
+}
+
+func waitForFile(path string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
 func TestEscDoesNotQuitUltraStartup(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupBasicTask(t, tmp)
