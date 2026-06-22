@@ -1025,23 +1025,13 @@ func (m Model) formatDue(s string, width int) string {
 	if s == "" {
 		return ""
 	}
-	ts, err := time.Parse(task.DateFormat, s)
+	ts, err := parseTaskDate(s)
 	if err != nil {
 		return s
 	}
 
-	days := int(time.Until(ts).Hours() / 24)
-	var val string
-	switch days {
-	case 0:
-		val = "today"
-	case 1:
-		val = "tomorrow"
-	case -1:
-		val = "yesterday"
-	default:
-		val = fmt.Sprintf("%dd", days)
-	}
+	days := daysUntil(ts)
+	val := formatDueText(s)
 	style := lipgloss.NewStyle().Width(width)
 	if days < 0 {
 		style = style.Background(lipgloss.Color(m.theme.OverdueBG))

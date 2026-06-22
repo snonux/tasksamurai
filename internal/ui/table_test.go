@@ -74,6 +74,63 @@ func TestAnnotateHotkey(t *testing.T) {
 	}
 }
 
+func TestFormatDueUsesCalendarDayLabels(t *testing.T) {
+	now := time.Now()
+	dueOn := func(dayOffset int, hour, minute int) string {
+		day := now.AddDate(0, 0, dayOffset)
+		due := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, 0, 0, time.UTC)
+		return due.Format(task.DateFormat)
+	}
+	skipIfDateChanged := func() {
+		t.Helper()
+		later := time.Now()
+		if later.Year() != now.Year() || later.YearDay() != now.YearDay() {
+			t.Skip("local date changed during due-date boundary test")
+		}
+	}
+
+	m := Model{theme: DefaultTheme()}
+	tests := []struct {
+		name string
+		due  string
+		want string
+	}{
+		{
+			name: "late yesterday",
+			due:  dueOn(-1, 23, 59),
+			want: "yesterday",
+		},
+		{
+			name: "early today",
+			due:  dueOn(0, 0, 1),
+			want: "today",
+		},
+		{
+			name: "late tomorrow",
+			due:  dueOn(1, 23, 59),
+			want: "tomorrow",
+		},
+		{
+			name: "future day count",
+			due:  dueOn(3, 23, 59),
+			want: "3d",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.TrimSpace(ansi.Strip(m.formatDue(tt.due, 12)))
+			skipIfDateChanged()
+			if got != tt.want {
+				t.Fatalf("formatDue() = %q, want %q", got, tt.want)
+			}
+			if got != formatDueText(tt.due) {
+				t.Fatalf("formatDue() = %q, formatDueText() = %q", got, formatDueText(tt.due))
+			}
+		})
+	}
+}
+
 func TestReplaceAnnotationHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
