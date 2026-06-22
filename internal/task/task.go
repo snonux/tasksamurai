@@ -63,7 +63,11 @@ type CompletionSources struct {
 }
 
 func run(args ...string) error {
-	_, err := RunArgs(context.Background(), args)
+	return runContext(context.Background(), args...)
+}
+
+func runContext(ctx context.Context, args ...string) error {
+	_, err := RunArgs(ctx, args)
 	return err
 }
 
@@ -342,6 +346,12 @@ func SetPriority(id int, priority string) error {
 
 // AddTags adds tags to the task with the given id.
 func AddTags(id int, tags []string) error {
+	return AddTagsContext(context.Background(), id, tags)
+}
+
+// AddTagsContext adds tags to the task with the given id using ctx for the
+// underlying Taskwarrior command.
+func AddTagsContext(ctx context.Context, id int, tags []string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
@@ -352,11 +362,17 @@ func AddTags(id int, tags []string) error {
 		}
 		args = append(args, t)
 	}
-	return run(args...)
+	return runContext(ctx, args...)
 }
 
 // RemoveTags removes tags from the task with the given id.
 func RemoveTags(id int, tags []string) error {
+	return RemoveTagsContext(context.Background(), id, tags)
+}
+
+// RemoveTagsContext removes tags from the task with the given id using ctx for
+// the underlying Taskwarrior command.
+func RemoveTagsContext(ctx context.Context, id int, tags []string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
@@ -367,7 +383,7 @@ func RemoveTags(id int, tags []string) error {
 		}
 		args = append(args, t)
 	}
-	return run(args...)
+	return runContext(ctx, args...)
 }
 
 // SetTags sets the tags of the task with the given id to exactly the provided set.
@@ -405,12 +421,12 @@ func SetTags(ctx context.Context, id int, tags []string) error {
 	}
 
 	if len(adds) > 0 {
-		if err := AddTags(id, adds); err != nil {
+		if err := AddTagsContext(ctx, id, adds); err != nil {
 			return err
 		}
 	}
 	if len(removes) > 0 {
-		if err := RemoveTags(id, removes); err != nil {
+		if err := RemoveTagsContext(ctx, id, removes); err != nil {
 			return err
 		}
 	}
@@ -439,10 +455,16 @@ func SetProject(id int, project string) error {
 
 // Annotate adds an annotation to the task with the given id.
 func Annotate(id int, text string) error {
+	return AnnotateContext(context.Background(), id, text)
+}
+
+// AnnotateContext adds an annotation to the task with the given id using ctx
+// for the underlying Taskwarrior command.
+func AnnotateContext(ctx context.Context, id int, text string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	return run(strconv.Itoa(id), "annotate", text)
+	return runContext(ctx, strconv.Itoa(id), "annotate", text)
 }
 
 // Denotate removes an annotation from the task with the given id.
@@ -450,6 +472,12 @@ func Annotate(id int, text string) error {
 // annotation text is matched exactly when provided. If text is empty, the
 // oldest annotation is removed.
 func Denotate(id int, text string) error {
+	return DenotateContext(context.Background(), id, text)
+}
+
+// DenotateContext removes an annotation from the task with the given id using
+// ctx for the underlying Taskwarrior command.
+func DenotateContext(ctx context.Context, id int, text string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
@@ -457,7 +485,7 @@ func Denotate(id int, text string) error {
 	if text != "" {
 		args = append(args, text)
 	}
-	return run(args...)
+	return runContext(ctx, args...)
 }
 
 // ReplaceAnnotations removes all existing annotations from the task with the
@@ -476,14 +504,14 @@ func ReplaceAnnotations(ctx context.Context, id int, text string) error {
 	}
 	anns := tasks[0].Annotations
 	for i := len(anns) - 1; i >= 0; i-- {
-		if err := Denotate(id, anns[i].Description); err != nil {
+		if err := DenotateContext(ctx, id, anns[i].Description); err != nil {
 			return err
 		}
 	}
 	if text == "" {
 		return nil
 	}
-	return Annotate(id, text)
+	return AnnotateContext(ctx, id, text)
 }
 
 // Edit opens the task in an editor for manual modification.

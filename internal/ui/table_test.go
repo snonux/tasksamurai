@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1498,6 +1500,20 @@ func TestEscDoesNotQuitFromTable(t *testing.T) {
 	m = *mv.(*Model)
 	if m.showHelp || m.showTaskDetail || m.showUltra {
 		t.Fatalf("q changed mode unexpectedly: help=%v detail=%v ultra=%v", m.showHelp, m.showTaskDetail, m.showUltra)
+	}
+}
+
+func TestQuitCancelsTaskExportContext(t *testing.T) {
+	m := Model{}
+	ctx, cancel := m.taskExportContext()
+	defer cancel()
+
+	_, cmd := m.handleQuitKey()
+	if cmd == nil {
+		t.Fatal("quit returned nil command; want tea.Quit")
+	}
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatalf("task export context error = %v, want context canceled", ctx.Err())
 	}
 }
 

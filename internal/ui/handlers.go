@@ -47,14 +47,16 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.replaceAnnotations {
-			ctx, cancel := taskExportContext()
+			ctx, cancel := m.taskExportContext()
 			defer cancel()
 			if err := task.ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 			m.replaceAnnotations = false
 		} else {
-			if err := task.Annotate(m.annotateID, value); err != nil {
+			ctx, cancel := m.taskExportContext()
+			defer cancel()
+			if err := task.AnnotateContext(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 		}
@@ -127,14 +129,18 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		if len(adds) > 0 {
-			if err := task.AddTags(m.tagsID, adds); err != nil {
-				return err
+		if len(adds) > 0 || len(removes) > 0 {
+			ctx, cancel := m.taskExportContext()
+			defer cancel()
+			if len(adds) > 0 {
+				if err := task.AddTagsContext(ctx, m.tagsID, adds); err != nil {
+					return err
+				}
 			}
-		}
-		if len(removes) > 0 {
-			if err := task.RemoveTags(m.tagsID, removes); err != nil {
-				return err
+			if len(removes) > 0 {
+				if err := task.RemoveTagsContext(ctx, m.tagsID, removes); err != nil {
+					return err
+				}
 			}
 		}
 		if err := m.reload(); err != nil {

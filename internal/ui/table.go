@@ -228,6 +228,9 @@ type Model struct {
 	statusMsg string // temporary status message shown in status bar
 
 	helpViewport viewport.Model
+
+	taskContext       context.Context
+	cancelTaskContext context.CancelFunc
 }
 
 // editDoneMsg is emitted when the external editor process finishes.
@@ -262,8 +265,22 @@ type reloadData struct {
 	ultraFilterIDs []int
 }
 
-func taskExportContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), taskExportTimeout)
+func (m *Model) initTaskContext() {
+	if m.taskContext != nil && m.cancelTaskContext != nil {
+		return
+	}
+	m.taskContext, m.cancelTaskContext = context.WithCancel(context.Background())
+}
+
+func (m *Model) cancelTaskOperations() {
+	if m.cancelTaskContext != nil {
+		m.cancelTaskContext()
+	}
+}
+
+func (m *Model) taskExportContext() (context.Context, context.CancelFunc) {
+	m.initTaskContext()
+	return context.WithTimeout(m.taskContext, taskExportTimeout)
 }
 
 // blinkInterval controls how quickly the row flashes when a task changes.
@@ -413,6 +430,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 // New creates a new UI model with the provided rows.
 func New(filters []string, browserCmd string) (Model, error) {
 	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", blinkState: blinkState{blinkEnabled: true}}
+	m.initTaskContext()
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
@@ -442,6 +460,7 @@ func New(filters []string, browserCmd string) (Model, error) {
 	m.theme = m.defaultTheme
 
 	if err := m.reload(); err != nil {
+		m.cancelTaskOperations()
 		return Model{}, err
 	}
 
@@ -491,7 +510,7 @@ func (m *Model) fetchTasks() (reloadData, error) {
 	// Always show only pending tasks by default.
 	filters := append([]string(nil), m.filters...)
 	filters = append(filters, "status:pending")
-	ctx, cancel := taskExportContext()
+	ctx, cancel := m.taskExportContext()
 	defer cancel()
 
 	tasks, err := task.Export(ctx, filters...)

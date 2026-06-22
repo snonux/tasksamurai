@@ -262,6 +262,134 @@ func TestExportReturnsCapturedErrorOutput(t *testing.T) {
 	}
 }
 
+func TestSetTagsHonorsContextDuringMutations(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = modify ]; then\n" +
+		"    sleep 5\n" +
+		"    exit 0\n" +
+		"  fi\n" +
+		"done\n" +
+		"printf '%s\\n' '{\"id\":1,\"tags\":[\"old\"]}'\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := SetTags(ctx, 1, []string{"new"})
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("SetTags error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("SetTags took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestSetTagsHonorsContextDuringRemovals(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = modify ]; then\n" +
+		"    sleep 5\n" +
+		"    exit 0\n" +
+		"  fi\n" +
+		"done\n" +
+		"printf '%s\\n' '{\"id\":1,\"tags\":[\"old\"]}'\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := SetTags(ctx, 1, nil)
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("SetTags error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("SetTags took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestReplaceAnnotationsHonorsContextDuringMutations(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = denotate ] || [ \"$arg\" = annotate ]; then\n" +
+		"    sleep 5\n" +
+		"    exit 0\n" +
+		"  fi\n" +
+		"done\n" +
+		"printf '%s\\n' '{\"id\":1,\"annotations\":[{\"entry\":\"20260622T000000Z\",\"description\":\"old note\"}]}'\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := ReplaceAnnotations(ctx, 1, "new note")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestReplaceAnnotationsHonorsContextDuringAnnotate(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = annotate ]; then\n" +
+		"    sleep 5\n" +
+		"    exit 0\n" +
+		"  fi\n" +
+		"done\n" +
+		"printf '%s\\n' '{\"id\":1,\"annotations\":[]}'\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := ReplaceAnnotations(ctx, 1, "new note")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
 func TestLoadCompletionSources(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")

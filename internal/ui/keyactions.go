@@ -159,7 +159,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			}
 			filters = append(filters, "status:"+restore.status)
 
-			ctx, cancel := taskExportContext()
+			ctx, cancel := m.taskExportContext()
 			tasks, err := task.Export(ctx, filters...)
 			cancel()
 			if err == nil && len(tasks) > 0 {
@@ -200,7 +200,7 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 	recurring := isRecurringTask(tsk)
 	tasks := []task.Task{tsk}
 	if recurring {
-		ctx, cancel := taskExportContext()
+		ctx, cancel := m.taskExportContext()
 		series, err := task.RecurringSeries(ctx, recurringRootUUID(tsk))
 		cancel()
 		if err != nil {
@@ -495,7 +495,9 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 	}
 
 	// Remove the tag from the task
-	if err := task.RemoveTags(id, []string{firstTag}); err != nil {
+	ctx, cancel := m.taskExportContext()
+	defer cancel()
+	if err := task.RemoveTagsContext(ctx, id, []string{firstTag}); err != nil {
 		m.showError(err)
 		return m, nil
 	}

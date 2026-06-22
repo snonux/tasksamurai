@@ -184,6 +184,7 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.reloadAndReport()
 		return m, nil
 	}
+	m.cancelTaskOperations()
 	return m, tea.Quit
 }
 
