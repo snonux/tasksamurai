@@ -550,6 +550,119 @@ func TestDeleteRecurringHotkeyUndo(t *testing.T) {
 	}
 }
 
+func TestDeleteRecurringRollsBackCompletedDeletesAfterContextDeadline(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if [ \"$1\" = \"(parent or parent:parent)\" ] && [ \"$2\" = \"status.any:\" ] && [ \"$3\" = \"export\" ]; then\n"+
+		"  echo '{\"id\":0,\"uuid\":\"parent\",\"description\":\"template\",\"status\":\"recurring\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  echo '{\"id\":1,\"uuid\":\"child\",\"parent\":\"parent\",\"description\":\"child\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %q\n"+
+		"if [ \"$1\" = \"parent\" ] && [ \"$2\" = \"modify\" ] && [ \"$3\" = \"status:deleted\" ]; then\n"+
+		"  sleep 10\n"+
+		"fi\n", logFile)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	parentCtx, cancelParent := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancelParent()
+	m := Model{taskContext: parentCtx, cancelTaskContext: cancelParent}
+
+	count, recurring, err := m.deleteTaskWithUndo(task.Task{
+		ID:          1,
+		UUID:        "child",
+		Parent:      "parent",
+		Description: "child",
+		Status:      "pending",
+		Recur:       "daily",
+		RType:       "periodic",
+	})
+	if err == nil {
+		t.Fatal("deleteTaskWithUndo returned nil error; want context deadline error")
+	}
+	if !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+		t.Fatalf("error = %q, want context deadline exceeded", err)
+	}
+	if count != 0 || !recurring {
+		t.Fatalf("delete result = (%d, %v), want (0, true)", count, recurring)
+	}
+	if len(m.undoStack) != 0 {
+		t.Fatalf("undo stack length = %d, want 0", len(m.undoStack))
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{
+		"child modify status:deleted",
+		"parent modify status:deleted",
+		"child modify status:pending",
+	}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("unexpected commands:\ngot  %#v\nwant %#v", lines, want)
+	}
+}
+
+func TestDeleteRecurringReportsRollbackFailure(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if [ \"$1\" = \"(parent or parent:parent)\" ] && [ \"$2\" = \"status.any:\" ] && [ \"$3\" = \"export\" ]; then\n"+
+		"  echo '{\"id\":0,\"uuid\":\"parent\",\"description\":\"template\",\"status\":\"recurring\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  echo '{\"id\":1,\"uuid\":\"child\",\"parent\":\"parent\",\"description\":\"child\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %q\n"+
+		"if [ \"$1\" = \"parent\" ] && [ \"$2\" = \"modify\" ] && [ \"$3\" = \"status:deleted\" ]; then\n"+
+		"  echo delete failed >&2\n"+
+		"  exit 2\n"+
+		"fi\n"+
+		"if [ \"$1\" = \"child\" ] && [ \"$2\" = \"modify\" ] && [ \"$3\" = \"status:pending\" ]; then\n"+
+		"  echo rollback failed >&2\n"+
+		"  exit 3\n"+
+		"fi\n", logFile)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m := Model{}
+	count, recurring, err := m.deleteTaskWithUndo(task.Task{
+		ID:          1,
+		UUID:        "child",
+		Parent:      "parent",
+		Description: "child",
+		Status:      "pending",
+		Recur:       "daily",
+		RType:       "periodic",
+	})
+	if err == nil {
+		t.Fatal("deleteTaskWithUndo returned nil error; want rollback failure")
+	}
+	if !strings.Contains(err.Error(), "rollback failed") {
+		t.Fatalf("error = %q, want rollback failure detail", err)
+	}
+	if !strings.Contains(err.Error(), "restoring task child to pending") {
+		t.Fatalf("error = %q, want failed restore context", err)
+	}
+	if count != 0 || !recurring {
+		t.Fatalf("delete result = (%d, %v), want (0, true)", count, recurring)
+	}
+	if len(m.undoStack) != 0 {
+		t.Fatalf("undo stack length = %d, want 0", len(m.undoStack))
+	}
+}
+
 func TestDeleteHotkeyInUltraMode(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")

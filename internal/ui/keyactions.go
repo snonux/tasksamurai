@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os/exec"
@@ -234,7 +235,9 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 	completed := make([]undoRestore, 0, len(restores))
 	for _, restore := range restores {
 		if err := task.SetStatusUUIDContext(ctx, restore.uuid, "deleted"); err != nil {
-			rollbackUndoRestores(ctx, completed)
+			if rollbackErr := rollbackUndoRestores(completed); rollbackErr != nil {
+				return 0, recurring, fmt.Errorf("deleting task %s: %w; rollback failed: %w", restore.uuid, err, rollbackErr)
+			}
 			return 0, recurring, fmt.Errorf("deleting task %s: %w", restore.uuid, err)
 		}
 		completed = append(completed, restore)
@@ -304,10 +307,17 @@ func undoStatusForTask(tsk task.Task) string {
 	return tsk.Status
 }
 
-func rollbackUndoRestores(ctx context.Context, restores []undoRestore) {
+func rollbackUndoRestores(restores []undoRestore) error {
+	ctx, cancel := context.WithTimeout(context.Background(), taskOperationTimeout)
+	defer cancel()
+
+	var errs []error
 	for i := len(restores) - 1; i >= 0; i-- {
-		_ = task.SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status)
+		if err := task.SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status); err != nil {
+			errs = append(errs, fmt.Errorf("restoring task %s to %s: %w", restores[i].uuid, restores[i].status, err))
+		}
 	}
+	return errors.Join(errs...)
 }
 
 func undoStatus(action undoAction) string {
