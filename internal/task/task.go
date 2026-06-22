@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/shlex"
 )
@@ -489,17 +491,33 @@ func SetTags(ctx context.Context, id int, tags []string) error {
 		}
 	}
 
-	if len(adds) > 0 {
-		if err := AddTagsContext(ctx, id, adds); err != nil {
-			return err
-		}
-	}
-	if len(removes) > 0 {
-		if err := RemoveTagsContext(ctx, id, removes); err != nil {
+	args := tagModifyArgs(adds, removes)
+	if len(args) > 0 {
+		if err := modifyTaskContext(ctx, id, args...); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func tagModifyArgs(adds, removes []string) []string {
+	sort.Strings(adds)
+	sort.Strings(removes)
+
+	args := make([]string, 0, len(adds)+len(removes))
+	for _, t := range adds {
+		if len(t) > 0 && t[0] != '+' {
+			t = "+" + t
+		}
+		args = append(args, t)
+	}
+	for _, t := range removes {
+		if len(t) > 0 && t[0] != '-' {
+			t = "-" + t
+		}
+		args = append(args, t)
+	}
+	return args
 }
 
 // SetRecurrence sets the recurrence for the task with the given id.
@@ -598,13 +616,55 @@ func ReplaceAnnotations(ctx context.Context, id int, text string) error {
 	anns := tasks[0].Annotations
 	for i := len(anns) - 1; i >= 0; i-- {
 		if err := DenotateContext(ctx, id, anns[i].Description); err != nil {
-			return err
+			return replaceAnnotationsError(ctx, id, anns, err)
 		}
 	}
 	if text == "" {
 		return nil
 	}
-	return AnnotateContext(ctx, id, text)
+	if err := AnnotateContext(ctx, id, text); err != nil {
+		return replaceAnnotationsError(ctx, id, anns, err)
+	}
+	return nil
+}
+
+func replaceAnnotationsError(ctx context.Context, id int, anns []Annotation, err error) error {
+	rollbackCtx, cancel := rollbackContext(ctx)
+	defer cancel()
+
+	if rollbackErr := restoreAnnotations(rollbackCtx, id, anns); rollbackErr != nil {
+		return fmt.Errorf("replace annotations failed: %w; rollback failed: %w", err, rollbackErr)
+	}
+	return err
+}
+
+func rollbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx.Err() != nil {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, 5*time.Second)
+}
+
+func restoreAnnotations(ctx context.Context, id int, anns []Annotation) error {
+	tasks, err := Export(ctx, strconv.Itoa(id))
+	if err != nil {
+		return fmt.Errorf("snapshot current annotations: %w", err)
+	}
+	if len(tasks) == 0 {
+		return fmt.Errorf("task %d not found", id)
+	}
+	current := tasks[0].Annotations
+	for i := len(current) - 1; i >= 0; i-- {
+		if err := DenotateContext(ctx, id, current[i].Description); err != nil {
+			return fmt.Errorf("remove current annotation %q: %w", current[i].Description, err)
+		}
+	}
+	for _, ann := range anns {
+		if err := AnnotateContext(ctx, id, ann.Description); err != nil {
+			return fmt.Errorf("restore annotation %q: %w", ann.Description, err)
+		}
+	}
+	return nil
 }
 
 // Edit opens the task in an editor for manual modification.

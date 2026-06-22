@@ -375,6 +375,93 @@ func TestSetTagsHonorsContextDuringRemovals(t *testing.T) {
 	}
 }
 
+func TestSetTagsFailureDoesNotPartiallyApply(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "tags.txt")
+	logPath := filepath.Join(tmp, "commands.log")
+	if err := os.WriteFile(statePath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fmt.Sprintf(`#!/bin/sh
+state=%q
+log=%q
+printf '%%s\n' "$*" >> "$log"
+if [ "$2" = export ]; then
+  tags=$(cat "$state")
+  printf '{"id":1,"tags":['
+  sep=
+  for tag in $tags; do
+    printf '%%s"%%s"' "$sep" "$tag"
+    sep=,
+  done
+  printf ']}\n'
+  exit 0
+fi
+if [ "$2" = modify ]; then
+  for arg in "$@"; do
+    if [ "$arg" = "-old" ]; then
+      echo remove failed >&2
+      exit 2
+    fi
+  done
+  tags=$(cat "$state")
+  shift 2
+  for arg in "$@"; do
+    case "$arg" in
+      +*)
+        tag=${arg#+}
+        case " $tags " in
+          *" $tag "*) ;;
+          *) tags="$tags $tag" ;;
+        esac
+        ;;
+      -*)
+        tag=${arg#-}
+        next=
+        for current in $tags; do
+          if [ "$current" != "$tag" ]; then
+            next="$next $current"
+          fi
+        done
+        tags=$next
+        ;;
+    esac
+  done
+  set -- $tags
+  printf '%%s' "$*" > "$state"
+  exit 0
+fi
+exit 1
+`, statePath, logPath)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	err := SetTags(context.Background(), 1, []string{"new"})
+	if err == nil {
+		t.Fatal("expected SetTags error")
+	}
+	if !strings.Contains(err.Error(), "remove failed") {
+		t.Fatalf("SetTags error = %v, want remove failure", err)
+	}
+	if got := readSpaceSeparatedFile(t, statePath); strings.Join(got, ",") != "old" {
+		t.Fatalf("tags after failed SetTags = %#v, want original old tag only", got)
+	}
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read command log: %v", err)
+	}
+	if got := strings.Count(string(logData), "modify"); got != 1 {
+		t.Fatalf("modify command count = %d, want 1; log:\n%s", got, logData)
+	}
+}
+
 func TestReplaceAnnotationsHonorsContextDuringMutations(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
@@ -436,6 +523,114 @@ func TestReplaceAnnotationsHonorsContextDuringAnnotate(t *testing.T) {
 	}
 	if elapsed > time.Second {
 		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestReplaceAnnotationsRestoresSnapshotAfterDenotateFailure(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "annotations.txt")
+	failPath := filepath.Join(tmp, "failed-once")
+	if err := os.WriteFile(statePath, []byte("first note\nsecond note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fakeAnnotationTaskScript(statePath, `
+if [ "$2" = denotate ] && [ "$3" = "first note" ] && [ ! -e `+shellQuote(failPath)+` ]; then
+  touch `+shellQuote(failPath)+`
+  echo denotate first failed >&2
+  exit 2
+fi
+`)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	if err == nil {
+		t.Fatal("expected ReplaceAnnotations error")
+	}
+	if !strings.Contains(err.Error(), "denotate first failed") {
+		t.Fatalf("ReplaceAnnotations error = %v, want denotate failure", err)
+	}
+	if got := readLinesFile(t, statePath); strings.Join(got, "|") != "first note|second note" {
+		t.Fatalf("annotations after rollback = %#v, want original annotations", got)
+	}
+}
+
+func TestReplaceAnnotationsRestoresSnapshotAfterAnnotateFailure(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "annotations.txt")
+	if err := os.WriteFile(statePath, []byte("first note\nsecond note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fakeAnnotationTaskScript(statePath, `
+if [ "$2" = annotate ] && [ "$3" = "replacement note" ]; then
+  echo annotate replacement failed >&2
+  exit 2
+fi
+`)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	if err == nil {
+		t.Fatal("expected ReplaceAnnotations error")
+	}
+	if !strings.Contains(err.Error(), "annotate replacement failed") {
+		t.Fatalf("ReplaceAnnotations error = %v, want annotate failure", err)
+	}
+	if got := readLinesFile(t, statePath); strings.Join(got, "|") != "first note|second note" {
+		t.Fatalf("annotations after rollback = %#v, want original annotations", got)
+	}
+}
+
+func TestReplaceAnnotationsReportsRollbackFailure(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "annotations.txt")
+	if err := os.WriteFile(statePath, []byte("first note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fakeAnnotationTaskScript(statePath, `
+if [ "$2" = annotate ] && [ "$3" = "replacement note" ]; then
+  echo annotate replacement failed >&2
+  exit 2
+fi
+if [ "$2" = annotate ] && [ "$3" = "first note" ]; then
+  echo rollback annotate failed >&2
+  exit 3
+fi
+`)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	if err == nil {
+		t.Fatal("expected ReplaceAnnotations error")
+	}
+	if !strings.Contains(err.Error(), "annotate replacement failed") {
+		t.Fatalf("ReplaceAnnotations error = %v, want original failure", err)
+	}
+	if !strings.Contains(err.Error(), "rollback failed") {
+		t.Fatalf("ReplaceAnnotations error = %v, want rollback failure", err)
+	}
+	if !strings.Contains(err.Error(), "rollback annotate failed") {
+		t.Fatalf("ReplaceAnnotations error = %v, want rollback detail", err)
 	}
 }
 
@@ -596,4 +791,72 @@ func TestModifyHelpers(t *testing.T) {
 	if !annFound {
 		t.Errorf("annotation not added")
 	}
+}
+
+func readSpaceSeparatedFile(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return strings.Fields(string(data))
+}
+
+func readLinesFile(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var lines []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func fakeAnnotationTaskScript(statePath, failureBlock string) string {
+	return `#!/bin/sh
+state=` + shellQuote(statePath) + `
+` + failureBlock + `
+if [ "$2" = export ]; then
+  printf '{"id":1,"annotations":['
+  sep=
+  while IFS= read -r ann; do
+    if [ -n "$ann" ]; then
+      printf '%s{"entry":"20260622T000000Z","description":"%s"}' "$sep" "$ann"
+      sep=,
+    fi
+  done < "$state"
+  printf ']}\n'
+  exit 0
+fi
+if [ "$2" = denotate ]; then
+  tmp="$state.tmp"
+  : > "$tmp"
+  removed=0
+  while IFS= read -r ann; do
+    if [ "$removed" = 0 ] && [ "$ann" = "$3" ]; then
+      removed=1
+    else
+      printf '%s\n' "$ann" >> "$tmp"
+    fi
+  done < "$state"
+  mv "$tmp" "$state"
+  exit 0
+fi
+if [ "$2" = annotate ]; then
+  printf '%s\n' "$3" >> "$state"
+  exit 0
+fi
+exit 1
+`
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
