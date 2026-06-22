@@ -1084,6 +1084,143 @@ func TestRecurrenceHotkey(t *testing.T) {
 	}
 }
 
+func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
+	m := newRecurrenceDetailModel(t, "")
+
+	m.showTaskDetail = true
+	m.currentTaskDetail = &m.tasks[0]
+	m.activateRecurEdit(m.currentTaskDetail.ID, m.currentTaskDetail.Recur)
+	m.recurInput.SetValue("daily")
+
+	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if cmd == nil {
+		t.Fatalf("recurrence edit did not start a blink command")
+	}
+	if m.currentTaskDetail == nil {
+		t.Fatalf("current task detail was cleared")
+	}
+	if m.currentTaskDetail.Recur != "daily" {
+		t.Fatalf("current detail recurrence = %q, want daily", m.currentTaskDetail.Recur)
+	}
+	if m.detailBlinkField != fieldRecur {
+		t.Fatalf("detail blink field = %d, want recurrence field %d", m.detailBlinkField, fieldRecur)
+	}
+	if m.detailBlinkField == fieldEntry {
+		t.Fatalf("detail blink targeted entry field %d, want recurrence field %d", fieldEntry, fieldRecur)
+	}
+	if m.blinkID != 0 {
+		t.Fatalf("row blink started unexpectedly for task ID %d", m.blinkID)
+	}
+}
+
+func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) {
+	m := newRecurrenceDetailModel(t, "daily")
+
+	m.showTaskDetail = true
+	m.currentTaskDetail = &m.tasks[0]
+	m.detailBlinkField = -1
+	m.activateRecurEdit(m.currentTaskDetail.ID, m.currentTaskDetail.Recur)
+	m.recurInput.SetValue("")
+
+	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if cmd == nil {
+		t.Fatalf("recurrence removal did not start a fallback blink command")
+	}
+	if m.currentTaskDetail == nil {
+		t.Fatalf("current task detail was cleared")
+	}
+	if m.currentTaskDetail.Recur != "" {
+		t.Fatalf("current detail recurrence = %q, want empty", m.currentTaskDetail.Recur)
+	}
+	if m.detailBlinkField == fieldRecur {
+		t.Fatalf("detail blink targeted recurrence field after recurrence row was removed")
+	}
+	if m.blinkID != 1 {
+		t.Fatalf("row blink ID = %d, want fallback task ID 1", m.blinkID)
+	}
+}
+
+func newRecurrenceDetailModel(t *testing.T, initialRecur string) Model {
+	t.Helper()
+
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	stateFile := filepath.Join(tmp, "recur-state.txt")
+
+	if initialRecur != "" {
+		if err := os.WriteFile(stateFile, []byte(initialRecur), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	script := fmt.Sprintf(`#!/bin/sh
+state=%q
+if echo "$@" | grep -q export; then
+  recur=""
+  if [ -f "$state" ]; then
+    recur=$(cat "$state")
+  fi
+  if [ -n "$recur" ]; then
+    printf '{"id":1,"uuid":"x","description":"d","status":"pending","entry":"","priority":"","urgency":0,"recur":"%%s"}\n' "$recur"
+  else
+    printf '{"id":1,"uuid":"x","description":"d","status":"pending","entry":"","priority":"","urgency":0}\n'
+  fi
+  exit 0
+fi
+for arg in "$@"; do
+  case "$arg" in
+    recur:*)
+      printf '%%s' "${arg#recur:}" > "$state"
+      exit 0
+      ;;
+  esac
+done
+exit 0
+`, stateFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", tmp+":"+origPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("PATH", origPath); err != nil {
+			t.Errorf("restore PATH: %v", err)
+		}
+	})
+
+	if err := os.Setenv("TASKDATA", tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("TASKRC", "/dev/null"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Unsetenv("TASKDATA"); err != nil {
+			t.Errorf("unset TASKDATA: %v", err)
+		}
+		if err := os.Unsetenv("TASKRC"); err != nil {
+			t.Errorf("unset TASKRC: %v", err)
+		}
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if len(m.tasks) != 1 {
+		t.Fatalf("loaded %d tasks, want 1", len(m.tasks))
+	}
+	return m
+}
+
 func TestPriorityHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")

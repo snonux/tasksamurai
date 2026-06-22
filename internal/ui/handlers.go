@@ -236,11 +236,8 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
 	if msg.String() == "enter" {
 		if m.showTaskDetail {
-			// In detail view, blink the recurrence field (dynamic index)
-			// Need to calculate the index based on whether recurrence field exists
-			fieldIndex := 8 // Base index for recurrence
 			if m.currentTaskDetail != nil && m.currentTaskDetail.Recur != "" {
-				return model, m.startDetailBlink(fieldIndex)
+				return model, m.startDetailBlink(fieldRecur)
 			}
 		}
 		return model, m.startBlink(m.recurID, false)
