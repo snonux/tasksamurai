@@ -262,6 +262,55 @@ func TestExportReturnsCapturedErrorOutput(t *testing.T) {
 	}
 }
 
+func TestMutationHelpersHonorContextCancellation(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\nsleep 5\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	tests := []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"AddContext", func(ctx context.Context) error { return AddContext(ctx, "new task", []string{"tag"}) }},
+		{"AddArgsContext", func(ctx context.Context) error { return AddArgsContext(ctx, []string{"new task", "+tag"}) }},
+		{"AddLineContext", func(ctx context.Context) error { return AddLineContext(ctx, `"new task" +tag`) }},
+		{"SetStatusContext", func(ctx context.Context) error { return SetStatusContext(ctx, 1, "pending") }},
+		{"SetStatusUUIDContext", func(ctx context.Context) error { return SetStatusUUIDContext(ctx, "task-uuid", "pending") }},
+		{"StartContext", func(ctx context.Context) error { return StartContext(ctx, 1) }},
+		{"StopContext", func(ctx context.Context) error { return StopContext(ctx, 1) }},
+		{"DoneContext", func(ctx context.Context) error { return DoneContext(ctx, 1) }},
+		{"DeleteContext", func(ctx context.Context) error { return DeleteContext(ctx, 1) }},
+		{"SetPriorityContext", func(ctx context.Context) error { return SetPriorityContext(ctx, 1, "H") }},
+		{"SetRecurrenceContext", func(ctx context.Context) error { return SetRecurrenceContext(ctx, 1, "daily") }},
+		{"SetDueDateContext", func(ctx context.Context) error { return SetDueDateContext(ctx, 1, "tomorrow") }},
+		{"SetDescriptionContext", func(ctx context.Context) error { return SetDescriptionContext(ctx, 1, "new description") }},
+		{"SetProjectContext", func(ctx context.Context) error { return SetProjectContext(ctx, 1, "home") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+
+			start := time.Now()
+			err := tt.run(ctx)
+			elapsed := time.Since(start)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("%s error = %v, want context deadline exceeded", tt.name, err)
+			}
+			if elapsed > time.Second {
+				t.Fatalf("%s took %s, expected prompt context cancellation", tt.name, elapsed)
+			}
+		})
+	}
+}
+
 func TestSetTagsHonorsContextDuringMutations(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")

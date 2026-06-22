@@ -25,7 +25,7 @@ import (
 
 var priorityOptions = []string{"H", "M", "L", ""}
 
-const taskExportTimeout = 30 * time.Second
+const taskOperationTimeout = 30 * time.Second
 
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
@@ -278,9 +278,9 @@ func (m *Model) cancelTaskOperations() {
 	}
 }
 
-func (m *Model) taskExportContext() (context.Context, context.CancelFunc) {
+func (m *Model) taskOperationContext() (context.Context, context.CancelFunc) {
 	m.initTaskContext()
-	return context.WithTimeout(m.taskContext, taskExportTimeout)
+	return context.WithTimeout(m.taskContext, taskOperationTimeout)
 }
 
 // blinkInterval controls how quickly the row flashes when a task changes.
@@ -397,7 +397,10 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 					break
 				}
 			}
-			if err := task.Done(id); err != nil {
+			ctx, cancel := m.taskOperationContext()
+			err := task.DoneContext(ctx, id)
+			cancel()
+			if err != nil {
 				m.showError(err)
 			}
 		}
@@ -510,7 +513,7 @@ func (m *Model) fetchTasks() (reloadData, error) {
 	// Always show only pending tasks by default.
 	filters := append([]string(nil), m.filters...)
 	filters = append(filters, "status:pending")
-	ctx, cancel := m.taskExportContext()
+	ctx, cancel := m.taskOperationContext()
 	defer cancel()
 
 	tasks, err := task.Export(ctx, filters...)
@@ -752,7 +755,10 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 					break
 				}
 			}
-			if err := task.Done(id); err != nil {
+			ctx, cancel := m.taskOperationContext()
+			err := task.DoneContext(ctx, id)
+			cancel()
+			if err != nil {
 				m.showError(err)
 			}
 		}

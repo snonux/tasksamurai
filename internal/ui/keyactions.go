@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os/exec"
@@ -38,12 +39,18 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 	}
 
 	if started {
-		if err := task.Stop(id); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		err := task.StopContext(ctx, id)
+		cancel()
+		if err != nil {
 			m.showError(err)
 			return m, nil
 		}
 	} else {
-		if err := task.Start(id); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		err := task.StartContext(ctx, id)
+		cancel()
+		if err != nil {
 			m.showError(err)
 			return m, nil
 		}
@@ -119,12 +126,15 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	}
 
 	action := m.undoStack[len(m.undoStack)-1]
+	ctx, cancel := m.taskOperationContext()
 	for _, restore := range action.restores {
-		if err := task.SetStatusUUID(restore.uuid, restore.status); err != nil {
+		if err := task.SetStatusUUIDContext(ctx, restore.uuid, restore.status); err != nil {
+			cancel()
 			m.showError(err)
 			return m, nil
 		}
 	}
+	cancel()
 	m.undoStack = m.undoStack[:len(m.undoStack)-1]
 
 	// Reload the task list to get the updated task with its new ID
@@ -159,7 +169,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			}
 			filters = append(filters, "status:"+restore.status)
 
-			ctx, cancel := m.taskExportContext()
+			ctx, cancel := m.taskOperationContext()
 			tasks, err := task.Export(ctx, filters...)
 			cancel()
 			if err == nil && len(tasks) > 0 {
@@ -199,10 +209,10 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 
 	recurring := isRecurringTask(tsk)
 	tasks := []task.Task{tsk}
+	ctx, cancel := m.taskOperationContext()
+	defer cancel()
 	if recurring {
-		ctx, cancel := m.taskExportContext()
 		series, err := task.RecurringSeries(ctx, recurringRootUUID(tsk))
-		cancel()
 		if err != nil {
 			return 0, true, fmt.Errorf("loading recurring series: %w", err)
 		}
@@ -223,8 +233,8 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 
 	completed := make([]undoRestore, 0, len(restores))
 	for _, restore := range restores {
-		if err := task.SetStatusUUID(restore.uuid, "deleted"); err != nil {
-			rollbackUndoRestores(completed)
+		if err := task.SetStatusUUIDContext(ctx, restore.uuid, "deleted"); err != nil {
+			rollbackUndoRestores(ctx, completed)
 			return 0, recurring, fmt.Errorf("deleting task %s: %w", restore.uuid, err)
 		}
 		completed = append(completed, restore)
@@ -294,9 +304,9 @@ func undoStatusForTask(tsk task.Task) string {
 	return tsk.Status
 }
 
-func rollbackUndoRestores(restores []undoRestore) {
+func rollbackUndoRestores(ctx context.Context, restores []undoRestore) {
 	for i := len(restores) - 1; i >= 0; i-- {
-		_ = task.SetStatusUUID(restores[i].uuid, restores[i].status)
+		_ = task.SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status)
 	}
 }
 
@@ -328,7 +338,10 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 	}
 
 	// In Taskwarrior, passing an empty value to due: removes the due date
-	if err := task.SetDueDate(id, ""); err != nil {
+	ctx, cancel := m.taskOperationContext()
+	err = task.SetDueDateContext(ctx, id, "")
+	cancel()
+	if err != nil {
 		m.showError(err)
 		return m, nil
 	}
@@ -348,7 +361,10 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 	days := rand.Intn(31) + 7
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 
-	if err := task.SetDueDate(id, due); err != nil {
+	ctx, cancel := m.taskOperationContext()
+	err = task.SetDueDateContext(ctx, id, due)
+	cancel()
+	if err != nil {
 		m.showError(err)
 		return m, nil
 	}
@@ -489,18 +505,21 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 	firstTag := currentTask.Tags[0]
 
 	// Set the tag as project
-	if err := task.SetProject(id, firstTag); err != nil {
+	ctx, cancel := m.taskOperationContext()
+	err = task.SetProjectContext(ctx, id, firstTag)
+	if err != nil {
+		cancel()
 		m.showError(err)
 		return m, nil
 	}
 
 	// Remove the tag from the task
-	ctx, cancel := m.taskExportContext()
-	defer cancel()
 	if err := task.RemoveTagsContext(ctx, id, []string{firstTag}); err != nil {
+		cancel()
 		m.showError(err)
 		return m, nil
 	}
+	cancel()
 
 	if !m.reloadAndReport() {
 		return m, nil

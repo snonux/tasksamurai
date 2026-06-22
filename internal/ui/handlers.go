@@ -47,14 +47,14 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.replaceAnnotations {
-			ctx, cancel := m.taskExportContext()
+			ctx, cancel := m.taskOperationContext()
 			defer cancel()
 			if err := task.ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 			m.replaceAnnotations = false
 		} else {
-			ctx, cancel := m.taskExportContext()
+			ctx, cancel := m.taskOperationContext()
 			defer cancel()
 			if err := task.AnnotateContext(ctx, m.annotateID, value); err != nil {
 				return err
@@ -85,7 +85,9 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if err := validateDescription(value); err != nil {
 			return err
 		}
-		if err := task.SetDescription(m.descID, value); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		defer cancel()
+		if err := task.SetDescriptionContext(ctx, m.descID, value); err != nil {
 			return err
 		}
 		if err := m.reload(); err != nil {
@@ -130,7 +132,7 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if len(adds) > 0 || len(removes) > 0 {
-			ctx, cancel := m.taskExportContext()
+			ctx, cancel := m.taskOperationContext()
 			defer cancel()
 			if len(adds) > 0 {
 				if err := task.AddTagsContext(ctx, m.tagsID, adds); err != nil {
@@ -168,7 +170,10 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		if err := task.SetDueDate(m.dueID, m.dueDate.Format("2006-01-02")); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		err := task.SetDueDateContext(ctx, m.dueID, m.dueDate.Format("2006-01-02"))
+		cancel()
+		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
@@ -213,7 +218,9 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if err := validateRecurrence(value); err != nil {
 			return err
 		}
-		if err := task.SetRecurrence(m.recurID, value); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		defer cancel()
+		if err := task.SetRecurrenceContext(ctx, m.recurID, value); err != nil {
 			return err
 		}
 		if err := m.reload(); err != nil {
@@ -244,7 +251,9 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleProjectMode handles project editing
 func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
-		return task.SetProject(m.projID, value)
+		ctx, cancel := m.taskOperationContext()
+		defer cancel()
+		return task.SetProjectContext(ctx, m.projID, value)
 	}
 
 	onExit := func() {
@@ -275,7 +284,10 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			})
 			return m, cmd
 		}
-		if err := task.SetPriority(m.priorityID, priority); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		err := task.SetPriorityContext(ctx, m.priorityID, priority)
+		cancel()
+		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}
@@ -351,7 +363,10 @@ func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			oldIDs[tsk.ID] = struct{}{}
 		}
 
-		if err := task.AddLine(m.addInput.Value()); err != nil {
+		ctx, cancel := m.taskOperationContext()
+		err := task.AddLineContext(ctx, m.addInput.Value())
+		cancel()
+		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 				return struct{ clearStatus bool }{true}

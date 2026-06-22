@@ -1503,9 +1503,9 @@ func TestEscDoesNotQuitFromTable(t *testing.T) {
 	}
 }
 
-func TestQuitCancelsTaskExportContext(t *testing.T) {
+func TestQuitCancelsTaskOperationContext(t *testing.T) {
 	m := Model{}
-	ctx, cancel := m.taskExportContext()
+	ctx, cancel := m.taskOperationContext()
 	defer cancel()
 
 	_, cmd := m.handleQuitKey()
@@ -1513,7 +1513,42 @@ func TestQuitCancelsTaskExportContext(t *testing.T) {
 		t.Fatal("quit returned nil command; want tea.Quit")
 	}
 	if !errors.Is(ctx.Err(), context.Canceled) {
-		t.Fatalf("task export context error = %v, want context canceled", ctx.Err())
+		t.Fatalf("task operation context error = %v, want context canceled", ctx.Err())
+	}
+}
+
+func TestCanceledTaskOperationContextReachesToggleStart(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	startedFile := filepath.Join(tmp, "started")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"if [ \"$1\" = \"1\" ] && [ \"$2\" = \"start\" ]; then\n"+
+		"  printf started > %q\n"+
+		"  exit 0\n"+
+		"fi\n", startedFile)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.cancelTaskOperations()
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = *mv.(*Model)
+	if !strings.Contains(m.statusMsg, context.Canceled.Error()) {
+		t.Fatalf("status = %q, want context canceled error", m.statusMsg)
+	}
+	if _, err := os.Stat(startedFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("start command ran despite canceled model context; stat error = %v", err)
 	}
 }
 

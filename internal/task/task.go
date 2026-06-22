@@ -73,18 +73,26 @@ func runContext(ctx context.Context, args ...string) error {
 
 // modifyTask runs a modify command with validation
 func modifyTask(id int, args ...string) error {
+	return modifyTaskContext(context.Background(), id, args...)
+}
+
+func modifyTaskContext(ctx context.Context, id int, args ...string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	return run(append([]string{strconv.Itoa(id), "modify"}, args...)...)
+	return runContext(ctx, append([]string{strconv.Itoa(id), "modify"}, args...)...)
 }
 
 // simpleTaskCommand runs a simple command on a task with validation
 func simpleTaskCommand(id int, command string) error {
+	return simpleTaskCommandContext(context.Background(), id, command)
+}
+
+func simpleTaskCommandContext(ctx context.Context, id int, command string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	return run(strconv.Itoa(id), command)
+	return runContext(ctx, strconv.Itoa(id), command)
 }
 
 // debugConfig groups the optional debug-logging state for the task package.
@@ -125,6 +133,12 @@ func SetDebugLog(path string) error {
 
 // Add creates a new task with the given description and tags.
 func Add(description string, tags []string) error {
+	return AddContext(context.Background(), description, tags)
+}
+
+// AddContext creates a new task with the given description and tags using ctx
+// for the underlying Taskwarrior command.
+func AddContext(ctx context.Context, description string, tags []string) error {
 	var args []string
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '+' {
@@ -133,25 +147,38 @@ func Add(description string, tags []string) error {
 		args = append(args, t)
 	}
 	args = append(args, description)
-	return AddArgs(args)
+	return AddArgsContext(ctx, args)
 }
 
 // AddArgs runs "task add" with the provided arguments. Each element in args
 // is passed as a separate command-line argument, allowing the caller to
 // specify additional modifiers like due dates or tags.
 func AddArgs(args []string) error {
-	return run(append([]string{"add"}, args...)...)
+	return AddArgsContext(context.Background(), args)
+}
+
+// AddArgsContext runs "task add" with the provided arguments using ctx for the
+// underlying Taskwarrior command.
+func AddArgsContext(ctx context.Context, args []string) error {
+	return runContext(ctx, append([]string{"add"}, args...)...)
 }
 
 // AddLine splits the given line into shell words and runs "task add" with the
 // resulting arguments. This allows users to pass raw Taskwarrior parameters
 // such as "due:today" directly.
 func AddLine(line string) error {
+	return AddLineContext(context.Background(), line)
+}
+
+// AddLineContext splits the given line into shell words and runs "task add"
+// with the resulting arguments using ctx for the underlying Taskwarrior
+// command.
+func AddLineContext(ctx context.Context, line string) error {
 	fields, err := shlex.Split(line)
 	if err != nil {
 		return err
 	}
-	return AddArgs(fields)
+	return AddArgsContext(ctx, fields)
 }
 
 // RunLine splits line using shell-word rules and runs the resulting task
@@ -302,12 +329,24 @@ func Export(ctx context.Context, filters ...string) ([]Task, error) {
 
 // SetStatus changes the status of the task with the given id.
 func SetStatus(id int, status string) error {
-	return modifyTask(id, "status:"+status)
+	return SetStatusContext(context.Background(), id, status)
+}
+
+// SetStatusContext changes the status of the task with the given id using ctx
+// for the underlying Taskwarrior command.
+func SetStatusContext(ctx context.Context, id int, status string) error {
+	return modifyTaskContext(ctx, id, "status:"+status)
 }
 
 // SetStatusUUID changes the status of the task with the given UUID.
 func SetStatusUUID(uuid, status string) error {
-	return run(uuid, "modify", "status:"+status)
+	return SetStatusUUIDContext(context.Background(), uuid, status)
+}
+
+// SetStatusUUIDContext changes the status of the task with the given UUID
+// using ctx for the underlying Taskwarrior command.
+func SetStatusUUIDContext(ctx context.Context, uuid, status string) error {
+	return runContext(ctx, uuid, "modify", "status:"+status)
 }
 
 // RecurringSeries returns the recurring template and generated instances for
@@ -321,27 +360,57 @@ func RecurringSeries(ctx context.Context, rootUUID string) ([]Task, error) {
 
 // Start begins the task with the given id.
 func Start(id int) error {
-	return simpleTaskCommand(id, "start")
+	return StartContext(context.Background(), id)
+}
+
+// StartContext begins the task with the given id using ctx for the underlying
+// Taskwarrior command.
+func StartContext(ctx context.Context, id int) error {
+	return simpleTaskCommandContext(ctx, id, "start")
 }
 
 // Stop stops the task with the given id.
 func Stop(id int) error {
-	return simpleTaskCommand(id, "stop")
+	return StopContext(context.Background(), id)
+}
+
+// StopContext stops the task with the given id using ctx for the underlying
+// Taskwarrior command.
+func StopContext(ctx context.Context, id int) error {
+	return simpleTaskCommandContext(ctx, id, "stop")
 }
 
 // Done marks the task with the given id as completed.
 func Done(id int) error {
-	return simpleTaskCommand(id, "done")
+	return DoneContext(context.Background(), id)
+}
+
+// DoneContext marks the task with the given id as completed using ctx for the
+// underlying Taskwarrior command.
+func DoneContext(ctx context.Context, id int) error {
+	return simpleTaskCommandContext(ctx, id, "done")
 }
 
 // Delete removes the task with the given id.
 func Delete(id int) error {
-	return simpleTaskCommand(id, "delete")
+	return DeleteContext(context.Background(), id)
+}
+
+// DeleteContext removes the task with the given id using ctx for the
+// underlying Taskwarrior command.
+func DeleteContext(ctx context.Context, id int) error {
+	return simpleTaskCommandContext(ctx, id, "delete")
 }
 
 // SetPriority changes the priority of the task with the given id.
 func SetPriority(id int, priority string) error {
-	return modifyTask(id, "priority:"+priority)
+	return SetPriorityContext(context.Background(), id, priority)
+}
+
+// SetPriorityContext changes the priority of the task with the given id using
+// ctx for the underlying Taskwarrior command.
+func SetPriorityContext(ctx context.Context, id int, priority string) error {
+	return modifyTaskContext(ctx, id, "priority:"+priority)
 }
 
 // AddTags adds tags to the task with the given id.
@@ -435,22 +504,46 @@ func SetTags(ctx context.Context, id int, tags []string) error {
 
 // SetRecurrence sets the recurrence for the task with the given id.
 func SetRecurrence(id int, rec string) error {
-	return modifyTask(id, "recur:"+rec)
+	return SetRecurrenceContext(context.Background(), id, rec)
+}
+
+// SetRecurrenceContext sets the recurrence for the task with the given id
+// using ctx for the underlying Taskwarrior command.
+func SetRecurrenceContext(ctx context.Context, id int, rec string) error {
+	return modifyTaskContext(ctx, id, "recur:"+rec)
 }
 
 // SetDueDate sets the due date for the task with the given id.
 func SetDueDate(id int, due string) error {
-	return modifyTask(id, "due:"+due)
+	return SetDueDateContext(context.Background(), id, due)
+}
+
+// SetDueDateContext sets the due date for the task with the given id using ctx
+// for the underlying Taskwarrior command.
+func SetDueDateContext(ctx context.Context, id int, due string) error {
+	return modifyTaskContext(ctx, id, "due:"+due)
 }
 
 // SetDescription changes the description of the task with the given id.
 func SetDescription(id int, desc string) error {
-	return modifyTask(id, "description:"+desc)
+	return SetDescriptionContext(context.Background(), id, desc)
+}
+
+// SetDescriptionContext changes the description of the task with the given id
+// using ctx for the underlying Taskwarrior command.
+func SetDescriptionContext(ctx context.Context, id int, desc string) error {
+	return modifyTaskContext(ctx, id, "description:"+desc)
 }
 
 // SetProject changes the project of the task with the given id.
 func SetProject(id int, project string) error {
-	return modifyTask(id, "project:"+project)
+	return SetProjectContext(context.Background(), id, project)
+}
+
+// SetProjectContext changes the project of the task with the given id using
+// ctx for the underlying Taskwarrior command.
+func SetProjectContext(ctx context.Context, id int, project string) error {
+	return modifyTaskContext(ctx, id, "project:"+project)
 }
 
 // Annotate adds an annotation to the task with the given id.
