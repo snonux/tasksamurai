@@ -616,20 +616,20 @@ func ReplaceAnnotations(ctx context.Context, id int, text string) error {
 	anns := tasks[0].Annotations
 	for i := len(anns) - 1; i >= 0; i-- {
 		if err := DenotateContext(ctx, id, anns[i].Description); err != nil {
-			return replaceAnnotationsError(ctx, id, anns, err)
+			return replaceAnnotationsError(id, anns, err)
 		}
 	}
 	if text == "" {
 		return nil
 	}
 	if err := AnnotateContext(ctx, id, text); err != nil {
-		return replaceAnnotationsError(ctx, id, anns, err)
+		return replaceAnnotationsError(id, anns, err)
 	}
 	return nil
 }
 
-func replaceAnnotationsError(ctx context.Context, id int, anns []Annotation, err error) error {
-	rollbackCtx, cancel := rollbackContext(ctx)
+func replaceAnnotationsError(id int, anns []Annotation, err error) error {
+	rollbackCtx, cancel := rollbackContext()
 	defer cancel()
 
 	if rollbackErr := restoreAnnotations(rollbackCtx, id, anns); rollbackErr != nil {
@@ -638,11 +638,8 @@ func replaceAnnotationsError(ctx context.Context, id int, anns []Annotation, err
 	return err
 }
 
-func rollbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if ctx.Err() != nil {
-		return ctx, func() {}
-	}
-	return context.WithTimeout(ctx, 5*time.Second)
+func rollbackContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
 func restoreAnnotations(ctx context.Context, id int, anns []Annotation) error {

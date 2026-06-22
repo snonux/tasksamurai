@@ -465,10 +465,15 @@ exit 1
 func TestReplaceAnnotationsHonorsContextDuringMutations(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
+	failPath := filepath.Join(tmp, "deadline-once")
 	script := "#!/bin/sh\n" +
+		"fail=" + shellQuote(failPath) + "\n" +
 		"for arg in \"$@\"; do\n" +
 		"  if [ \"$arg\" = denotate ] || [ \"$arg\" = annotate ]; then\n" +
-		"    sleep 5\n" +
+		"    if [ ! -e \"$fail\" ]; then\n" +
+		"      touch \"$fail\"\n" +
+		"      sleep 5\n" +
+		"    fi\n" +
 		"    exit 0\n" +
 		"  fi\n" +
 		"done\n" +
@@ -523,6 +528,86 @@ func TestReplaceAnnotationsHonorsContextDuringAnnotate(t *testing.T) {
 	}
 	if elapsed > time.Second {
 		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestReplaceAnnotationsRestoresSnapshotAfterDenotateDeadline(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "annotations.txt")
+	failPath := filepath.Join(tmp, "deadline-once")
+	if err := os.WriteFile(statePath, []byte("first note\nsecond note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fakeAnnotationTaskScript(statePath, `
+if [ "$2" = denotate ] && [ "$3" = "first note" ] && [ ! -e `+shellQuote(failPath)+` ]; then
+  touch `+shellQuote(failPath)+`
+  sleep 5
+  exit 0
+fi
+`)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := ReplaceAnnotations(ctx, 1, "replacement note")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation plus rollback", elapsed)
+	}
+	if got := readLinesFile(t, statePath); strings.Join(got, "|") != "first note|second note" {
+		t.Fatalf("annotations after rollback = %#v, want original annotations", got)
+	}
+}
+
+func TestReplaceAnnotationsRestoresSnapshotAfterAnnotateDeadline(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	statePath := filepath.Join(tmp, "annotations.txt")
+	failPath := filepath.Join(tmp, "deadline-once")
+	if err := os.WriteFile(statePath, []byte("first note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := fakeAnnotationTaskScript(statePath, `
+if [ "$2" = annotate ] && [ "$3" = "replacement note" ] && [ ! -e `+shellQuote(failPath)+` ]; then
+  touch `+shellQuote(failPath)+`
+  sleep 5
+  exit 0
+fi
+`)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := ReplaceAnnotations(ctx, 1, "replacement note")
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("ReplaceAnnotations took %s, expected prompt context cancellation plus rollback", elapsed)
+	}
+	if got := readLinesFile(t, statePath); strings.Join(got, "|") != "first note" {
+		t.Fatalf("annotations after rollback = %#v, want original annotations", got)
 	}
 }
 
