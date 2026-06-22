@@ -47,7 +47,9 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.replaceAnnotations {
-			if err := task.ReplaceAnnotations(m.annotateID, value); err != nil {
+			ctx, cancel := taskExportContext()
+			defer cancel()
+			if err := task.ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 			m.replaceAnnotations = false

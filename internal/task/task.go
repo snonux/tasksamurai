@@ -188,10 +188,13 @@ func RunArgs(ctx context.Context, args []string) (RunResult, error) {
 	}
 
 	if dbg.writer != nil {
-		fmt.Fprintln(dbg.writer, "task "+strings.Join(copied, " "))
+		if _, err := fmt.Fprintln(dbg.writer, "task "+strings.Join(copied, " ")); err != nil {
+			return result, fmt.Errorf("write debug log: %w", err)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, "task", copied...)
+	configureCommandContext(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -200,6 +203,9 @@ func RunArgs(ctx context.Context, args []string) (RunResult, error) {
 	result.Stdout = stdout.String()
 	result.Stderr = stderr.String()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return result, fmt.Errorf("task command: %w", ctxErr)
+		}
 		if strings.TrimSpace(result.Stderr) != "" {
 			return result, fmt.Errorf("%v: %s", err, strings.TrimSpace(result.Stderr))
 		}
@@ -247,20 +253,22 @@ func outputLines(output string) []string {
 	return lines
 }
 
-// Export retrieves all tasks using `task export rc.json.array=off` and parses
-// the JSON output into a slice of Task structs.
 // Export retrieves tasks using `task <filter> export rc.json.array=off` and parses
 // the JSON output into a slice of Task structs. Optional filter arguments are
 // passed directly to the `task` command before `export`.
-func Export(filters ...string) ([]Task, error) {
+func Export(ctx context.Context, filters ...string) ([]Task, error) {
 	args := append(filters, "export", "rc.json.array=off")
-	cmd := exec.Command("task", args...)
+	cmd := exec.CommandContext(ctx, "task", args...)
+	configureCommandContext(cmd)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	out, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("task export: %w", ctxErr)
+		}
 		// Include stderr output in the error message
 		if stderr.Len() > 0 {
 			return nil, fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
@@ -300,11 +308,11 @@ func SetStatusUUID(uuid, status string) error {
 
 // RecurringSeries returns the recurring template and generated instances for
 // the recurring task identified by rootUUID.
-func RecurringSeries(rootUUID string) ([]Task, error) {
+func RecurringSeries(ctx context.Context, rootUUID string) ([]Task, error) {
 	if strings.TrimSpace(rootUUID) == "" {
 		return nil, fmt.Errorf("empty recurring task UUID")
 	}
-	return Export(fmt.Sprintf("(%s or parent:%s)", rootUUID, rootUUID), "status.any:")
+	return Export(ctx, fmt.Sprintf("(%s or parent:%s)", rootUUID, rootUUID), "status.any:")
 }
 
 // Start begins the task with the given id.
@@ -364,11 +372,11 @@ func RemoveTags(id int, tags []string) error {
 
 // SetTags sets the tags of the task with the given id to exactly the provided set.
 // Tags not present will be removed and new tags added as needed.
-func SetTags(id int, tags []string) error {
+func SetTags(ctx context.Context, id int, tags []string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	tasks, err := Export(strconv.Itoa(id))
+	tasks, err := Export(ctx, strconv.Itoa(id))
 	if err != nil {
 		return err
 	}
@@ -455,11 +463,11 @@ func Denotate(id int, text string) error {
 // ReplaceAnnotations removes all existing annotations from the task with the
 // given id and sets a single annotation with the provided text. If text is
 // empty, all annotations are simply removed.
-func ReplaceAnnotations(id int, text string) error {
+func ReplaceAnnotations(ctx context.Context, id int, text string) error {
 	if id <= 0 {
 		return fmt.Errorf("invalid task ID: %d", id)
 	}
-	tasks, err := Export(strconv.Itoa(id))
+	tasks, err := Export(ctx, strconv.Itoa(id))
 	if err != nil {
 		return err
 	}

@@ -2,12 +2,14 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestSetDebugLog exercises the lifecycle of the debug logger: enable,
@@ -88,7 +90,7 @@ func TestAddAndExport(t *testing.T) {
 		t.Fatalf("add task 2: %v", err)
 	}
 
-	tasks, err := Export()
+	tasks, err := Export(context.Background())
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
@@ -213,6 +215,53 @@ func TestRunLineReturnsCapturedErrorOutput(t *testing.T) {
 	}
 }
 
+func TestExportHonorsContextCancellation(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\nsleep 5\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := Export(ctx)
+	elapsed := time.Since(start)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Export error = %v, want context deadline exceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("Export took %s, expected prompt context cancellation", elapsed)
+	}
+}
+
+func TestExportReturnsCapturedErrorOutput(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"echo export-failed >&2\n" +
+		"exit 2\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+
+	_, err := Export(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "export-failed") {
+		t.Fatalf("error did not include stderr: %v", err)
+	}
+}
+
 func TestLoadCompletionSources(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
@@ -279,7 +328,7 @@ func TestRecurringSeries(t *testing.T) {
 	os.Setenv("PATH", tmp+":"+origPath)
 	t.Cleanup(func() { os.Setenv("PATH", origPath) })
 
-	tasks, err := RecurringSeries("parent-uuid")
+	tasks, err := RecurringSeries(context.Background(), "parent-uuid")
 	if err != nil {
 		t.Fatalf("RecurringSeries: %v", err)
 	}
@@ -335,7 +384,7 @@ func TestModifyHelpers(t *testing.T) {
 		t.Fatalf("annotate: %v", err)
 	}
 
-	tasks, err := Export()
+	tasks, err := Export(context.Background())
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}

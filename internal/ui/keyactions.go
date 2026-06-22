@@ -159,7 +159,9 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			}
 			filters = append(filters, "status:"+restore.status)
 
-			tasks, err := task.Export(filters...)
+			ctx, cancel := taskExportContext()
+			tasks, err := task.Export(ctx, filters...)
+			cancel()
 			if err == nil && len(tasks) > 0 {
 				id = tasks[0].ID
 				// Also update our local task list
@@ -198,7 +200,9 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 	recurring := isRecurringTask(tsk)
 	tasks := []task.Task{tsk}
 	if recurring {
-		series, err := task.RecurringSeries(recurringRootUUID(tsk))
+		ctx, cancel := taskExportContext()
+		series, err := task.RecurringSeries(ctx, recurringRootUUID(tsk))
+		cancel()
 		if err != nil {
 			return 0, true, fmt.Errorf("loading recurring series: %w", err)
 		}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,6 +24,8 @@ import (
 )
 
 var priorityOptions = []string{"H", "M", "L", ""}
+
+const taskExportTimeout = 30 * time.Second
 
 var (
 	urlRegex         = regexp.MustCompile(`https?://\S+`)
@@ -259,6 +262,10 @@ type reloadData struct {
 	ultraFilterIDs []int
 }
 
+func taskExportContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), taskExportTimeout)
+}
+
 // blinkInterval controls how quickly the row flashes when a task changes.
 // A shorter interval results in a faster blink.
 const blinkInterval = 150 * time.Millisecond
@@ -484,7 +491,10 @@ func (m *Model) fetchTasks() (reloadData, error) {
 	// Always show only pending tasks by default.
 	filters := append([]string(nil), m.filters...)
 	filters = append(filters, "status:pending")
-	tasks, err := task.Export(filters...)
+	ctx, cancel := taskExportContext()
+	defer cancel()
+
+	tasks, err := task.Export(ctx, filters...)
 	if err != nil {
 		return reloadData{}, err
 	}
