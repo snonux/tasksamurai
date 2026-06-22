@@ -113,12 +113,28 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if err := exec.Command(m.browserCmd, url).Run(); err != nil {
-		m.showError(fmt.Errorf("opening browser: %w", err))
+	return m, openURLCmd(m.browserCmd, url, task.ID)
+}
+
+func openURLCmd(browserCmd, url string, taskID int) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command(browserCmd, url)
+		if err := cmd.Start(); err != nil {
+			return openURLDoneMsg{err: fmt.Errorf("opening browser: %w", err)}
+		}
+		if err := cmd.Process.Release(); err != nil {
+			return openURLDoneMsg{err: fmt.Errorf("releasing browser process: %w", err)}
+		}
+		return openURLDoneMsg{taskID: taskID}
+	}
+}
+
+func (m *Model) handleOpenURLDone(msg openURLDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.showError(msg.err)
 		return m, nil
 	}
-
-	return m, m.startBlink(task.ID, false)
+	return m, m.startBlink(msg.taskID, false)
 }
 
 func (m *Model) handleUndo() (tea.Model, tea.Cmd) {

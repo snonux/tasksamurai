@@ -798,9 +798,29 @@ func TestOpenURLHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		t.Fatalf("open URL unexpectedly returned no command")
+	}
 	m = *mv.(*Model)
 
+	msg := cmd()
+	done, ok := msg.(openURLDoneMsg)
+	if !ok {
+		t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("open URL command failed: %v", done.err)
+	}
+	mv, cmd = (&m).Update(done)
+	if cmd == nil {
+		t.Fatalf("successful open URL did not start blink")
+	}
+	m = *mv.(*Model)
+
+	if !waitForFile(openFile, 2*time.Second) {
+		t.Fatalf("browser file was not written")
+	}
 	data, err := os.ReadFile(openFile)
 	if err != nil {
 		t.Fatalf("read open: %v", err)
@@ -2540,11 +2560,27 @@ func TestUltraOpenURLHotkeyUsesUltraSelection(t *testing.T) {
 
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
 	if cmd == nil {
-		// Opening a URL starts the blink animation, so a command is expected.
 		t.Fatalf("ultra open URL unexpectedly returned no command")
 	}
 	m = *mv.(*Model)
 
+	msg := cmd()
+	done, ok := msg.(openURLDoneMsg)
+	if !ok {
+		t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("open URL command failed: %v", done.err)
+	}
+	mv, cmd = (&m).Update(done)
+	if cmd == nil {
+		t.Fatalf("successful open URL did not start blink")
+	}
+	m = *mv.(*Model)
+
+	if !waitForFile(openLog, 2*time.Second) {
+		t.Fatalf("browser log was not written")
+	}
 	data, err := os.ReadFile(openLog)
 	if err != nil {
 		t.Fatalf("read open log: %v", err)
@@ -2570,6 +2606,112 @@ func TestUltraOpenURLHotkeyUsesUltraSelection(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != "https://example.com" {
 		t.Fatalf("browser was called for task without url: %q", data)
+	}
+}
+
+func TestOpenURLStartErrorShowsStatus(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha https://example.com\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, filepath.Join(tmp, "missing-browser"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		t.Fatalf("open URL unexpectedly returned no command")
+	}
+	m = *mv.(*Model)
+	if m.statusMsg != "" {
+		t.Fatalf("status was set before async command completed: %q", m.statusMsg)
+	}
+
+	msg := cmd()
+	done, ok := msg.(openURLDoneMsg)
+	if !ok {
+		t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+	}
+	if done.err == nil {
+		t.Fatalf("open URL command unexpectedly succeeded")
+	}
+
+	mv, cmd = (&m).Update(done)
+	if cmd != nil {
+		t.Fatalf("failed open URL unexpectedly returned a follow-up command")
+	}
+	m = *mv.(*Model)
+	if !strings.Contains(m.statusMsg, "Error: opening browser:") {
+		t.Fatalf("status = %q, want browser start error", m.statusMsg)
+	}
+}
+
+func TestOpenURLCommandDoesNotWaitForBrowserExit(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	browserPath := filepath.Join(tmp, "browser")
+
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha https://example.com\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	browserScript := "#!/bin/sh\n" +
+		"sleep 2\n"
+	if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, browserPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	start := time.Now()
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("Update blocked for %s", elapsed)
+	}
+	if cmd == nil {
+		t.Fatalf("open URL unexpectedly returned no command")
+	}
+	m = *mv.(*Model)
+
+	done := make(chan tea.Msg, 1)
+	start = time.Now()
+	go func() {
+		done <- cmd()
+	}()
+
+	select {
+	case msg := <-done:
+		if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+			t.Fatalf("open URL command waited for browser exit: %s", elapsed)
+		}
+		done, ok := msg.(openURLDoneMsg)
+		if !ok {
+			t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+		}
+		if done.err != nil {
+			t.Fatalf("open URL command failed: %v", done.err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("open URL command did not return promptly")
 	}
 }
 

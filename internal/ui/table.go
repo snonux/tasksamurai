@@ -247,6 +247,11 @@ type shellCompletionMsg struct {
 	sources task.CompletionSources
 }
 
+type openURLDoneMsg struct {
+	err    error
+	taskID int
+}
+
 type blinkMsg struct{}
 
 type descriptionTempFile interface {
@@ -609,6 +614,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleShellDone(msg)
 	case shellCompletionMsg:
 		return m.handleShellCompletion(msg)
+	case openURLDoneMsg:
+		return m.handleOpenURLDone(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
 	case struct{ clearStatus bool }:
