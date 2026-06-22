@@ -21,6 +21,7 @@ import (
 	"codeberg.org/snonux/tasksamurai/internal"
 	atable "codeberg.org/snonux/tasksamurai/internal/atable"
 	"codeberg.org/snonux/tasksamurai/internal/task"
+	uihelp "codeberg.org/snonux/tasksamurai/internal/ui/help"
 )
 
 var priorityOptions = []string{"H", "M", "L", ""}
@@ -36,16 +37,6 @@ var (
 type cellMatch struct {
 	row int
 	col int
-}
-
-type helpItem struct {
-	key  string
-	desc string
-}
-
-type helpSection struct {
-	title string
-	items []helpItem
 }
 
 type undoRestore struct {
@@ -124,6 +115,12 @@ type ultraModeState struct {
 	ultraStartup bool
 }
 
+// helpState holds help-screen visibility and viewport state.
+type helpState struct {
+	showHelp     bool
+	helpViewport viewport.Model
+}
+
 // shellState holds the Taskwarrior command prompt and captured output panel.
 type shellState struct {
 	shellActive         bool
@@ -185,7 +182,6 @@ type editState struct {
 type Model struct {
 	tbl       atable.Model
 	tblStyles atable.Styles
-	showHelp  bool
 
 	blinkState      // row blink animation (see blinkState)
 	searchState     // task-table and help-screen search (see searchState)
@@ -193,6 +189,7 @@ type Model struct {
 	ultraState      // ultra mode task list and search state (see ultraState)
 	detailEditState // detail-overlay external description editor state
 	ultraModeState  // ultra-mode lifecycle flags
+	helpState       // help-screen viewport state
 	shellState      // Taskwarrior command prompt and output panel
 	editState       // inline field editing (see editState)
 
@@ -226,8 +223,6 @@ type Model struct {
 	disco        bool // disco mode changes theme on every task modification
 
 	statusMsg string // temporary status message shown in status bar
-
-	helpViewport viewport.Model
 
 	taskContext       context.Context
 	cancelTaskContext context.CancelFunc
@@ -857,7 +852,7 @@ func (m *Model) updateHelpContent() {
 
 // buildHelpContent builds the help content
 func (m Model) buildHelpContent() string {
-	return m.buildRenderedHelpContent(m.helpSections())
+	return uihelp.Render(m.helpSections(), m.helpPalette(), m.helpSearchRegex)
 }
 
 // renderHelpScreen renders the help screen with optional search highlighting
@@ -883,43 +878,9 @@ func (m Model) renderHelpScreen() string {
 	return result
 }
 
-// formatHelpLine formats a help line with key and description styling
-func (m Model) formatHelpLine(key, desc string, keyStyle, descStyle lipgloss.Style) string {
-	// Pad key to consistent width for alignment
-	paddedKey := fmt.Sprintf("%-12s", key)
-	return keyStyle.Render(paddedKey) + " " + descStyle.Render(desc)
-}
-
-// highlightHelpLine applies search highlighting to a help line
-func (m Model) highlightHelpLine(line string) string {
-	if m.helpSearchRegex == nil {
-		return line
-	}
-
-	matches := m.helpSearchRegex.FindAllStringIndex(line, -1)
-	if len(matches) == 0 {
-		return line
-	}
-
-	highlighted := line
-	offset := 0
-	highlightStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(m.theme.SearchBG)).
-		Foreground(lipgloss.Color(m.theme.SearchFG))
-
-	for _, match := range matches {
-		start := match[0] + offset
-		end := match[1] + offset
-		highlighted = highlighted[:start] + highlightStyle.Render(highlighted[start:end]) + highlighted[end:]
-		offset += len(highlightStyle.Render(highlighted[start:end])) - (end - start)
-	}
-
-	return highlighted
-}
-
 // getHelpLines returns searchable help content as plain text lines
 func (m Model) getHelpLines() []string {
-	return flattenHelpSections(m.activeHelpSections())
+	return uihelp.Lines(m.activeHelpSections())
 }
 
 func (m Model) activeHelpContent() string {
@@ -929,138 +890,94 @@ func (m Model) activeHelpContent() string {
 	return m.buildHelpContent()
 }
 
-func (m Model) activeHelpSections() []helpSection {
+func (m Model) activeHelpSections() []uihelp.Section {
 	if m.showUltra {
 		return m.ultraHelpSections()
 	}
 	return m.helpSections()
 }
 
-func (m Model) buildRenderedHelpContent(sections []helpSection) string {
-	headerStyle, keyStyle, descStyle := m.helpStyles()
-	lines := make([]string, 0, len(sections)*4)
-	for i, section := range sections {
-		lines = append(lines, headerStyle.Render(section.title))
-		for _, item := range section.items {
-			lines = append(lines, m.formatHelpLine(item.key, item.desc, keyStyle, descStyle))
-		}
-		if i < len(sections)-1 {
-			lines = append(lines, "")
-		}
-	}
-
-	if m.helpSearchRegex != nil {
-		for i, line := range lines {
-			if m.helpSearchRegex.MatchString(line) {
-				lines[i] = m.highlightHelpLine(line)
-			}
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func (m Model) helpStyles() (lipgloss.Style, lipgloss.Style, lipgloss.Style) {
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.HeaderFG)).
-		Background(lipgloss.Color(m.theme.SelectedBG)).
-		Padding(0, 1)
-
-	keyStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.SelectedFG))
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("250"))
-
-	return headerStyle, keyStyle, descStyle
-}
-
-func (m Model) helpSections() []helpSection {
-	return []helpSection{
-		{
-			title: "Navigation",
-			items: []helpItem{
-				{key: "↑/k, ↓/j", desc: "move up/down"},
-				{key: "←/h, →/l", desc: "move left/right"},
-				{key: "0, g, Home", desc: "go to start"},
-				{key: "G, End", desc: "go to end"},
-				{key: "pgup/pgdn, b", desc: "page up/down"},
-				{key: "1", desc: "jump to random task"},
-				{key: "2", desc: "jump to random task (no due date)"},
-			},
-		},
-		{
-			title: "Task Management",
-			items: []helpItem{
-				{key: "Enter", desc: "view task details"},
-				{key: "+", desc: "add new task"},
-				{key: "e, E", desc: "edit entire task"},
-				{key: "d", desc: "mark task done"},
-				{key: "D", desc: "delete task/recurring series"},
-				{key: "U", desc: "undo last done/delete"},
-				{key: "s", desc: "start/stop task"},
-			},
-		},
-		{
-			title: "Task Fields",
-			items: []helpItem{
-				{key: "i", desc: "edit current field"},
-				{key: "p", desc: "set priority"},
-				{key: "w, W", desc: "set/remove due date"},
-				{key: "r", desc: "set random due date"},
-				{key: "R", desc: "edit recurrence"},
-				{key: "t", desc: "edit tags"},
-				{key: "J", desc: "edit project"},
-				{key: "T", desc: "convert first tag to project"},
-				{key: "a, A", desc: "add/replace annotations"},
-				{key: "o", desc: "open URL from description"},
-			},
-		},
-		{
-			title: "View & Search",
-			items: []helpItem{
-				{key: m.agentFilterHotkeyLabel(), desc: "toggle +agent/-agent filter"},
-				{key: "f", desc: "change filter"},
-				{key: ":", desc: "run task command prompt"},
-				{key: ";", desc: "run task command prompt for selected task"},
-				{key: "/, ?", desc: "search"},
-				{key: "n, N", desc: "next/previous match"},
-				{key: "space", desc: "refresh tasks"},
-			},
-		},
-		{
-			title: "Appearance",
-			items: []helpItem{
-				{key: "c, C", desc: "random/reset theme"},
-				{key: "x", desc: "toggle disco mode"},
-				{key: "B", desc: "toggle blinking"},
-			},
-		},
-		{
-			title: "General",
-			items: []helpItem{
-				{key: "H", desc: "toggle help"},
-				{key: "ESC", desc: "close dialogs/cancel"},
-				{key: "q", desc: "quit"},
-			},
-		},
+func (m Model) helpPalette() uihelp.Palette {
+	return uihelp.Palette{
+		HeaderFG: m.theme.HeaderFG,
+		HeaderBG: m.theme.SelectedBG,
+		KeyFG:    m.theme.SelectedFG,
+		DescFG:   "250",
+		SearchFG: m.theme.SearchFG,
+		SearchBG: m.theme.SearchBG,
 	}
 }
 
-func flattenHelpSections(sections []helpSection) []string {
-	lines := make([]string, 0, len(sections)*4)
-	for i, section := range sections {
-		lines = append(lines, section.title)
-		for _, item := range section.items {
-			lines = append(lines, fmt.Sprintf("%s: %s", item.key, item.desc))
-		}
-		if i < len(sections)-1 {
-			lines = append(lines, "")
-		}
+func (m Model) helpSections() []uihelp.Section {
+	return []uihelp.Section{
+		{
+			Title: "Navigation",
+			Items: []uihelp.Item{
+				{Key: "↑/k, ↓/j", Desc: "move up/down"},
+				{Key: "←/h, →/l", Desc: "move left/right"},
+				{Key: "0, g, Home", Desc: "go to start"},
+				{Key: "G, End", Desc: "go to end"},
+				{Key: "pgup/pgdn, b", Desc: "page up/down"},
+				{Key: "1", Desc: "jump to random task"},
+				{Key: "2", Desc: "jump to random task (no due date)"},
+			},
+		},
+		{
+			Title: "Task Management",
+			Items: []uihelp.Item{
+				{Key: "Enter", Desc: "view task details"},
+				{Key: "+", Desc: "add new task"},
+				{Key: "e, E", Desc: "edit entire task"},
+				{Key: "d", Desc: "mark task done"},
+				{Key: "D", Desc: "delete task/recurring series"},
+				{Key: "U", Desc: "undo last done/delete"},
+				{Key: "s", Desc: "start/stop task"},
+			},
+		},
+		{
+			Title: "Task Fields",
+			Items: []uihelp.Item{
+				{Key: "i", Desc: "edit current field"},
+				{Key: "p", Desc: "set priority"},
+				{Key: "w, W", Desc: "set/remove due date"},
+				{Key: "r", Desc: "set random due date"},
+				{Key: "R", Desc: "edit recurrence"},
+				{Key: "t", Desc: "edit tags"},
+				{Key: "J", Desc: "edit project"},
+				{Key: "T", Desc: "convert first tag to project"},
+				{Key: "a, A", Desc: "add/replace annotations"},
+				{Key: "o", Desc: "open URL from description"},
+			},
+		},
+		{
+			Title: "View & Search",
+			Items: []uihelp.Item{
+				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
+				{Key: "f", Desc: "change filter"},
+				{Key: ":", Desc: "run task command prompt"},
+				{Key: ";", Desc: "run task command prompt for selected task"},
+				{Key: "/, ?", Desc: "search"},
+				{Key: "n, N", Desc: "next/previous match"},
+				{Key: "space", Desc: "refresh tasks"},
+			},
+		},
+		{
+			Title: "Appearance",
+			Items: []uihelp.Item{
+				{Key: "c, C", Desc: "random/reset theme"},
+				{Key: "x", Desc: "toggle disco mode"},
+				{Key: "B", Desc: "toggle blinking"},
+			},
+		},
+		{
+			Title: "General",
+			Items: []uihelp.Item{
+				{Key: "H", Desc: "toggle help"},
+				{Key: "ESC", Desc: "close dialogs/cancel"},
+				{Key: "q", Desc: "quit"},
+			},
+		},
 	}
-	return lines
 }
 
 func (m Model) statusLine() string {

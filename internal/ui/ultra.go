@@ -11,6 +11,7 @@ import (
 
 	"codeberg.org/snonux/tasksamurai/internal"
 	"codeberg.org/snonux/tasksamurai/internal/task"
+	uihelp "codeberg.org/snonux/tasksamurai/internal/ui/help"
 )
 
 func (m *Model) renderUltraModus() string {
@@ -73,70 +74,70 @@ func (m *Model) ultraNoTasksMessage(width, budget int) string {
 }
 
 func (m Model) buildUltraHelpContent() string {
-	return m.buildRenderedHelpContent(m.ultraHelpSections())
+	return uihelp.Render(m.ultraHelpSections(), m.helpPalette(), m.helpSearchRegex)
 }
 
-func (m Model) ultraHelpSections() []helpSection {
-	return []helpSection{
+func (m Model) ultraHelpSections() []uihelp.Section {
+	return []uihelp.Section{
 		{
-			title: "Navigation",
-			items: []helpItem{
-				{key: "j, k", desc: "move down/up"},
-				{key: "pgup, pgdn", desc: "page up/down"},
-				{key: "g, G, 0", desc: "go to start/end"},
-				{key: "space", desc: "refresh tasks"},
+			Title: "Navigation",
+			Items: []uihelp.Item{
+				{Key: "j, k", Desc: "move down/up"},
+				{Key: "pgup, pgdn", Desc: "page up/down"},
+				{Key: "g, G, 0", Desc: "go to start/end"},
+				{Key: "space", Desc: "refresh tasks"},
 			},
 		},
 		{
-			title: "Task Management",
-			items: []helpItem{
-				{key: "Enter, e, E", desc: "edit selected task"},
-				{key: "o", desc: "open URL from description"},
-				{key: "s", desc: "start/stop task"},
-				{key: "d", desc: "mark task done"},
-				{key: "D", desc: "delete task/recurring series"},
-				{key: "U", desc: "undo last done/delete"},
-				{key: "+", desc: "add new task"},
+			Title: "Task Management",
+			Items: []uihelp.Item{
+				{Key: "Enter, e, E", Desc: "edit selected task"},
+				{Key: "o", Desc: "open URL from description"},
+				{Key: "s", Desc: "start/stop task"},
+				{Key: "d", Desc: "mark task done"},
+				{Key: "D", Desc: "delete task/recurring series"},
+				{Key: "U", Desc: "undo last done/delete"},
+				{Key: "+", Desc: "add new task"},
 			},
 		},
 		{
-			title: "Task Fields",
-			items: []helpItem{
-				{key: "p", desc: "set priority"},
-				{key: "w", desc: "set due date"},
-				{key: "W", desc: "remove due date"},
-				{key: "r", desc: "set random due date"},
-				{key: "t", desc: "edit tags"},
-				{key: "a, A", desc: "add/replace annotations"},
-				{key: "J", desc: "edit project"},
-				{key: "R", desc: "edit recurrence"},
-				{key: m.agentFilterHotkeyLabel(), desc: "toggle +agent/-agent filter"},
-				{key: "f", desc: "change filter"},
+			Title: "Task Fields",
+			Items: []uihelp.Item{
+				{Key: "p", Desc: "set priority"},
+				{Key: "w", Desc: "set due date"},
+				{Key: "W", Desc: "remove due date"},
+				{Key: "r", Desc: "set random due date"},
+				{Key: "t", Desc: "edit tags"},
+				{Key: "a, A", Desc: "add/replace annotations"},
+				{Key: "J", Desc: "edit project"},
+				{Key: "R", Desc: "edit recurrence"},
+				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
+				{Key: "f", Desc: "change filter"},
 			},
 		},
 		{
-			title: "Search",
-			items: []helpItem{
-				{key: "/", desc: "search ultra cards"},
-				{key: "n, N", desc: "next/previous match"},
-				{key: ":", desc: "run task command prompt"},
-				{key: ";", desc: "run task command prompt for selected task"},
+			Title: "Search",
+			Items: []uihelp.Item{
+				{Key: "/", Desc: "search ultra cards"},
+				{Key: "n, N", Desc: "next/previous match"},
+				{Key: ":", Desc: "run task command prompt"},
+				{Key: ";", Desc: "run task command prompt for selected task"},
 			},
 		},
 		{
-			title: "Appearance",
-			items: []helpItem{
-				{key: "c, C", desc: "random/reset theme"},
-				{key: "x", desc: "toggle disco mode"},
-				{key: "B", desc: "toggle blinking"},
+			Title: "Appearance",
+			Items: []uihelp.Item{
+				{Key: "c, C", Desc: "random/reset theme"},
+				{Key: "x", Desc: "toggle disco mode"},
+				{Key: "B", Desc: "toggle blinking"},
 			},
 		},
 		{
-			title: "General",
-			items: []helpItem{
-				{key: "H", desc: "toggle help"},
-				{key: "esc", desc: "close help/input or exit ultra mode"},
-				{key: "q", desc: "exit ultra mode"},
+			Title: "General",
+			Items: []uihelp.Item{
+				{Key: "H", Desc: "toggle help"},
+				{Key: "esc", Desc: "close help/input or exit ultra mode"},
+				{Key: "q", Desc: "exit ultra mode"},
 			},
 		},
 	}
