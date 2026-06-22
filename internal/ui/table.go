@@ -237,6 +237,10 @@ type descEditDoneMsg struct {
 	tempFile string
 }
 
+type descEditLaunchMsg struct {
+	tempFile string
+}
+
 type shellDoneMsg struct {
 	result     task.RunResult
 	err        error
@@ -320,7 +324,7 @@ func editCmd(id int) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
 }
 
-// editDescriptionCmd returns a command that opens the description in external editor
+// editDescriptionCmd returns a command that prepares the description temp file.
 func editDescriptionCmd(description string) tea.Cmd {
 	return func() tea.Msg {
 		tmpPath, err := prepareDescriptionTempFile(description, func() (descriptionTempFile, error) {
@@ -330,23 +334,24 @@ func editDescriptionCmd(description string) tea.Cmd {
 			return descEditDoneMsg{err: err, tempFile: ""}
 		}
 
-		// Get editor from environment
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "vi" // fallback to vi
-		}
-
-		// Create the command
-		c := exec.Command(editor, tmpPath)
-		c.Stdin = os.Stdin
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-
-		// Use ExecProcess to properly handle the external TUI editor
-		return tea.ExecProcess(c, func(err error) tea.Msg {
-			return descEditDoneMsg{err: err, tempFile: tmpPath}
-		})()
+		return descEditLaunchMsg{tempFile: tmpPath}
 	}
+}
+
+func launchDescriptionEditorCmd(tmpPath string) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	c := exec.Command(editor, tmpPath)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return descEditDoneMsg{err: err, tempFile: tmpPath}
+	})
 }
 
 func blinkCmd() tea.Cmd {
@@ -608,6 +613,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWindowResize(msg)
 	case editDoneMsg:
 		return m.handleEditDone(msg)
+	case descEditLaunchMsg:
+		return m, launchDescriptionEditorCmd(msg.tempFile)
 	case descEditDoneMsg:
 		return m.handleDescEditDone(msg)
 	case shellDoneMsg:

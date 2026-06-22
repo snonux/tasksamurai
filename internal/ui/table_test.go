@@ -203,6 +203,48 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	}
 }
 
+func TestEditDescriptionCmdPreparesLaunchWithoutRunningEditor(t *testing.T) {
+	tmp := t.TempDir()
+	editorLog := filepath.Join(tmp, "editor.log")
+	editorPath := filepath.Join(tmp, "editor")
+	editorScript := "#!/bin/sh\n" +
+		"printf ran > " + editorLog + "\n"
+	if err := os.WriteFile(editorPath, []byte(editorScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origEditor := os.Getenv("EDITOR")
+	os.Setenv("EDITOR", editorPath)
+	t.Cleanup(func() { os.Setenv("EDITOR", origEditor) })
+
+	cmd := editDescriptionCmd("old description")
+	msg := cmd()
+
+	launchMsg, ok := msg.(descEditLaunchMsg)
+	if !ok {
+		t.Fatalf("editDescriptionCmd returned %T, want descEditLaunchMsg", msg)
+	}
+	defer func() { _ = os.Remove(launchMsg.tempFile) }()
+
+	if _, err := os.Stat(editorLog); !os.IsNotExist(err) {
+		t.Fatalf("editor was run during temp-file preparation: %v", err)
+	}
+
+	content, err := os.ReadFile(launchMsg.tempFile)
+	if err != nil {
+		t.Fatalf("read temp description: %v", err)
+	}
+	if string(content) != "old description" {
+		t.Fatalf("temp description = %q, want %q", content, "old description")
+	}
+
+	m := Model{}
+	_, launchCmd := (&m).Update(launchMsg)
+	if launchCmd == nil {
+		t.Fatalf("descEditLaunchMsg did not return an editor launch command")
+	}
+}
+
 func TestPrepareDescriptionTempFileRemovesTempFileOnWriteError(t *testing.T) {
 	tmp := t.TempDir()
 	tempFile := filepath.Join(tmp, "desc.txt")
