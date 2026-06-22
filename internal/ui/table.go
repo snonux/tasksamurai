@@ -45,6 +45,16 @@ type helpSection struct {
 	items []helpItem
 }
 
+type undoRestore struct {
+	uuid   string
+	status string
+}
+
+type undoAction struct {
+	label    string
+	restores []undoRestore
+}
+
 // blinkState holds row-level blink animation state for the task table.
 // A blink cycles the selected row's highlight on/off after a modification.
 type blinkState struct {
@@ -111,6 +121,18 @@ type ultraModeState struct {
 	ultraStartup bool
 }
 
+// shellState holds the Taskwarrior command prompt and captured output panel.
+type shellState struct {
+	shellActive         bool
+	shellInput          textinput.Model
+	shellHistory        []string
+	shellOutputVisible  bool
+	shellOutputTitle    string
+	shellOutputViewport viewport.Model
+	shellCompletion     task.CompletionSources
+	shellCompletionLoad bool
+}
+
 // editState holds inline field-editing state for the task table.
 // Each editing mode (annotate, desc, tags, …) is mutually exclusive;
 // clearEditingModes resets them all before activating a new one.
@@ -168,6 +190,7 @@ type Model struct {
 	ultraState      // ultra mode task list and search state (see ultraState)
 	detailEditState // detail-overlay external description editor state
 	ultraModeState  // ultra-mode lifecycle flags
+	shellState      // Taskwarrior command prompt and output panel
 	editState       // inline field editing (see editState)
 
 	cellExpanded bool
@@ -191,7 +214,7 @@ type Model struct {
 
 	filters           []string
 	tasks             []task.Task
-	undoStack         []string
+	undoStack         []undoAction
 	browserCmd        string
 	agentFilterHotkey string
 
@@ -211,6 +234,16 @@ type editDoneMsg struct{ err error }
 type descEditDoneMsg struct {
 	err      error
 	tempFile string
+}
+
+type shellDoneMsg struct {
+	result     task.RunResult
+	err        error
+	selectedID int
+}
+
+type shellCompletionMsg struct {
+	sources task.CompletionSources
 }
 
 type blinkMsg struct{}
@@ -307,6 +340,7 @@ func (m *Model) clearEditingModes() {
 	m.filterEditing = false
 	m.addingTask = false
 	m.searching = false
+	m.shellActive = false
 	m.prioritySelecting = false
 }
 
@@ -335,7 +369,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 		if markDone {
 			for _, tsk := range m.tasks {
 				if tsk.ID == id {
-					m.undoStack = append(m.undoStack, tsk.UUID)
+					m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
 					break
 				}
 			}
@@ -394,6 +428,8 @@ func New(filters []string, browserCmd string) (Model, error) {
 
 	m.addInput = textinput.New()
 	m.addInput.Prompt = "add: "
+	m.shellInput = textinput.New()
+	m.shellInput.Prompt = "task "
 
 	m.defaultTheme = DefaultTheme()
 	m.theme = m.defaultTheme
@@ -542,6 +578,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEditDone(msg)
 	case descEditDoneMsg:
 		return m.handleDescEditDone(msg)
+	case shellDoneMsg:
+		return m.handleShellDone(msg)
+	case shellCompletionMsg:
+		return m.handleShellCompletion(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
 	case struct{ clearStatus bool }:
@@ -551,6 +591,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle blinking state first
 		if m.blinkID != 0 {
 			return m.handleBlinkingState(msg)
+		}
+		if m.shellOutputVisible {
+			return m.handleShellOutputMode(msg)
 		}
 
 		// Check if we're in detail view
@@ -608,6 +651,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.tbl.SetWidth(msg.Width)
 	m.windowHeight = msg.Height
+	m.shellInput.SetWidth(msg.Width)
 	m.computeColumnWidths()
 	m.updateTableHeight()
 	if m.showUltra {
@@ -626,6 +670,14 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 			m.helpViewport.SetWidth(width)
 			m.helpViewport.SetHeight(height)
 		}
+	}
+	if m.shellOutputVisible {
+		height := msg.Height - 2
+		if height < 1 {
+			height = 1
+		}
+		m.shellOutputViewport.SetWidth(msg.Width)
+		m.shellOutputViewport.SetHeight(height)
 	}
 
 	return m, nil
@@ -667,7 +719,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 		if mark {
 			for _, tsk := range m.tasks {
 				if tsk.ID == id {
-					m.undoStack = append(m.undoStack, tsk.UUID)
+					m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
 					break
 				}
 			}
@@ -691,6 +743,8 @@ func (m Model) View() tea.View {
 		content = m.renderHelpScreen()
 	case m.showTaskDetail:
 		content = m.renderDetailScreen()
+	case m.shellOutputVisible:
+		content = m.renderShellOutputScreen()
 	case m.showUltra:
 		content = m.renderUltraScreen()
 	default:
@@ -728,6 +782,8 @@ func (m Model) appendInlineInputOverlay(view string) string {
 		overlay = m.addInput.View()
 	case m.searching:
 		overlay = m.searchInput.View()
+	case m.shellActive:
+		overlay = m.shellInput.View()
 	}
 
 	if overlay != "" {
@@ -907,7 +963,8 @@ func (m Model) helpSections() []helpSection {
 				{key: "+", desc: "add new task"},
 				{key: "e, E", desc: "edit entire task"},
 				{key: "d", desc: "mark task done"},
-				{key: "U", desc: "undo last done"},
+				{key: "D", desc: "delete task/recurring series"},
+				{key: "U", desc: "undo last done/delete"},
 				{key: "s", desc: "start/stop task"},
 			},
 		},
@@ -931,6 +988,8 @@ func (m Model) helpSections() []helpSection {
 			items: []helpItem{
 				{key: m.agentFilterHotkeyLabel(), desc: "toggle +agent/-agent filter"},
 				{key: "f", desc: "change filter"},
+				{key: ":", desc: "run task command prompt"},
+				{key: ";", desc: "run task command prompt for selected task"},
 				{key: "/, ?", desc: "search"},
 				{key: "n, N", desc: "next/previous match"},
 				{key: "space", desc: "refresh tasks"},
@@ -1247,7 +1306,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask {
+	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask || m.shellActive {
 		h--
 	}
 	if h < 1 {

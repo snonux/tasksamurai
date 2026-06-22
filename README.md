@@ -20,6 +20,13 @@ Press `H` to view all available hotkeys.
 
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
 
+Press `:` in either table or ultra mode to open a Taskwarrior command prompt.
+The prompt supplies `task`; type arguments such as `add Buy milk`, `projects`,
+or `+home list`. Press `;` to open the same prompt pre-filled with the selected
+task UUID, ready for commands like `modify`, `annotate`, or `done`. Press `Tab`
+for completion, `Enter` to run, and `Esc` to cancel. Commands that print output
+open a scrollable output panel.
+
 ## Screenshot
 
 ![Task Samurai screenshot](screenshot.png)

@@ -94,7 +94,8 @@ func (m Model) ultraHelpSections() []helpSection {
 				{key: "o", desc: "open URL from description"},
 				{key: "s", desc: "start/stop task"},
 				{key: "d", desc: "mark task done"},
-				{key: "U", desc: "undo last done"},
+				{key: "D", desc: "delete task/recurring series"},
+				{key: "U", desc: "undo last done/delete"},
 				{key: "+", desc: "add new task"},
 			},
 		},
@@ -118,6 +119,8 @@ func (m Model) ultraHelpSections() []helpSection {
 			items: []helpItem{
 				{key: "/", desc: "search ultra cards"},
 				{key: "n, N", desc: "next/previous match"},
+				{key: ":", desc: "run task command prompt"},
+				{key: ";", desc: "run task command prompt for selected task"},
 			},
 		},
 		{
@@ -397,6 +400,8 @@ func (m *Model) ultraInputOverlay() string {
 		return m.addInput.View()
 	case m.searching:
 		return m.searchInput.View()
+	case m.shellActive:
+		return m.shellInput.View()
 	default:
 		return ""
 	}
@@ -1055,6 +1060,8 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUltraToggleStart()
 	case "d":
 		return m.handleUltraMarkDone()
+	case "D":
+		return m.handleUltraDeleteTask()
 	case "o":
 		return m.handleOpenURL()
 	case "p":
@@ -1077,6 +1084,10 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUltraSetRecurrence()
 	case "f":
 		return m.handleFilter()
+	case ":":
+		return m.handleShellPrompt()
+	case ";":
+		return m.handleShellPromptForSelectedTask()
 	case "+":
 		m.ultraClearFocusedID()
 		return m.handleAddTask()
@@ -1202,6 +1213,14 @@ func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
 	}
 
 	return m, m.startBlink(id, true)
+}
+
+func (m *Model) handleUltraDeleteTask() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleDeleteTask()
 }
 
 func (m *Model) handleUltraSetPriority() (tea.Model, tea.Cmd) {

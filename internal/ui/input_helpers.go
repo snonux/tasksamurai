@@ -81,6 +81,9 @@ func (m *Model) handleEditingModes(msg tea.KeyPressMsg) (handled bool, model tea
 	case m.searching:
 		model, cmd = m.handleSearchMode(msg)
 		return true, model, cmd
+	case m.shellActive:
+		model, cmd = m.handleShellMode(msg)
+		return true, model, cmd
 	case m.helpSearching:
 		model, cmd = m.handleHelpSearchMode(msg)
 		return true, model, cmd

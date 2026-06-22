@@ -3,6 +3,7 @@ package task
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,28 +38,33 @@ type Task struct {
 	Due         string       `json:"due"`
 	Priority    string       `json:"priority"`
 	Recur       string       `json:"recur"`
+	Parent      string       `json:"parent"`
+	RType       string       `json:"rtype"`
 	Urgency     float64      `json:"urgency"`
 	Annotations []Annotation `json:"annotations"`
 }
 
+// RunResult contains the captured output from a task command invocation.
+type RunResult struct {
+	Args   []string
+	Stdout string
+	Stderr string
+}
+
+// CompletionSources contains values used for Taskwarrior shell completion.
+type CompletionSources struct {
+	Commands []string
+	Columns  []string
+	Projects []string
+	Tags     []string
+	IDs      []string
+	UUIDs    []string
+	UDAs     []string
+}
+
 func run(args ...string) error {
-	if dbg.writer != nil {
-		fmt.Fprintln(dbg.writer, "task "+strings.Join(args, " "))
-	}
-	cmd := exec.Command("task", args...)
-
-	// Capture stderr to provide better error messages
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		// Include stderr output in the error message
-		if stderr.Len() > 0 {
-			return fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
-		}
-		return err
-	}
-	return nil
+	_, err := RunArgs(context.Background(), args)
+	return err
 }
 
 // modifyTask runs a modify command with validation
@@ -144,6 +150,103 @@ func AddLine(line string) error {
 	return AddArgs(fields)
 }
 
+// RunLine splits line using shell-word rules and runs the resulting task
+// arguments. A leading "task" token is ignored so callers may accept either
+// "add foo" or "task add foo" from user input.
+func RunLine(ctx context.Context, line string) (RunResult, error) {
+	fields, err := shlex.Split(line)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if len(fields) > 0 && fields[0] == "task" {
+		fields = fields[1:]
+	}
+	return RunArgs(ctx, fields)
+}
+
+// RunShellLine runs a user-entered task command in non-interactive mode. It
+// avoids Taskwarrior's recurring-task prompt by applying the same behavior as
+// answering "no": modify only the addressed recurrence.
+func RunShellLine(ctx context.Context, line string) (RunResult, error) {
+	fields, err := shlex.Split(line)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if len(fields) > 0 && fields[0] == "task" {
+		fields = fields[1:]
+	}
+	fields = append([]string{"rc.recurrence.confirmation=no"}, fields...)
+	return RunArgs(ctx, fields)
+}
+
+// RunArgs runs "task" with args and captures stdout and stderr.
+func RunArgs(ctx context.Context, args []string) (RunResult, error) {
+	copied := append([]string(nil), args...)
+	result := RunResult{Args: copied}
+	if len(copied) == 0 {
+		return result, fmt.Errorf("empty task command")
+	}
+
+	if dbg.writer != nil {
+		fmt.Fprintln(dbg.writer, "task "+strings.Join(copied, " "))
+	}
+
+	cmd := exec.CommandContext(ctx, "task", copied...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	result.Stdout = stdout.String()
+	result.Stderr = stderr.String()
+	if err != nil {
+		if strings.TrimSpace(result.Stderr) != "" {
+			return result, fmt.Errorf("%v: %s", err, strings.TrimSpace(result.Stderr))
+		}
+		return result, err
+	}
+	return result, nil
+}
+
+// LoadCompletionSources returns Taskwarrior-provided completion candidates.
+func LoadCompletionSources(ctx context.Context) CompletionSources {
+	return CompletionSources{
+		Commands: completionList(ctx, "_commands"),
+		Columns:  completionList(ctx, "_columns"),
+		Projects: completionList(ctx, "_projects"),
+		Tags:     completionList(ctx, "_tags"),
+		IDs:      completionList(ctx, "_ids"),
+		UUIDs:    completionList(ctx, "_uuids"),
+		UDAs:     completionList(ctx, "_udas"),
+	}
+}
+
+func completionList(ctx context.Context, command string) []string {
+	result, err := RunArgs(ctx, []string{command})
+	if err != nil {
+		return nil
+	}
+	return outputLines(result.Stdout)
+}
+
+func outputLines(output string) []string {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	seen := make(map[string]struct{})
+	var lines []string
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if _, ok := seen[line]; ok {
+			continue
+		}
+		seen[line] = struct{}{}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
 // Export retrieves all tasks using `task export rc.json.array=off` and parses
 // the JSON output into a slice of Task structs.
 // Export retrieves tasks using `task <filter> export rc.json.array=off` and parses
@@ -193,6 +296,15 @@ func SetStatus(id int, status string) error {
 // SetStatusUUID changes the status of the task with the given UUID.
 func SetStatusUUID(uuid, status string) error {
 	return run(uuid, "modify", "status:"+status)
+}
+
+// RecurringSeries returns the recurring template and generated instances for
+// the recurring task identified by rootUUID.
+func RecurringSeries(rootUUID string) ([]Task, error) {
+	if strings.TrimSpace(rootUUID) == "" {
+		return nil, fmt.Errorf("empty recurring task UUID")
+	}
+	return Export(fmt.Sprintf("(%s or parent:%s)", rootUUID, rootUUID), "status.any:")
 }
 
 // Start begins the task with the given id.

@@ -61,6 +61,8 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleToggleStart()
 	case "d":
 		return m.handleMarkDone()
+	case "D":
+		return m.handleDeleteTask()
 	case "o":
 		return m.handleOpenURL()
 	case "U":
@@ -81,6 +83,10 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleAnnotate(true)
 	case "f":
 		return m.handleFilter()
+	case ":":
+		return m.handleShellPrompt()
+	case ";":
+		return m.handleShellPromptForSelectedTask()
 	case "+":
 		return m.handleAddTask()
 	case "t":

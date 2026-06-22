@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -114,6 +115,190 @@ func TestAddAndExport(t *testing.T) {
 	}
 	if !found["hello universe"] {
 		t.Errorf("missing task 'hello universe'")
+	}
+}
+
+func TestRunLineSplitsCapturesAndStripsTaskPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	argsFile := filepath.Join(tmp, "args.txt")
+
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$@\" > " + argsFile + "\n" +
+		"echo stdout-value\n" +
+		"echo stderr-value >&2\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	result, err := RunLine(context.Background(), `task add "hello world" project:home`)
+	if err != nil {
+		t.Fatalf("RunLine: %v", err)
+	}
+	if result.Stdout != "stdout-value\n" {
+		t.Fatalf("stdout = %q", result.Stdout)
+	}
+	if result.Stderr != "stderr-value\n" {
+		t.Fatalf("stderr = %q", result.Stderr)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"add", "hello world", "project:home"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunShellLineDisablesRecurrencePrompt(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	argsFile := filepath.Join(tmp, "args.txt")
+
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$@\" > " + argsFile + "\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	if _, err := RunShellLine(context.Background(), `task 260 modify project:foo`); err != nil {
+		t.Fatalf("RunShellLine: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"rc.recurrence.confirmation=no", "260", "modify", "project:foo"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunLineReturnsCapturedErrorOutput(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"echo bad-output >&2\n" +
+		"exit 2\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	result, err := RunLine(context.Background(), "bad command")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if result.Stderr != "bad-output\n" {
+		t.Fatalf("stderr = %q", result.Stderr)
+	}
+	if !strings.Contains(err.Error(), "bad-output") {
+		t.Fatalf("error did not include stderr: %v", err)
+	}
+}
+
+func TestLoadCompletionSources(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\n" +
+		"case \"$1\" in\n" +
+		"  _commands) printf 'add\\nmodify\\n' ;;\n" +
+		"  _columns) printf 'project\\ndue\\n' ;;\n" +
+		"  _projects) printf 'home\\nwork\\n' ;;\n" +
+		"  _tags) printf 'urgent\\n' ;;\n" +
+		"  _ids) printf '1\\n2\\n' ;;\n" +
+		"  _uuids) printf 'uuid-1\\n' ;;\n" +
+		"  _udas) printf 'custom\\n' ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	sources := LoadCompletionSources(context.Background())
+	if strings.Join(sources.Commands, ",") != "add,modify" {
+		t.Fatalf("commands = %#v", sources.Commands)
+	}
+	if strings.Join(sources.Columns, ",") != "project,due" {
+		t.Fatalf("columns = %#v", sources.Columns)
+	}
+	if strings.Join(sources.Projects, ",") != "home,work" {
+		t.Fatalf("projects = %#v", sources.Projects)
+	}
+	if strings.Join(sources.Tags, ",") != "urgent" {
+		t.Fatalf("tags = %#v", sources.Tags)
+	}
+	if strings.Join(sources.IDs, ",") != "1,2" {
+		t.Fatalf("ids = %#v", sources.IDs)
+	}
+	if strings.Join(sources.UUIDs, ",") != "uuid-1" {
+		t.Fatalf("uuids = %#v", sources.UUIDs)
+	}
+	if strings.Join(sources.UDAs, ",") != "custom" {
+		t.Fatalf("udas = %#v", sources.UDAs)
+	}
+}
+
+func TestRecurringSeries(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	argsFile := filepath.Join(tmp, "args.txt")
+
+	script := "#!/bin/sh\n" +
+		"echo \"$@\" > " + argsFile + "\n" +
+		"if [ \"$1\" = \"(parent-uuid or parent:parent-uuid)\" ] && [ \"$2\" = \"status.any:\" ] && [ \"$3\" = \"export\" ]; then\n" +
+		"  echo '{\"id\":0,\"uuid\":\"parent-uuid\",\"description\":\"template\",\"status\":\"recurring\",\"recur\":\"daily\"}'\n" +
+		"  echo '{\"id\":1,\"uuid\":\"child-uuid\",\"parent\":\"parent-uuid\",\"description\":\"child\",\"status\":\"pending\",\"recur\":\"daily\"}'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 1\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	tasks, err := RecurringSeries("parent-uuid")
+	if err != nil {
+		t.Fatalf("RecurringSeries: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks))
+	}
+	if tasks[0].UUID != "parent-uuid" || tasks[0].Status != "recurring" {
+		t.Fatalf("unexpected template task: %#v", tasks[0])
+	}
+	if tasks[1].UUID != "child-uuid" || tasks[1].Parent != "parent-uuid" {
+		t.Fatalf("unexpected child task: %#v", tasks[1])
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "(parent-uuid or parent:parent-uuid) status.any: export rc.json.array=off" {
+		t.Fatalf("unexpected args: %q", got)
 	}
 }
 

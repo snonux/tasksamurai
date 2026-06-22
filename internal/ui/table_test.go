@@ -434,6 +434,218 @@ func TestUndoHotkey(t *testing.T) {
 	}
 }
 
+func TestDeleteHotkeyUndo(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %s\n", logFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least two commands, got %d", len(lines))
+	}
+	if lines[0] != "x modify status:deleted" {
+		t.Fatalf("delete not called: %q", lines[0])
+	}
+	if lines[1] != "x modify status:pending" {
+		t.Fatalf("undo delete not called: %q", lines[1])
+	}
+}
+
+func TestDeleteRecurringHotkeyUndo(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if [ \"$1\" = \"(parent or parent:parent)\" ] && [ \"$2\" = \"status.any:\" ] && [ \"$3\" = \"export\" ]; then\n"+
+		"  echo '{\"id\":0,\"uuid\":\"parent\",\"description\":\"template\",\"status\":\"recurring\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  echo '{\"id\":1,\"uuid\":\"child\",\"parent\":\"parent\",\"description\":\"child\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  echo '{\"id\":2,\"uuid\":\"future\",\"parent\":\"parent\",\"description\":\"future\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"child\",\"parent\":\"parent\",\"description\":\"child\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"recur\":\"daily\",\"rtype\":\"periodic\"}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %s\n", logFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{
+		"child modify status:deleted",
+		"future modify status:deleted",
+		"parent modify status:deleted",
+		"child modify status:pending",
+		"future modify status:pending",
+		"parent modify status:recurring",
+	}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("unexpected commands:\ngot  %#v\nwant %#v", lines, want)
+	}
+}
+
+func TestDeleteHotkeyInUltraMode(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %s\n", logFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "x modify status:deleted" {
+		t.Fatalf("ultra delete not called: %q", got)
+	}
+}
+
+func TestDeleteHotkeyInDetailMode(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "log.txt")
+
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"echo \"$@\" >> %s\n", logFile)
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+
+	os.Setenv("TASKDATA", tmp)
+	os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		os.Unsetenv("TASKDATA")
+		os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+	if !m.showTaskDetail {
+		t.Fatalf("enter did not open detail mode")
+	}
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	if m.showTaskDetail {
+		t.Fatalf("delete did not close detail mode")
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "x modify status:deleted" {
+		t.Fatalf("detail delete not called: %q", got)
+	}
+}
+
 func TestOpenURLHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
@@ -1177,6 +1389,35 @@ func setupBasicTask(t *testing.T, tmp string) string {
 		t.Fatal(err)
 	}
 	return taskPath
+}
+
+func setupShellTask(t *testing.T, tmp string) (string, string) {
+	t.Helper()
+	taskPath := filepath.Join(tmp, "task")
+	runFile := filepath.Join(tmp, "run.txt")
+	script := fmt.Sprintf("#!/bin/sh\n"+
+		"if echo \"$@\" | grep -q export; then\n"+
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"alpha\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  echo '{\"id\":2,\"uuid\":\"y\",\"description\":\"beta\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n"+
+		"  exit 0\n"+
+		"fi\n"+
+		"case \"$1\" in\n"+
+		"  _commands) printf 'add\\nmodify\\nprojects\\n' ; exit 0 ;;\n"+
+		"  _columns) printf 'project\\ndue\\nstatus\\npriority\\n' ; exit 0 ;;\n"+
+		"  _projects) printf 'tasksamurai\\nwork\\n' ; exit 0 ;;\n"+
+		"  _tags) printf 'urgent\\nagent\\n' ; exit 0 ;;\n"+
+		"  _ids) printf '1\\n2\\n' ; exit 0 ;;\n"+
+		"  _uuids) printf 'uuid-1\\nuuid-2\\n' ; exit 0 ;;\n"+
+		"  _udas) printf 'custom\\n' ; exit 0 ;;\n"+
+		"esac\n"+
+		"printf '%%s\\n' \"$@\" > %q\n"+
+		"if [ \"$1\" = \"projects\" ] || [ \"$2\" = \"projects\" ]; then\n"+
+		"  printf 'home\\nwork\\n'\n"+
+		"fi\n", runFile)
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return taskPath, runFile
 }
 
 func setupSharedSearchTaskSet(t *testing.T, tmp string) string {
@@ -2165,6 +2406,174 @@ func TestUltraInlineOverlayRenders(t *testing.T) {
 	view := m.View().Content
 	if !strings.Contains(view, "filter:") {
 		t.Fatalf("ultra view did not render filter overlay: %q", view)
+	}
+}
+
+func TestShellPromptRendersInNormalAndUltraModes(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, _ := setupShellTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = *mv.(*Model)
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatalf(": should start async completion loading")
+	}
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
+	if !m.shellActive {
+		t.Fatalf(": did not activate shell prompt in normal mode")
+	}
+	if !strings.Contains(m.View().Content, "task ") {
+		t.Fatalf("normal view did not render shell prompt")
+	}
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = *mv.(*Model)
+	if !m.shellActive {
+		t.Fatalf(": did not activate shell prompt in ultra mode")
+	}
+	if !strings.Contains(m.View().Content, "task ") {
+		t.Fatalf("ultra view did not render shell prompt")
+	}
+}
+
+func TestShellPromptForSelectedTaskPrefillsUUID(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, _ := setupShellTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: ';', Text: ";"})
+	m = *mv.(*Model)
+	if !m.shellActive {
+		t.Fatalf("; did not activate shell prompt in normal mode")
+	}
+	if got := m.shellInput.Value(); got != "x " {
+		t.Fatalf("normal ; prefill = %q, want %q", got, "x ")
+	}
+	if cmd == nil {
+		t.Fatalf("; should start async completion loading")
+	}
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: ';', Text: ";"})
+	m = *mv.(*Model)
+	if !m.shellActive {
+		t.Fatalf("; did not activate shell prompt in ultra mode")
+	}
+	if got := m.shellInput.Value(); got != "y " {
+		t.Fatalf("ultra ; prefill = %q, want %q", got, "y ")
+	}
+}
+
+func TestShellPromptExecutesCommandAndShowsOutput(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, runFile := setupShellTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = *mv.(*Model)
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = *mv.(*Model)
+	for _, r := range "projects" {
+		mv, _ = (&m).Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = *mv.(*Model)
+	}
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("enter did not return shell command")
+	}
+	m = *mv.(*Model)
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
+
+	data, err := os.ReadFile(runFile)
+	if err != nil {
+		t.Fatalf("read run file: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "rc.recurrence.confirmation=no\nprojects" {
+		t.Fatalf("task command args = %q", data)
+	}
+	if !m.shellOutputVisible {
+		t.Fatalf("command output did not open shell output panel")
+	}
+	if view := m.View().Content; !strings.Contains(view, "home") || !strings.Contains(view, "work") {
+		t.Fatalf("output panel did not render task output: %q", view)
+	}
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = *mv.(*Model)
+	if m.shellOutputVisible {
+		t.Fatalf("esc did not close shell output panel")
+	}
+}
+
+func TestShellPromptTabCompletion(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath, _ := setupShellTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = *mv.(*Model)
+	if cmd != nil {
+		mv, _ = (&m).Update(cmd())
+		m = *mv.(*Model)
+	}
+	for _, r := range "ad" {
+		mv, _ = (&m).Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = *mv.(*Model)
+	}
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = *mv.(*Model)
+	if got := m.shellInput.Value(); got != "add" {
+		t.Fatalf("command completion = %q, want add", got)
+	}
+
+	m.shellInput.SetValue("project:tas")
+	m.shellInput.CursorEnd()
+	mv, _ = (&m).handleShellMode(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = *mv.(*Model)
+	if got := m.shellInput.Value(); got != "project:tasksamurai" {
+		t.Fatalf("project completion = %q, want project:tasksamurai", got)
+	}
+
+	m.shellInput.SetValue("+urg")
+	m.shellInput.CursorEnd()
+	mv, _ = (&m).handleShellMode(tea.KeyPressMsg{Code: tea.KeyTab})
+	m = *mv.(*Model)
+	if got := m.shellInput.Value(); got != "+urgent" {
+		t.Fatalf("tag completion = %q, want +urgent", got)
 	}
 }
 

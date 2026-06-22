@@ -63,6 +63,29 @@ func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
 	return m, m.startBlink(id, true)
 }
 
+func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
+	tsk := m.getTaskForDelete()
+	if tsk == nil {
+		return m, nil
+	}
+
+	count, recurring, err := m.deleteTaskWithUndo(*tsk)
+	if err != nil {
+		m.showError(err)
+		return m, nil
+	}
+	if !m.reloadAndReport() {
+		return m, nil
+	}
+
+	if recurring {
+		m.statusMsg = fmt.Sprintf("Deleted %d recurring tasks", count)
+	} else {
+		m.statusMsg = "Deleted task"
+	}
+	return m, nil
+}
+
 func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	task := m.getTaskForOpenURL()
 	if task == nil {
@@ -95,13 +118,14 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	uuid := m.undoStack[len(m.undoStack)-1]
-	m.undoStack = m.undoStack[:len(m.undoStack)-1]
-
-	if err := task.SetStatusUUID(uuid, "pending"); err != nil {
-		m.showError(err)
-		return m, nil
+	action := m.undoStack[len(m.undoStack)-1]
+	for _, restore := range action.restores {
+		if err := task.SetStatusUUID(restore.uuid, restore.status); err != nil {
+			m.showError(err)
+			return m, nil
+		}
 	}
+	m.undoStack = m.undoStack[:len(m.undoStack)-1]
 
 	// Reload the task list to get the updated task with its new ID
 	if err := m.reload(); err != nil {
@@ -112,10 +136,15 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	// Find the task ID for blinking
 	var id int
 	var found bool
-	for _, tsk := range m.tasks {
-		if tsk.UUID == uuid {
-			id = tsk.ID
-			found = true
+	for _, restore := range action.restores {
+		for _, tsk := range m.tasks {
+			if tsk.UUID == restore.uuid {
+				id = tsk.ID
+				found = true
+				break
+			}
+		}
+		if found {
 			break
 		}
 	}
@@ -123,32 +152,155 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	// If task not found or has ID 0, try to get it directly from Taskwarrior
 	if !found || id == 0 {
 		// Use task export with UUID filter to get the specific task
-		filters := []string{uuid}
-		if m.filters != nil {
-			filters = append(filters, m.filters...)
-		}
-		filters = append(filters, "status:pending")
+		for _, restore := range action.restores {
+			filters := []string{restore.uuid}
+			if m.filters != nil {
+				filters = append(filters, m.filters...)
+			}
+			filters = append(filters, "status:"+restore.status)
 
-		tasks, err := task.Export(filters...)
-		if err == nil && len(tasks) > 0 {
-			id = tasks[0].ID
-			// Also update our local task list
-			for i, tsk := range m.tasks {
-				if tsk.UUID == uuid {
-					m.tasks[i].ID = id
-					break
+			tasks, err := task.Export(filters...)
+			if err == nil && len(tasks) > 0 {
+				id = tasks[0].ID
+				// Also update our local task list
+				for i, tsk := range m.tasks {
+					if tsk.UUID == restore.uuid {
+						m.tasks[i].ID = id
+						break
+					}
 				}
+				break
 			}
 		}
 	}
 
 	// If we still don't have a valid ID, don't try to blink
 	if id == 0 {
-		m.statusMsg = "Task restored"
+		m.statusMsg = undoStatus(action)
 		return m, nil
 	}
 
 	return m, m.startBlink(id, false)
+}
+
+func (m *Model) getTaskForDelete() *task.Task {
+	if m.showTaskDetail && m.currentTaskDetail != nil {
+		return m.currentTaskDetail
+	}
+	return m.getTaskAtCursor()
+}
+
+func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
+	if strings.TrimSpace(tsk.UUID) == "" {
+		return 0, false, fmt.Errorf("task %d has no UUID", tsk.ID)
+	}
+
+	recurring := isRecurringTask(tsk)
+	tasks := []task.Task{tsk}
+	if recurring {
+		series, err := task.RecurringSeries(recurringRootUUID(tsk))
+		if err != nil {
+			return 0, true, fmt.Errorf("loading recurring series: %w", err)
+		}
+		tasks = mergeTasksByUUID(series, tsk)
+	}
+
+	tasks = deleteOrder(tasks, recurringRootUUID(tsk))
+	restores := make([]undoRestore, 0, len(tasks))
+	for _, candidate := range tasks {
+		if strings.TrimSpace(candidate.UUID) == "" {
+			continue
+		}
+		restores = append(restores, undoRestore{uuid: candidate.UUID, status: undoStatusForTask(candidate)})
+	}
+	if len(restores) == 0 {
+		return 0, recurring, fmt.Errorf("no task UUIDs to delete")
+	}
+
+	completed := make([]undoRestore, 0, len(restores))
+	for _, restore := range restores {
+		if err := task.SetStatusUUID(restore.uuid, "deleted"); err != nil {
+			rollbackUndoRestores(completed)
+			return 0, recurring, fmt.Errorf("deleting task %s: %w", restore.uuid, err)
+		}
+		completed = append(completed, restore)
+	}
+
+	m.pushUndoAction("delete", restores)
+	return len(restores), recurring, nil
+}
+
+func (m *Model) pushUndoAction(label string, restores []undoRestore) {
+	if len(restores) == 0 {
+		return
+	}
+	copied := append([]undoRestore(nil), restores...)
+	m.undoStack = append(m.undoStack, undoAction{label: label, restores: copied})
+}
+
+func isRecurringTask(tsk task.Task) bool {
+	return tsk.Parent != "" || tsk.Status == "recurring" || tsk.RType != "" || tsk.Recur != ""
+}
+
+func recurringRootUUID(tsk task.Task) string {
+	if tsk.Parent != "" {
+		return tsk.Parent
+	}
+	return tsk.UUID
+}
+
+func mergeTasksByUUID(tasks []task.Task, selected task.Task) []task.Task {
+	seen := make(map[string]struct{}, len(tasks)+1)
+	merged := make([]task.Task, 0, len(tasks)+1)
+	for _, tsk := range tasks {
+		if tsk.UUID == "" {
+			continue
+		}
+		if _, ok := seen[tsk.UUID]; ok {
+			continue
+		}
+		seen[tsk.UUID] = struct{}{}
+		merged = append(merged, tsk)
+	}
+	if selected.UUID != "" {
+		if _, ok := seen[selected.UUID]; !ok {
+			merged = append(merged, selected)
+		}
+	}
+	return merged
+}
+
+func deleteOrder(tasks []task.Task, rootUUID string) []task.Task {
+	ordered := make([]task.Task, 0, len(tasks))
+	var root []task.Task
+	for _, tsk := range tasks {
+		if tsk.UUID == rootUUID {
+			root = append(root, tsk)
+			continue
+		}
+		ordered = append(ordered, tsk)
+	}
+	return append(ordered, root...)
+}
+
+func undoStatusForTask(tsk task.Task) string {
+	if tsk.Status == "" || tsk.Status == "deleted" {
+		return "pending"
+	}
+	return tsk.Status
+}
+
+func rollbackUndoRestores(restores []undoRestore) {
+	for i := len(restores) - 1; i >= 0; i-- {
+		_ = task.SetStatusUUID(restores[i].uuid, restores[i].status)
+	}
+}
+
+func undoStatus(action undoAction) string {
+	if action.label == "delete" && len(action.restores) > 1 {
+		return "Tasks restored"
+	}
+	return "Task restored"
 }
 
 func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {

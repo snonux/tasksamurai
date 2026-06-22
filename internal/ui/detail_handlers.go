@@ -79,6 +79,8 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenURL()
 	case "d":
 		return m.handleDetailMarkDone()
+	case "D":
+		return m.handleDetailDeleteTask()
 	case "U":
 		return m.handleDetailUndo()
 	case "i", "enter":
@@ -100,6 +102,28 @@ func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
 	id := m.currentTaskDetail.ID
 	m.closeDetailView()
 	return m, m.startBlink(id, true)
+}
+
+func (m *Model) handleDetailDeleteTask() (tea.Model, tea.Cmd) {
+	if m.currentTaskDetail == nil {
+		return m, nil
+	}
+	tsk := *m.currentTaskDetail
+	m.closeDetailView()
+	count, recurring, err := m.deleteTaskWithUndo(tsk)
+	if err != nil {
+		m.showError(err)
+		return m, nil
+	}
+	if !m.reloadAndReport() {
+		return m, nil
+	}
+	if recurring {
+		m.statusMsg = fmt.Sprintf("Deleted %d recurring tasks", count)
+	} else {
+		m.statusMsg = "Deleted task"
+	}
+	return m, nil
 }
 
 // handleDetailUndo restores the most recently completed task from the undo

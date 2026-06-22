@@ -297,7 +297,7 @@ func (m *Model) renderDetailFooter(lines []string) []string {
 		lines = append(lines, ist.Render("Press ESC or q to return to table view"))
 		lines = append(lines, ist.Render("Use ↑/k and ↓/j to navigate fields"))
 		lines = append(lines, ist.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence, Description)"))
-		lines = append(lines, ist.Render("Press d to mark task done, U to undo last done"))
+		lines = append(lines, ist.Render("Press d to mark task done, D to delete, U to undo last done/delete"))
 		if m.detailSearching {
 			lines = append(lines, ist.Render("Type to search, Enter to confirm"))
 		} else {
