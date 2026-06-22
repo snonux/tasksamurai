@@ -2754,7 +2754,7 @@ func TestUltraPriorityOpUsesUltraSelection(t *testing.T) {
 	}
 }
 
-func TestSharedKeyBindingsWorkInNormalAndUltraModes(t *testing.T) {
+func TestSharedKeyRegistryDispatchesInNormalAndUltraModes(t *testing.T) {
 	tests := []struct {
 		name  string
 		ultra bool

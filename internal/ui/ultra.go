@@ -1009,7 +1009,7 @@ func (m *Model) ultraEnsureVisible() {
 
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if handled, model, cmd := m.handleSharedKey(msg.String(), m.ultraSharedKeyHandlers()); handled {
+	if handled, model, cmd := m.handleSharedKey(msg.String(), keyBindingUltra, m.ultraSharedKeyHandlers()); handled {
 		return model, cmd
 	}
 

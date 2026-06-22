@@ -1,0 +1,37 @@
+package ui
+
+import "testing"
+
+func TestSharedKeyBindingsHaveUsableMetadata(t *testing.T) {
+	seen := map[string]struct{}{}
+	for _, binding := range sharedKeyBindings {
+		if len(binding.keys) == 0 {
+			t.Fatalf("binding has no keys: %#v", binding)
+		}
+		if binding.modes == 0 {
+			t.Fatalf("binding %v has no modes", binding.keys)
+		}
+		if binding.desc == "" {
+			t.Fatalf("binding %v has no description", binding.keys)
+		}
+		if binding.action == nil {
+			t.Fatalf("binding %v has no action", binding.keys)
+		}
+
+		for _, key := range binding.keys {
+			if key == "" {
+				t.Fatalf("binding %v contains an empty key", binding.keys)
+			}
+			if _, ok := seen[key]; ok {
+				t.Fatalf("duplicate shared key binding for %q", key)
+			}
+			seen[key] = struct{}{}
+		}
+	}
+
+	for _, key := range []string{"p", "+", "H", "space"} {
+		if _, ok := seen[key]; !ok {
+			t.Fatalf("shared key registry is missing %q", key)
+		}
+	}
+}

@@ -20,6 +20,54 @@ type sharedKeyHandlers struct {
 	addTask       func() (tea.Model, tea.Cmd)
 }
 
+type keyBindingMode uint8
+
+const (
+	keyBindingNormal keyBindingMode = 1 << iota
+	keyBindingUltra
+
+	keyBindingAll = keyBindingNormal | keyBindingUltra
+)
+
+type keyBindingAction func(*Model, sharedKeyHandlers) (bool, tea.Model, tea.Cmd)
+
+type keyBinding struct {
+	keys   []string
+	modes  keyBindingMode
+	desc   string
+	action keyBindingAction
+}
+
+var sharedKeyBindings = []keyBinding{
+	{keys: []string{"H"}, modes: keyBindingAll, desc: "toggle help", action: modelKeyAction((*Model).handleToggleHelp)},
+	{keys: []string{"q"}, modes: keyBindingAll, desc: "quit or exit current view", action: modelKeyAction((*Model).handleQuitKey)},
+	{keys: []string{"esc"}, modes: keyBindingAll, desc: "close help/input or cancel", action: modelKeyAction((*Model).handleEscapeKey)},
+	{keys: []string{"e", "E"}, modes: keyBindingAll, desc: "edit selected task", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.editTask })},
+	{keys: []string{"s"}, modes: keyBindingAll, desc: "start/stop task", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.toggleStart })},
+	{keys: []string{"d"}, modes: keyBindingAll, desc: "mark task done", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.markDone })},
+	{keys: []string{"D"}, modes: keyBindingAll, desc: "delete task/recurring series", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.deleteTask })},
+	{keys: []string{"o"}, modes: keyBindingAll, desc: "open URL from description", action: modelKeyAction((*Model).handleOpenURL)},
+	{keys: []string{"U"}, modes: keyBindingAll, desc: "undo last done/delete", action: modelKeyAction((*Model).handleUndo)},
+	{keys: []string{"w"}, modes: keyBindingAll, desc: "set due date", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setDueDate })},
+	{keys: []string{"W"}, modes: keyBindingAll, desc: "remove due date", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.removeDueDate })},
+	{keys: []string{"r"}, modes: keyBindingAll, desc: "set random due date", action: modelKeyAction((*Model).handleRandomDueDate)},
+	{keys: []string{"R"}, modes: keyBindingAll, desc: "edit recurrence", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setRecurrence })},
+	{keys: []string{"p"}, modes: keyBindingAll, desc: "set priority", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setPriority })},
+	{keys: []string{"a"}, modes: keyBindingAll, desc: "add annotations", action: sharedAnnotateKeyAction(false)},
+	{keys: []string{"A"}, modes: keyBindingAll, desc: "replace annotations", action: sharedAnnotateKeyAction(true)},
+	{keys: []string{"f"}, modes: keyBindingAll, desc: "change filter", action: modelKeyAction((*Model).handleFilter)},
+	{keys: []string{":"}, modes: keyBindingAll, desc: "run task command prompt", action: modelKeyAction((*Model).handleShellPrompt)},
+	{keys: []string{";"}, modes: keyBindingAll, desc: "run task command prompt for selected task", action: modelKeyAction((*Model).handleShellPromptForSelectedTask)},
+	{keys: []string{"+"}, modes: keyBindingAll, desc: "add new task", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.addTask })},
+	{keys: []string{"t"}, modes: keyBindingAll, desc: "edit tags", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.editTags })},
+	{keys: []string{"J"}, modes: keyBindingAll, desc: "edit project", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.editProject })},
+	{keys: []string{"c"}, modes: keyBindingAll, desc: "random theme", action: modelKeyAction((*Model).handleRandomTheme)},
+	{keys: []string{"C"}, modes: keyBindingAll, desc: "reset theme", action: modelKeyAction((*Model).handleResetTheme)},
+	{keys: []string{"x"}, modes: keyBindingAll, desc: "toggle disco mode", action: modelKeyAction((*Model).handleToggleDisco)},
+	{keys: []string{"B"}, modes: keyBindingAll, desc: "toggle blinking", action: modelKeyAction((*Model).handleToggleBlink)},
+	{keys: []string{"space"}, modes: keyBindingAll, desc: "refresh tasks", action: modelKeyAction((*Model).handleRefresh)},
+}
+
 // handleNormalMode handles keyboard input in normal mode (not editing)
 func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If help is shown, handle special cases
@@ -59,7 +107,7 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if handled, model, cmd := m.handleSharedKey(msg.String(), m.normalSharedKeyHandlers()); handled {
+	if handled, model, cmd := m.handleSharedKey(msg.String(), keyBindingNormal, m.normalSharedKeyHandlers()); handled {
 		return model, cmd
 	}
 
@@ -130,83 +178,49 @@ func (m *Model) ultraSharedKeyHandlers() sharedKeyHandlers {
 	}
 }
 
-func (m *Model) handleSharedKey(key string, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
+func (m *Model) handleSharedKey(key string, mode keyBindingMode, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
 	if key == m.agentFilterHotkeyLabel() {
 		model, cmd := m.handleToggleAgentFilter()
 		return true, model, cmd
 	}
 
-	switch key {
-	case "H":
-		model, cmd := m.handleToggleHelp()
+	for _, binding := range sharedKeyBindings {
+		if binding.matches(key, mode) {
+			return binding.action(m, handlers)
+		}
+	}
+
+	return false, m, nil
+}
+
+func (b keyBinding) matches(key string, mode keyBindingMode) bool {
+	if b.modes&mode == 0 {
+		return false
+	}
+	for _, candidate := range b.keys {
+		if candidate == key {
+			return true
+		}
+	}
+	return false
+}
+
+func modelKeyAction(handler func(*Model) (tea.Model, tea.Cmd)) keyBindingAction {
+	return func(m *Model, _ sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
+		model, cmd := handler(m)
 		return true, model, cmd
-	case "q":
-		model, cmd := m.handleQuitKey()
-		return true, model, cmd
-	case "esc":
-		model, cmd := m.handleEscapeKey()
-		return true, model, cmd
-	case "e", "E":
-		return callSharedKeyHandler(m, handlers.editTask)
-	case "s":
-		return callSharedKeyHandler(m, handlers.toggleStart)
-	case "d":
-		return callSharedKeyHandler(m, handlers.markDone)
-	case "D":
-		return callSharedKeyHandler(m, handlers.deleteTask)
-	case "o":
-		model, cmd := m.handleOpenURL()
-		return true, model, cmd
-	case "U":
-		model, cmd := m.handleUndo()
-		return true, model, cmd
-	case "w":
-		return callSharedKeyHandler(m, handlers.setDueDate)
-	case "W":
-		return callSharedKeyHandler(m, handlers.removeDueDate)
-	case "r":
-		model, cmd := m.handleRandomDueDate()
-		return true, model, cmd
-	case "R":
-		return callSharedKeyHandler(m, handlers.setRecurrence)
-	case "p":
-		return callSharedKeyHandler(m, handlers.setPriority)
-	case "a":
-		return callSharedAnnotateHandler(m, handlers.annotate, false)
-	case "A":
-		return callSharedAnnotateHandler(m, handlers.annotate, true)
-	case "f":
-		model, cmd := m.handleFilter()
-		return true, model, cmd
-	case ":":
-		model, cmd := m.handleShellPrompt()
-		return true, model, cmd
-	case ";":
-		model, cmd := m.handleShellPromptForSelectedTask()
-		return true, model, cmd
-	case "+":
-		return callSharedKeyHandler(m, handlers.addTask)
-	case "t":
-		return callSharedKeyHandler(m, handlers.editTags)
-	case "J":
-		return callSharedKeyHandler(m, handlers.editProject)
-	case "c":
-		model, cmd := m.handleRandomTheme()
-		return true, model, cmd
-	case "C":
-		model, cmd := m.handleResetTheme()
-		return true, model, cmd
-	case "x":
-		model, cmd := m.handleToggleDisco()
-		return true, model, cmd
-	case "B":
-		model, cmd := m.handleToggleBlink()
-		return true, model, cmd
-	case "space":
-		model, cmd := m.handleRefresh()
-		return true, model, cmd
-	default:
-		return false, m, nil
+	}
+}
+
+func sharedKeyAction(selectHandler func(sharedKeyHandlers) func() (tea.Model, tea.Cmd)) keyBindingAction {
+	return func(m *Model, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
+		return callSharedKeyHandler(m, selectHandler(handlers))
+	}
+}
+
+func sharedAnnotateKeyAction(replace bool) keyBindingAction {
+	return func(m *Model, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
+		return callSharedAnnotateHandler(m, handlers.annotate, replace)
 	}
 }
 
