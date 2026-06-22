@@ -5,6 +5,21 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+type sharedKeyHandlers struct {
+	editTask      func() (tea.Model, tea.Cmd)
+	toggleStart   func() (tea.Model, tea.Cmd)
+	markDone      func() (tea.Model, tea.Cmd)
+	deleteTask    func() (tea.Model, tea.Cmd)
+	setPriority   func() (tea.Model, tea.Cmd)
+	setDueDate    func() (tea.Model, tea.Cmd)
+	removeDueDate func() (tea.Model, tea.Cmd)
+	editTags      func() (tea.Model, tea.Cmd)
+	annotate      func(replace bool) (tea.Model, tea.Cmd)
+	editProject   func() (tea.Model, tea.Cmd)
+	setRecurrence func() (tea.Model, tea.Cmd)
+	addTask       func() (tea.Model, tea.Cmd)
+}
+
 // handleNormalMode handles keyboard input in normal mode (not editing)
 func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// If help is shown, handle special cases
@@ -44,67 +59,13 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if msg.String() == m.agentFilterHotkeyLabel() {
-		return m.handleToggleAgentFilter()
+	if handled, model, cmd := m.handleSharedKey(msg.String(), m.normalSharedKeyHandlers()); handled {
+		return model, cmd
 	}
 
 	switch msg.String() {
-	case "H":
-		return m.handleToggleHelp()
-	case "q":
-		return m.handleQuitKey()
-	case "esc":
-		return m.handleEscapeKey()
-	case "e", "E":
-		return m.handleEditTask()
-	case "s":
-		return m.handleToggleStart()
-	case "d":
-		return m.handleMarkDone()
-	case "D":
-		return m.handleDeleteTask()
-	case "o":
-		return m.handleOpenURL()
-	case "U":
-		return m.handleUndo()
-	case "w":
-		return m.handleSetDueDate()
-	case "W":
-		return m.handleRemoveDueDate()
-	case "r":
-		return m.handleRandomDueDate()
-	case "R":
-		return m.handleSetRecurrence()
-	case "p":
-		return m.handleSetPriority()
-	case "a":
-		return m.handleAnnotate(false)
-	case "A":
-		return m.handleAnnotate(true)
-	case "f":
-		return m.handleFilter()
-	case ":":
-		return m.handleShellPrompt()
-	case ";":
-		return m.handleShellPromptForSelectedTask()
-	case "+":
-		return m.handleAddTask()
-	case "t":
-		return m.handleEditTags()
-	case "J":
-		return m.handleEditProject()
 	case "T":
 		return m.handleTagToProject()
-	case "c":
-		return m.handleRandomTheme()
-	case "C":
-		return m.handleResetTheme()
-	case "x":
-		return m.handleToggleDisco()
-	case "B":
-		return m.handleToggleBlink()
-	case "space":
-		return m.handleRefresh()
 	case "/", "?":
 		return m.handleSearch()
 	case "n":
@@ -130,6 +91,139 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Pass through to table for navigation
 		return m.handleTableNavigation(msg)
 	}
+}
+
+func (m *Model) normalSharedKeyHandlers() sharedKeyHandlers {
+	return sharedKeyHandlers{
+		editTask:      m.handleEditTask,
+		toggleStart:   m.handleToggleStart,
+		markDone:      m.handleMarkDone,
+		deleteTask:    m.handleDeleteTask,
+		setPriority:   m.handleSetPriority,
+		setDueDate:    m.handleSetDueDate,
+		removeDueDate: m.handleRemoveDueDate,
+		editTags:      m.handleEditTags,
+		annotate:      m.handleAnnotate,
+		editProject:   m.handleEditProject,
+		setRecurrence: m.handleSetRecurrence,
+		addTask:       m.handleAddTask,
+	}
+}
+
+func (m *Model) ultraSharedKeyHandlers() sharedKeyHandlers {
+	return sharedKeyHandlers{
+		editTask:      m.handleUltraEditTask,
+		toggleStart:   m.handleUltraToggleStart,
+		markDone:      m.handleUltraMarkDone,
+		deleteTask:    m.handleUltraDeleteTask,
+		setPriority:   m.handleUltraSetPriority,
+		setDueDate:    m.handleUltraSetDueDate,
+		removeDueDate: m.handleUltraRemoveDueDate,
+		editTags:      m.handleUltraEditTags,
+		annotate:      m.handleUltraAnnotate,
+		editProject:   m.handleUltraEditProject,
+		setRecurrence: m.handleUltraSetRecurrence,
+		addTask: func() (tea.Model, tea.Cmd) {
+			m.ultraClearFocusedID()
+			return m.handleAddTask()
+		},
+	}
+}
+
+func (m *Model) handleSharedKey(key string, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
+	if key == m.agentFilterHotkeyLabel() {
+		model, cmd := m.handleToggleAgentFilter()
+		return true, model, cmd
+	}
+
+	switch key {
+	case "H":
+		model, cmd := m.handleToggleHelp()
+		return true, model, cmd
+	case "q":
+		model, cmd := m.handleQuitKey()
+		return true, model, cmd
+	case "esc":
+		model, cmd := m.handleEscapeKey()
+		return true, model, cmd
+	case "e", "E":
+		return callSharedKeyHandler(m, handlers.editTask)
+	case "s":
+		return callSharedKeyHandler(m, handlers.toggleStart)
+	case "d":
+		return callSharedKeyHandler(m, handlers.markDone)
+	case "D":
+		return callSharedKeyHandler(m, handlers.deleteTask)
+	case "o":
+		model, cmd := m.handleOpenURL()
+		return true, model, cmd
+	case "U":
+		model, cmd := m.handleUndo()
+		return true, model, cmd
+	case "w":
+		return callSharedKeyHandler(m, handlers.setDueDate)
+	case "W":
+		return callSharedKeyHandler(m, handlers.removeDueDate)
+	case "r":
+		model, cmd := m.handleRandomDueDate()
+		return true, model, cmd
+	case "R":
+		return callSharedKeyHandler(m, handlers.setRecurrence)
+	case "p":
+		return callSharedKeyHandler(m, handlers.setPriority)
+	case "a":
+		return callSharedAnnotateHandler(m, handlers.annotate, false)
+	case "A":
+		return callSharedAnnotateHandler(m, handlers.annotate, true)
+	case "f":
+		model, cmd := m.handleFilter()
+		return true, model, cmd
+	case ":":
+		model, cmd := m.handleShellPrompt()
+		return true, model, cmd
+	case ";":
+		model, cmd := m.handleShellPromptForSelectedTask()
+		return true, model, cmd
+	case "+":
+		return callSharedKeyHandler(m, handlers.addTask)
+	case "t":
+		return callSharedKeyHandler(m, handlers.editTags)
+	case "J":
+		return callSharedKeyHandler(m, handlers.editProject)
+	case "c":
+		model, cmd := m.handleRandomTheme()
+		return true, model, cmd
+	case "C":
+		model, cmd := m.handleResetTheme()
+		return true, model, cmd
+	case "x":
+		model, cmd := m.handleToggleDisco()
+		return true, model, cmd
+	case "B":
+		model, cmd := m.handleToggleBlink()
+		return true, model, cmd
+	case "space":
+		model, cmd := m.handleRefresh()
+		return true, model, cmd
+	default:
+		return false, m, nil
+	}
+}
+
+func callSharedKeyHandler(m *Model, handler func() (tea.Model, tea.Cmd)) (bool, tea.Model, tea.Cmd) {
+	if handler == nil {
+		return false, m, nil
+	}
+	model, cmd := handler()
+	return true, model, cmd
+}
+
+func callSharedAnnotateHandler(m *Model, handler func(bool) (tea.Model, tea.Cmd), replace bool) (bool, tea.Model, tea.Cmd) {
+	if handler == nil {
+		return false, m, nil
+	}
+	model, cmd := handler(replace)
+	return true, model, cmd
 }
 
 func (m *Model) handleToggleHelp() (tea.Model, tea.Cmd) {

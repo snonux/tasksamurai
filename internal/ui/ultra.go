@@ -1009,17 +1009,11 @@ func (m *Model) ultraEnsureVisible() {
 
 // handleUltraMode handles keyboard input in ultra mode.
 func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == m.agentFilterHotkeyLabel() {
-		return m.handleToggleAgentFilter()
+	if handled, model, cmd := m.handleSharedKey(msg.String(), m.ultraSharedKeyHandlers()); handled {
+		return model, cmd
 	}
 
 	switch msg.String() {
-	case "H":
-		return m.handleToggleHelp()
-	case "q":
-		return m.handleQuitKey()
-	case "esc":
-		return m.handleEscapeKey()
 	case "u":
 		cursor := m.ultraCursor
 		m.leaveUltraMode()
@@ -1047,61 +1041,14 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraMoveCursor(m.ultraVisibleCount())
 	case "pgup", "b":
 		m.ultraMoveCursor(-m.ultraVisibleCount())
-	case "space":
-		return m.handleRefresh()
 	case "g", "home":
 		m.ultraGoHome()
 	case "G", "end":
 		m.ultraGoEnd()
 	case "0":
 		m.ultraGoHome()
-	case "enter", "e", "E":
+	case "enter":
 		return m.handleUltraEditTask()
-	case "s":
-		return m.handleUltraToggleStart()
-	case "d":
-		return m.handleUltraMarkDone()
-	case "D":
-		return m.handleUltraDeleteTask()
-	case "o":
-		return m.handleOpenURL()
-	case "p":
-		return m.handleUltraSetPriority()
-	case "w":
-		return m.handleUltraSetDueDate()
-	case "W":
-		return m.handleUltraRemoveDueDate()
-	case "r":
-		return m.handleRandomDueDate()
-	case "t":
-		return m.handleUltraEditTags()
-	case "a":
-		return m.handleUltraAnnotate(false)
-	case "A":
-		return m.handleUltraAnnotate(true)
-	case "J":
-		return m.handleUltraEditProject()
-	case "R":
-		return m.handleUltraSetRecurrence()
-	case "f":
-		return m.handleFilter()
-	case ":":
-		return m.handleShellPrompt()
-	case ";":
-		return m.handleShellPromptForSelectedTask()
-	case "+":
-		m.ultraClearFocusedID()
-		return m.handleAddTask()
-	case "U":
-		return m.handleUndo()
-	case "c":
-		return m.handleRandomTheme()
-	case "C":
-		return m.handleResetTheme()
-	case "x":
-		return m.handleToggleDisco()
-	case "B":
-		return m.handleToggleBlink()
 	}
 	return m, nil
 }

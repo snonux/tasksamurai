@@ -2754,6 +2754,130 @@ func TestUltraPriorityOpUsesUltraSelection(t *testing.T) {
 	}
 }
 
+func TestSharedKeyBindingsWorkInNormalAndUltraModes(t *testing.T) {
+	tests := []struct {
+		name  string
+		ultra bool
+		key   tea.KeyPressMsg
+		check func(t *testing.T, m Model)
+	}{
+		{
+			name: "normal priority",
+			key:  tea.KeyPressMsg{Code: 'p', Text: "p"},
+			check: func(t *testing.T, m Model) {
+				if !m.prioritySelecting {
+					t.Fatalf("normal p did not activate priority selection")
+				}
+				if got, want := m.priorityID, 1; got != want {
+					t.Fatalf("normal p targeted task %d, want %d", got, want)
+				}
+			},
+		},
+		{
+			name:  "ultra priority",
+			ultra: true,
+			key:   tea.KeyPressMsg{Code: 'p', Text: "p"},
+			check: func(t *testing.T, m Model) {
+				if !m.prioritySelecting {
+					t.Fatalf("ultra p did not activate priority selection")
+				}
+				if got, want := m.priorityID, 2; got != want {
+					t.Fatalf("ultra p targeted task %d, want %d", got, want)
+				}
+			},
+		},
+		{
+			name: "normal add",
+			key:  tea.KeyPressMsg{Code: '+', Text: "+"},
+			check: func(t *testing.T, m Model) {
+				if !m.addingTask {
+					t.Fatalf("normal + did not activate add input")
+				}
+			},
+		},
+		{
+			name:  "ultra add",
+			ultra: true,
+			key:   tea.KeyPressMsg{Code: '+', Text: "+"},
+			check: func(t *testing.T, m Model) {
+				if !m.addingTask {
+					t.Fatalf("ultra + did not activate add input")
+				}
+				if !m.showUltra {
+					t.Fatalf("ultra + exited ultra mode")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			taskPath := setupUltraTaskSet(t, tmp)
+			setupEnv(t, taskPath)
+
+			m, err := New(nil, "firefox")
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			if tt.ultra {
+				m.showUltra = true
+				m.tbl.SetCursor(0)
+				m.ultraCursor = 1
+			}
+
+			mv, cmd := (&m).Update(tt.key)
+			if cmd != nil {
+				t.Fatalf("%s unexpectedly returned a command", tt.name)
+			}
+			tt.check(t, *mv.(*Model))
+		})
+	}
+}
+
+func TestEnterRemainsModeSpecificInNormalAndUltraModes(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupUltraTaskSet(t, tmp)
+	setupEnv(t, taskPath)
+
+	normal, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New normal: %v", err)
+	}
+
+	mv, cmd := (&normal).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("normal enter unexpectedly returned a command")
+	}
+	normal = *mv.(*Model)
+	if !normal.showTaskDetail {
+		t.Fatalf("normal enter did not open task detail")
+	}
+	if normal.editID != 0 {
+		t.Fatalf("normal enter started edit for task %d", normal.editID)
+	}
+
+	ultra, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New ultra: %v", err)
+	}
+	ultra.showUltra = true
+	ultra.tbl.SetCursor(0)
+	ultra.ultraCursor = 1
+
+	mv, cmd = (&ultra).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	ultra = *mv.(*Model)
+	if cmd == nil {
+		t.Fatalf("ultra enter did not return edit command")
+	}
+	if ultra.showTaskDetail {
+		t.Fatalf("ultra enter opened task detail")
+	}
+	if got, want := ultra.editID, 2; got != want {
+		t.Fatalf("ultra enter targeted task %d, want %d", got, want)
+	}
+}
+
 func TestUltraOpenURLHotkeyUsesUltraSelection(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
