@@ -122,9 +122,9 @@ func openURLCmd(browserCmd, url string, taskID int) tea.Cmd {
 		if err := cmd.Start(); err != nil {
 			return openURLDoneMsg{err: fmt.Errorf("opening browser: %w", err)}
 		}
-		if err := cmd.Process.Release(); err != nil {
-			return openURLDoneMsg{err: fmt.Errorf("releasing browser process: %w", err)}
-		}
+		go func() {
+			_ = cmd.Wait()
+		}()
 		return openURLDoneMsg{taskID: taskID}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -2713,6 +2714,71 @@ func TestOpenURLCommandDoesNotWaitForBrowserExit(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("open URL command did not return promptly")
 	}
+}
+
+func TestOpenURLCommandReapsBrowserProcess(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires /proc process state")
+	}
+
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	pidPath := filepath.Join(tmp, "browser.pid")
+	browserPath := filepath.Join(tmp, "browser")
+
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"1\",\"description\":\"alpha https://example.com\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	browserScript := "#!/bin/sh\n" +
+		"echo $$ > " + pidPath + "\n"
+	if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, browserPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		t.Fatalf("open URL unexpectedly returned no command")
+	}
+	m = *mv.(*Model)
+
+	msg := cmd()
+	done, ok := msg.(openURLDoneMsg)
+	if !ok {
+		t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("open URL command failed: %v", done.err)
+	}
+
+	if !waitForFile(pidPath, 2*time.Second) {
+		t.Fatalf("browser pid file was not written")
+	}
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("read browser pid: %v", err)
+	}
+	procPath := filepath.Join("/proc", strings.TrimSpace(string(data)))
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(procPath); errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("browser process still exists at %s; child may not have been reaped", procPath)
 }
 
 func TestUltraReloadPreservesFilteredSelection(t *testing.T) {
