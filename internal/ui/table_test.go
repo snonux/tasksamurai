@@ -91,14 +91,16 @@ func TestFormatDueUsesCalendarDayLabels(t *testing.T) {
 
 	m := Model{theme: DefaultTheme()}
 	tests := []struct {
-		name string
-		due  string
-		want string
+		name    string
+		due     string
+		want    string
+		overdue bool
 	}{
 		{
-			name: "late yesterday",
-			due:  dueOn(-1, 23, 59),
-			want: "yesterday",
+			name:    "late yesterday",
+			due:     dueOn(-1, 23, 59),
+			want:    "yesterday",
+			overdue: true,
 		},
 		{
 			name: "early today",
@@ -119,13 +121,15 @@ func TestFormatDueUsesCalendarDayLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := strings.TrimSpace(ansi.Strip(m.formatDue(tt.due, 12)))
+			rendered := m.formatDue(tt.due, 12)
+			got := strings.TrimSpace(ansi.Strip(rendered))
 			skipIfDateChanged()
 			if got != tt.want {
 				t.Fatalf("formatDue() = %q, want %q", got, tt.want)
 			}
-			if got != formatDueText(tt.due) {
-				t.Fatalf("formatDue() = %q, formatDueText() = %q", got, formatDueText(tt.due))
+			hasStyle := rendered != ansi.Strip(rendered)
+			if hasStyle != tt.overdue {
+				t.Fatalf("formatDue() styled = %t, want overdue styling %t; rendered %q", hasStyle, tt.overdue, rendered)
 			}
 		})
 	}

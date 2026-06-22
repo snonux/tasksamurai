@@ -45,6 +45,10 @@ func formatDueText(dueStr string) string {
 	}
 
 	days := daysUntil(ts)
+	return formatDueTextFromDays(days)
+}
+
+func formatDueTextFromDays(days int) string {
 	switch days {
 	case 0:
 		return "today"

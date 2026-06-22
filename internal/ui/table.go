@@ -1031,7 +1031,7 @@ func (m Model) formatDue(s string, width int) string {
 	}
 
 	days := daysUntil(ts)
-	val := formatDueText(s)
+	val := formatDueTextFromDays(days)
 	style := lipgloss.NewStyle().Width(width)
 	if days < 0 {
 		style = style.Background(lipgloss.Color(m.theme.OverdueBG))
