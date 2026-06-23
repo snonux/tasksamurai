@@ -1056,16 +1056,14 @@ func (m *Model) topStatusLine() string {
 // are returned as "today" or "tomorrow" respectively. Past due dates are
 // highlighted in red.
 func (m *Model) formatDue(s string, width int) string {
-	if s == "" {
+	val, days, ok := dueTextAndDays(s)
+	if val == "" {
 		return ""
 	}
-	ts, err := parseTaskDate(s)
-	if err != nil {
-		return s
+	if !ok {
+		return val
 	}
 
-	days := daysUntil(ts)
-	val := formatDueTextFromDays(days)
 	style := lipgloss.NewStyle().Width(width)
 	if days < 0 {
 		style = style.Background(lipgloss.Color(m.theme.OverdueBG))
@@ -1159,11 +1157,7 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 		rowStyle = rowStyle.Reverse(true)
 	}
 
-	age := ""
-	if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
-		days := int(time.Since(ts).Hours() / 24)
-		age = fmt.Sprintf("%dd", days)
-	}
+	age, _ := taskAgeText(t.Entry)
 
 	tags := strings.Join(t.Tags, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
@@ -1228,10 +1222,7 @@ func (m *Model) expandedCellView() string {
 	case 1:
 		val = strconv.Itoa(t.ID)
 	case 2:
-		if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
-			days := int(time.Since(ts).Hours() / 24)
-			val = fmt.Sprintf("%dd", days)
-		}
+		val, _ = taskAgeText(t.Entry)
 	case 3:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case 4:
@@ -1318,10 +1309,7 @@ func (m *Model) computeColumnWidths() {
 		if l := len(strconv.Itoa(t.ID)); l > maxID {
 			maxID = l
 		}
-		age := ""
-		if ts, err := time.Parse(task.DateFormat, t.Entry); err == nil {
-			age = fmt.Sprintf("%dd", int(time.Since(ts).Hours()/24))
-		}
+		age, _ := taskAgeText(t.Entry)
 		if l := len(age); l > maxAge {
 			maxAge = l
 		}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -930,14 +929,13 @@ func ultraBodyWidth(width int) int {
 }
 
 func ultraTaskAge(entry string) string {
+	if age, ok := taskAgeText(entry); ok {
+		return age
+	}
 	if entry == "" {
 		return "-"
 	}
-	ts, err := time.Parse(task.DateFormat, entry)
-	if err != nil {
-		return entry
-	}
-	return fmt.Sprintf("%dd", int(time.Since(ts).Hours()/24))
+	return entry
 }
 
 func ultraOrDash(text string) string {

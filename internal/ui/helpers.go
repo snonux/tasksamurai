@@ -39,17 +39,22 @@ func daysUntil(t time.Time) int {
 
 // formatDueText returns a human-readable due date string
 func formatDueText(dueStr string) string {
+	text, _, _ := dueTextAndDays(dueStr)
+	return text
+}
+
+func dueTextAndDays(dueStr string) (string, int, bool) {
 	if dueStr == "" {
-		return ""
+		return "", 0, false
 	}
 
 	ts, err := parseTaskDate(dueStr)
 	if err != nil {
-		return dueStr
+		return dueStr, 0, false
 	}
 
 	days := daysUntil(ts)
-	return formatDueTextFromDays(days)
+	return formatDueTextFromDays(days), days, true
 }
 
 func formatDueTextFromDays(days int) string {
@@ -63,6 +68,19 @@ func formatDueTextFromDays(days int) string {
 	default:
 		return fmt.Sprintf("%dd", days)
 	}
+}
+
+func taskAgeText(entry string) (string, bool) {
+	if entry == "" {
+		return "", false
+	}
+
+	ts, err := parseTaskDate(entry)
+	if err != nil {
+		return "", false
+	}
+
+	return fmt.Sprintf("%dd", int(time.Since(ts).Hours()/24)), true
 }
 
 // compileAndCacheRegex compiles a regex and adds it to the cache

@@ -135,6 +135,96 @@ func TestFormatDueText(t *testing.T) {
 	}
 }
 
+func TestDueTextAndDays(t *testing.T) {
+	loc, now := useSofiaLocalTime(t)
+	tests := []struct {
+		name     string
+		input    string
+		wantText string
+		wantDays int
+		wantOK   bool
+	}{
+		{
+			name:     "empty",
+			input:    "",
+			wantText: "",
+		},
+		{
+			name:     "invalid",
+			input:    "not-a-task-date",
+			wantText: "not-a-task-date",
+		},
+		{
+			name:     "today",
+			input:    taskwarriorDateOnlyDue(now, loc, 0),
+			wantText: "today",
+			wantOK:   true,
+		},
+		{
+			name:     "future day count",
+			input:    taskwarriorDateOnlyDue(now, loc, 4),
+			wantText: "4d",
+			wantDays: 4,
+			wantOK:   true,
+		},
+		{
+			name:     "past day count",
+			input:    taskwarriorDateOnlyDue(now, loc, -2),
+			wantText: "-2d",
+			wantDays: -2,
+			wantOK:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotText, gotDays, gotOK := dueTextAndDays(tt.input)
+			skipIfLocalDateChanged(t, loc, now)
+			if gotText != tt.wantText || gotDays != tt.wantDays || gotOK != tt.wantOK {
+				t.Fatalf("dueTextAndDays() = %q, %d, %t; want %q, %d, %t", gotText, gotDays, gotOK, tt.wantText, tt.wantDays, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestTaskAgeText(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    string
+		wantText string
+		wantOK   bool
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name:  "invalid",
+			entry: "not-a-task-date",
+		},
+		{
+			name:     "less than one day",
+			entry:    time.Now().Add(-23 * time.Hour).UTC().Format(task.DateFormat),
+			wantText: "0d",
+			wantOK:   true,
+		},
+		{
+			name:     "more than one day",
+			entry:    time.Now().Add(-25 * time.Hour).UTC().Format(task.DateFormat),
+			wantText: "1d",
+			wantOK:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotText, gotOK := taskAgeText(tt.entry)
+			if gotText != tt.wantText || gotOK != tt.wantOK {
+				t.Fatalf("taskAgeText() = %q, %t; want %q, %t", gotText, gotOK, tt.wantText, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestSearchRegexCacheConcurrentAccess(t *testing.T) {
 	searchRegexMu.Lock()
 	searchRegexCache = make(map[string]*regexp.Regexp)
