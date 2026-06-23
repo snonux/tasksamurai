@@ -1409,10 +1409,26 @@ func validateAgentFilterHotkey(key string) error {
 	if key == "" {
 		return nil
 	}
-	if _, ok := reservedAgentHotkeys[key]; ok {
+	if sharedKeyBindingContains(key) || reservedAgentHotkeyContains(key) {
 		return fmt.Errorf("agent hotkey %q conflicts with an existing command", key)
 	}
 	return nil
+}
+
+func sharedKeyBindingContains(key string) bool {
+	for _, binding := range sharedKeyBindings {
+		for _, candidate := range binding.keys {
+			if candidate == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func reservedAgentHotkeyContains(key string) bool {
+	_, ok := reservedAgentHotkeys[key]
+	return ok
 }
 
 func normalizeAgentFilterHotkey(key string) string {

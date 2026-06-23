@@ -35,3 +35,13 @@ func TestSharedKeyBindingsHaveUsableMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentFilterHotkeyValidationRejectsSharedKeyBindings(t *testing.T) {
+	for _, binding := range sharedKeyBindings {
+		for _, key := range binding.keys {
+			if err := validateAgentFilterHotkey(key); err == nil {
+				t.Fatalf("shared key binding %q can be set as the agent filter hotkey", key)
+			}
+		}
+	}
+}

@@ -1603,6 +1603,20 @@ func TestAgentFilterHotkeyRejectsUppercaseNamedKeyCollision(t *testing.T) {
 	}
 }
 
+func TestAgentFilterHotkeyRejectsShellPromptSharedKeys(t *testing.T) {
+	for _, key := range []string{":", ";"} {
+		t.Run(key, func(t *testing.T) {
+			var m Model
+			if err := m.SetAgentFilterHotkey(key); err == nil {
+				t.Fatalf("expected collision for shell prompt hotkey %q", key)
+			}
+			if got := m.agentFilterHotkeyLabel(); got != "3" {
+				t.Fatalf("colliding shell prompt hotkey changed label: got %q want %q", got, "3")
+			}
+		})
+	}
+}
+
 func TestAgentFilterHotkeyCollisionIsRejected(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
