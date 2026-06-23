@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -363,7 +364,7 @@ func blinkCmd() tea.Cmd {
 
 func (m *Model) taskwarriorClient() task.Taskwarrior {
 	if m.taskwarrior == nil {
-		m.taskwarrior = task.NewTaskwarrior()
+		panic("ui.Model Taskwarrior client is nil; use ui.New or ui.NewWithTaskwarrior")
 	}
 	return m.taskwarrior
 }
@@ -453,7 +454,7 @@ func New(filters []string, browserCmd string) (Model, error) {
 // NewWithTaskwarrior creates a UI model using the provided Taskwarrior client.
 func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior) (Model, error) {
 	if tw == nil {
-		tw = task.NewTaskwarrior()
+		return Model{}, errors.New("taskwarrior client is nil")
 	}
 	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
 	m.initTaskContext()

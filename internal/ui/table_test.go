@@ -187,6 +187,32 @@ func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
 	}
 }
 
+func TestNewWithTaskwarriorRejectsNilClient(t *testing.T) {
+	_, err := NewWithTaskwarrior(nil, "firefox", nil)
+	if err == nil {
+		t.Fatalf("NewWithTaskwarrior with nil client succeeded")
+	}
+	if got, want := err.Error(), "taskwarrior client is nil"; got != want {
+		t.Fatalf("NewWithTaskwarrior error = %q, want %q", got, want)
+	}
+}
+
+func TestZeroValueModelTaskwarriorClientFailsFast(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected zero-value Model taskwarrior client access to panic")
+		}
+		want := "ui.Model Taskwarrior client is nil; use ui.New or ui.NewWithTaskwarrior"
+		if got := fmt.Sprint(r); got != want {
+			t.Fatalf("panic = %q, want %q", got, want)
+		}
+	}()
+
+	var m Model
+	_ = m.taskwarriorClient()
+}
+
 func TestFakeTaskwarriorFailsFastOnUnexpectedCalls(t *testing.T) {
 	fake := &fakeTaskwarrior{}
 
@@ -848,7 +874,7 @@ func TestDeleteRecurringRollsBackCompletedDeletesAfterContextDeadline(t *testing
 
 	parentCtx, cancelParent := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancelParent()
-	m := Model{taskContext: parentCtx, cancelTaskContext: cancelParent}
+	m := Model{taskContext: parentCtx, cancelTaskContext: cancelParent, taskwarrior: task.NewTaskwarrior()}
 
 	count, recurring, err := m.deleteTaskWithUndo(task.Task{
 		ID:          1,
@@ -912,7 +938,7 @@ func TestDeleteRecurringReportsRollbackFailure(t *testing.T) {
 	}
 	setupEnv(t, taskPath)
 
-	m := Model{}
+	m := Model{taskwarrior: task.NewTaskwarrior()}
 	count, recurring, err := m.deleteTaskWithUndo(task.Task{
 		ID:          1,
 		UUID:        "child",
