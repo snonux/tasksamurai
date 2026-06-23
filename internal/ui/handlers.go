@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -15,11 +14,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg, input *textinput.Model, onE
 	case "enter":
 		value := input.Value()
 		if err := onEnter(value); err != nil {
-			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showErrorTimed(err)
 		}
 		input.Blur()
 		onExit()
@@ -172,11 +167,7 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		err := m.taskwarriorClient().SetDueDateContext(ctx, m.dueID, m.dueDate.Format("2006-01-02"))
 		cancel()
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showErrorTimed(err)
 		}
 		m.dueEditing = false
 		if !m.reloadAndReport() {
@@ -273,21 +264,13 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		priority := priorityOptions[m.priorityIndex]
 		if err := validatePriority(priority); err != nil {
-			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showErrorTimed(err)
 		}
 		ctx, cancel := m.taskOperationContext()
 		err := m.taskwarriorClient().SetPriorityContext(ctx, m.priorityID, priority)
 		cancel()
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showErrorTimed(err)
 		}
 		m.prioritySelecting = false
 		if !m.reloadAndReport() {
@@ -362,11 +345,7 @@ func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		err := m.taskwarriorClient().AddLineContext(ctx, m.addInput.Value())
 		cancel()
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showErrorTimed(err)
 		}
 
 		m.addingTask = false

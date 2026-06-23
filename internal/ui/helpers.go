@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/shlex"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
@@ -15,6 +16,21 @@ import (
 // It is kept as a package-level constant so internal helpers don't need
 // to qualify every parse/format call with the package name.
 const taskDateFormat = task.DateFormat
+
+const statusClearDelay = 2 * time.Second
+
+type clearStatusMsg struct{}
+
+func (m *Model) showStatusTimed(message string) tea.Cmd {
+	m.statusMsg = message
+	return tea.Tick(statusClearDelay, func(time.Time) tea.Msg {
+		return clearStatusMsg{}
+	})
+}
+
+func (m *Model) showErrorTimed(err error) tea.Cmd {
+	return m.showStatusTimed(fmt.Sprintf("Error: %v", err))
+}
 
 // parseTaskDate parses a date string in Taskwarrior format
 func parseTaskDate(dateStr string) (time.Time, error) {

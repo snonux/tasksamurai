@@ -659,7 +659,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleOpenURLDone(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
-	case struct{ clearStatus bool }:
+	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyPressMsg:

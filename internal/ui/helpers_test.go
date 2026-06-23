@@ -434,6 +434,20 @@ func TestHandleTextInputKeepsStateOnEnterError(t *testing.T) {
 	}
 }
 
+func TestClearStatusMsgClearsStatus(t *testing.T) {
+	m := Model{statusMsg: "temporary"}
+
+	mv, cmd := (&m).Update(clearStatusMsg{})
+	m = *mv.(*Model)
+
+	if cmd != nil {
+		t.Fatalf("clear status returned command")
+	}
+	if m.statusMsg != "" {
+		t.Fatalf("status message was not cleared: %q", m.statusMsg)
+	}
+}
+
 func TestActivateDueEditFallsBackToNowOnInvalidDate(t *testing.T) {
 	m := Model{windowHeight: 20}
 	before := time.Now().Add(-time.Second)

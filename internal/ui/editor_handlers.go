@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -34,21 +33,13 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if msg.err != nil {
-		m.statusMsg = fmt.Sprintf("Edit error: %v", msg.err)
-		cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-			return struct{ clearStatus bool }{true}
-		})
-		return m, cmd
+		return m, m.showStatusTimed(fmt.Sprintf("Edit error: %v", msg.err))
 	}
 
 	// Read the edited content
 	content, err := os.ReadFile(msg.tempFile)
 	if err != nil {
-		m.statusMsg = fmt.Sprintf("Error reading file: %v", err)
-		cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-			return struct{ clearStatus bool }{true}
-		})
-		return m, cmd
+		return m, m.showStatusTimed(fmt.Sprintf("Error reading file: %v", err))
 	}
 
 	// Update the description
@@ -58,11 +49,7 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		err = m.taskwarriorClient().SetDescriptionContext(ctx, m.currentTaskDetail.ID, newDesc)
 		cancel()
 		if err != nil {
-			m.statusMsg = fmt.Sprintf("Error updating description: %v", err)
-			cmd := tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-				return struct{ clearStatus bool }{true}
-			})
-			return m, cmd
+			return m, m.showStatusTimed(fmt.Sprintf("Error updating description: %v", err))
 		}
 
 		// Reload and start blinking
