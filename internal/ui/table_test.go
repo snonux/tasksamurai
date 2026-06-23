@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,8 +21,6 @@ import (
 )
 
 type fakeTaskwarrior struct {
-	task.Client
-
 	tasks         []task.Task
 	exportFilters [][]string
 	addLines      []string
@@ -43,6 +42,111 @@ func (f *fakeTaskwarrior) AddLineContext(_ context.Context, line string) error {
 		Status:      "pending",
 	})
 	return nil
+}
+
+func (f *fakeTaskwarrior) SortTasks(tasks []task.Task) {
+	task.SortTasks(tasks)
+}
+
+func (f *fakeTaskwarrior) TotalTasks(tasks []task.Task) int {
+	return task.TotalTasks(tasks)
+}
+
+func (f *fakeTaskwarrior) InProgressTasks(tasks []task.Task) int {
+	return task.InProgressTasks(tasks)
+}
+
+func (f *fakeTaskwarrior) DueTasks(tasks []task.Task, now time.Time) int {
+	return task.DueTasks(tasks, now)
+}
+
+func (f *fakeTaskwarrior) EditCmd(int) *exec.Cmd {
+	f.unexpected("EditCmd")
+	return nil
+}
+
+func (f *fakeTaskwarrior) RunShellLine(context.Context, string) (task.RunResult, error) {
+	f.unexpected("RunShellLine")
+	return task.RunResult{}, nil
+}
+
+func (f *fakeTaskwarrior) LoadCompletionSources(context.Context) task.CompletionSources {
+	f.unexpected("LoadCompletionSources")
+	return task.CompletionSources{}
+}
+
+func (f *fakeTaskwarrior) AnnotateContext(context.Context, int, string) error {
+	f.unexpected("AnnotateContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) ReplaceAnnotations(context.Context, int, string) error {
+	f.unexpected("ReplaceAnnotations")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetDescriptionContext(context.Context, int, string) error {
+	f.unexpected("SetDescriptionContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) AddTagsContext(context.Context, int, []string) error {
+	f.unexpected("AddTagsContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) RemoveTagsContext(context.Context, int, []string) error {
+	f.unexpected("RemoveTagsContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetDueDateContext(context.Context, int, string) error {
+	f.unexpected("SetDueDateContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetRecurrenceContext(context.Context, int, string) error {
+	f.unexpected("SetRecurrenceContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetProjectContext(context.Context, int, string) error {
+	f.unexpected("SetProjectContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetPriorityContext(context.Context, int, string) error {
+	f.unexpected("SetPriorityContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) StartContext(context.Context, int) error {
+	f.unexpected("StartContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) StopContext(context.Context, int) error {
+	f.unexpected("StopContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) DoneContext(context.Context, int) error {
+	f.unexpected("DoneContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) SetStatusUUIDContext(context.Context, string, string) error {
+	f.unexpected("SetStatusUUIDContext")
+	return nil
+}
+
+func (f *fakeTaskwarrior) RecurringSeries(context.Context, string) ([]task.Task, error) {
+	f.unexpected("RecurringSeries")
+	return nil, nil
+}
+
+func (f *fakeTaskwarrior) unexpected(method string) {
+	panic(fmt.Sprintf("unexpected fake Taskwarrior call: %s", method))
 }
 
 func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
@@ -81,6 +185,22 @@ func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
 	if m.tasks[1].Description != "new task +agent" {
 		t.Fatalf("added task description = %q", m.tasks[1].Description)
 	}
+}
+
+func TestFakeTaskwarriorFailsFastOnUnexpectedCalls(t *testing.T) {
+	fake := &fakeTaskwarrior{}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatalf("expected unexpected fake call to panic")
+		}
+		if got, want := fmt.Sprint(r), "unexpected fake Taskwarrior call: StartContext"; got != want {
+			t.Fatalf("panic = %q, want %q", got, want)
+		}
+	}()
+
+	_ = fake.StartContext(context.Background(), 1)
 }
 
 func TestAnnotateHotkey(t *testing.T) {
