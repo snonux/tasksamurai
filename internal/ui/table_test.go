@@ -188,12 +188,24 @@ func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
 }
 
 func TestNewWithTaskwarriorRejectsNilClient(t *testing.T) {
-	_, err := NewWithTaskwarrior(nil, "firefox", nil)
-	if err == nil {
-		t.Fatalf("NewWithTaskwarrior with nil client succeeded")
+	tests := []struct {
+		name string
+		tw   task.Taskwarrior
+	}{
+		{name: "plain nil", tw: nil},
+		{name: "typed nil", tw: (*fakeTaskwarrior)(nil)},
 	}
-	if got, want := err.Error(), "taskwarrior client is nil"; got != want {
-		t.Fatalf("NewWithTaskwarrior error = %q, want %q", got, want)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewWithTaskwarrior(nil, "firefox", tc.tw)
+			if err == nil {
+				t.Fatalf("NewWithTaskwarrior with nil client succeeded")
+			}
+			if got, want := err.Error(), "taskwarrior client is nil"; got != want {
+				t.Fatalf("NewWithTaskwarrior error = %q, want %q", got, want)
+			}
+		})
 	}
 }
 

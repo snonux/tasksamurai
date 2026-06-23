@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -363,10 +364,24 @@ func blinkCmd() tea.Cmd {
 }
 
 func (m *Model) taskwarriorClient() task.Taskwarrior {
-	if m.taskwarrior == nil {
+	if isNilTaskwarrior(m.taskwarrior) {
 		panic("ui.Model Taskwarrior client is nil; use ui.New or ui.NewWithTaskwarrior")
 	}
 	return m.taskwarrior
+}
+
+func isNilTaskwarrior(tw task.Taskwarrior) bool {
+	if tw == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(tw)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // clearEditingModes ensures only one editing mode is active at a time
@@ -453,7 +468,7 @@ func New(filters []string, browserCmd string) (Model, error) {
 
 // NewWithTaskwarrior creates a UI model using the provided Taskwarrior client.
 func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior) (Model, error) {
-	if tw == nil {
+	if isNilTaskwarrior(tw) {
 		return Model{}, errors.New("taskwarrior client is nil")
 	}
 	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
