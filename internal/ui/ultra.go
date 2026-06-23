@@ -1144,7 +1144,7 @@ func (m *Model) handleUltraEditTask() (tea.Model, tea.Cmd) {
 	}
 
 	m.editID = id
-	return m, editCmd(id)
+	return m, m.editCmd(id)
 }
 
 func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {

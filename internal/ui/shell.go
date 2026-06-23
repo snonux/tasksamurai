@@ -16,12 +16,12 @@ import (
 
 const shellCommandTimeout = 2 * time.Minute
 
-func shellRunCmd(parent context.Context, line string, selectedID int) tea.Cmd {
+func shellRunCmd(parent context.Context, tw task.Taskwarrior, line string, selectedID int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, shellCommandTimeout)
 		defer cancel()
 
-		result, err := task.RunShellLine(ctx, line)
+		result, err := tw.RunShellLine(ctx, line)
 		return shellDoneMsg{result: result, err: err, selectedID: selectedID}
 	}
 }
@@ -70,7 +70,7 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shellActive = false
 		m.shellInput.Blur()
 		m.updateTableHeight()
-		return m, shellRunCmd(m.shellCommandContext(), line, selectedID)
+		return m, shellRunCmd(m.shellCommandContext(), m.taskwarriorClient(), line, selectedID)
 	case "esc":
 		m.shellActive = false
 		m.shellInput.Blur()
@@ -227,7 +227,7 @@ func (m *Model) loadShellCompletionsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return shellCompletionMsg{sources: task.LoadCompletionSources(ctx)}
+		return shellCompletionMsg{sources: m.taskwarriorClient().LoadCompletionSources(ctx)}
 	}
 }
 

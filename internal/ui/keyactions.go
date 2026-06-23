@@ -21,7 +21,7 @@ func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.editID = id
-	return m, editCmd(id)
+	return m, m.editCmd(id)
 }
 
 func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
@@ -41,7 +41,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 
 	if started {
 		ctx, cancel := m.taskOperationContext()
-		err := task.StopContext(ctx, id)
+		err := m.taskwarriorClient().StopContext(ctx, id)
 		cancel()
 		if err != nil {
 			m.showError(err)
@@ -49,7 +49,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 		}
 	} else {
 		ctx, cancel := m.taskOperationContext()
-		err := task.StartContext(ctx, id)
+		err := m.taskwarriorClient().StartContext(ctx, id)
 		cancel()
 		if err != nil {
 			m.showError(err)
@@ -145,7 +145,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	action := m.undoStack[len(m.undoStack)-1]
 	ctx, cancel := m.taskOperationContext()
 	for _, restore := range action.restores {
-		if err := task.SetStatusUUIDContext(ctx, restore.uuid, restore.status); err != nil {
+		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restore.uuid, restore.status); err != nil {
 			cancel()
 			m.showError(err)
 			return m, nil
@@ -187,7 +187,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 			filters = append(filters, "status:"+restore.status)
 
 			ctx, cancel := m.taskOperationContext()
-			tasks, err := task.Export(ctx, filters...)
+			tasks, err := m.taskwarriorClient().Export(ctx, filters...)
 			cancel()
 			if err == nil && len(tasks) > 0 {
 				id = tasks[0].ID
@@ -229,7 +229,7 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 	ctx, cancel := m.taskOperationContext()
 	defer cancel()
 	if recurring {
-		series, err := task.RecurringSeries(ctx, recurringRootUUID(tsk))
+		series, err := m.taskwarriorClient().RecurringSeries(ctx, recurringRootUUID(tsk))
 		if err != nil {
 			return 0, true, fmt.Errorf("loading recurring series: %w", err)
 		}
@@ -250,8 +250,8 @@ func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
 
 	completed := make([]undoRestore, 0, len(restores))
 	for _, restore := range restores {
-		if err := task.SetStatusUUIDContext(ctx, restore.uuid, "deleted"); err != nil {
-			if rollbackErr := rollbackUndoRestores(completed); rollbackErr != nil {
+		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restore.uuid, "deleted"); err != nil {
+			if rollbackErr := m.rollbackUndoRestores(completed); rollbackErr != nil {
 				return 0, recurring, fmt.Errorf("deleting task %s: %w; rollback failed: %w", restore.uuid, err, rollbackErr)
 			}
 			return 0, recurring, fmt.Errorf("deleting task %s: %w", restore.uuid, err)
@@ -323,13 +323,13 @@ func undoStatusForTask(tsk task.Task) string {
 	return tsk.Status
 }
 
-func rollbackUndoRestores(restores []undoRestore) error {
+func (m *Model) rollbackUndoRestores(restores []undoRestore) error {
 	ctx, cancel := context.WithTimeout(context.Background(), taskOperationTimeout)
 	defer cancel()
 
 	var errs []error
 	for i := len(restores) - 1; i >= 0; i-- {
-		if err := task.SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status); err != nil {
+		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status); err != nil {
 			errs = append(errs, fmt.Errorf("restoring task %s to %s: %w", restores[i].uuid, restores[i].status, err))
 		}
 	}
@@ -365,7 +365,7 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 
 	// In Taskwarrior, passing an empty value to due: removes the due date
 	ctx, cancel := m.taskOperationContext()
-	err = task.SetDueDateContext(ctx, id, "")
+	err = m.taskwarriorClient().SetDueDateContext(ctx, id, "")
 	cancel()
 	if err != nil {
 		m.showError(err)
@@ -388,7 +388,7 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 
 	ctx, cancel := m.taskOperationContext()
-	err = task.SetDueDateContext(ctx, id, due)
+	err = m.taskwarriorClient().SetDueDateContext(ctx, id, due)
 	cancel()
 	if err != nil {
 		m.showError(err)
@@ -532,7 +532,7 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 
 	// Set the tag as project
 	ctx, cancel := m.taskOperationContext()
-	err = task.SetProjectContext(ctx, id, firstTag)
+	err = m.taskwarriorClient().SetProjectContext(ctx, id, firstTag)
 	if err != nil {
 		cancel()
 		m.showError(err)
@@ -540,7 +540,7 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 	}
 
 	// Remove the tag from the task
-	if err := task.RemoveTagsContext(ctx, id, []string{firstTag}); err != nil {
+	if err := m.taskwarriorClient().RemoveTagsContext(ctx, id, []string{firstTag}); err != nil {
 		cancel()
 		m.showError(err)
 		return m, nil

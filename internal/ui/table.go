@@ -217,6 +217,7 @@ type Model struct {
 	undoStack         []undoAction
 	browserCmd        string
 	agentFilterHotkey string
+	taskwarrior       task.Taskwarrior
 
 	theme        Theme
 	defaultTheme Theme
@@ -321,8 +322,8 @@ func prepareDescriptionTempFile(description string, newTempFile func() (descript
 
 // editCmd returns a command that edits the task and sends an
 // editDoneMsg once the process is complete.
-func editCmd(id int) tea.Cmd {
-	c := task.EditCmd(id)
+func (m *Model) editCmd(id int) tea.Cmd {
+	c := m.taskwarriorClient().EditCmd(id)
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
 }
 
@@ -358,6 +359,13 @@ func launchDescriptionEditorCmd(tmpPath string) tea.Cmd {
 
 func blinkCmd() tea.Cmd {
 	return tea.Tick(blinkInterval, func(time.Time) tea.Msg { return blinkMsg{} })
+}
+
+func (m *Model) taskwarriorClient() task.Taskwarrior {
+	if m.taskwarrior == nil {
+		m.taskwarrior = task.NewTaskwarrior()
+	}
+	return m.taskwarrior
 }
 
 // clearEditingModes ensures only one editing mode is active at a time
@@ -405,7 +413,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 				}
 			}
 			ctx, cancel := m.taskOperationContext()
-			err := task.DoneContext(ctx, id)
+			err := m.taskwarriorClient().DoneContext(ctx, id)
 			cancel()
 			if err != nil {
 				m.showError(err)
@@ -439,7 +447,15 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 
 // New creates a new UI model with the provided rows.
 func New(filters []string, browserCmd string) (Model, error) {
-	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", blinkState: blinkState{blinkEnabled: true}}
+	return NewWithTaskwarrior(filters, browserCmd, task.NewTaskwarrior())
+}
+
+// NewWithTaskwarrior creates a UI model using the provided Taskwarrior client.
+func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior) (Model, error) {
+	if tw == nil {
+		tw = task.NewTaskwarrior()
+	}
+	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
 	m.initTaskContext()
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
@@ -523,12 +539,12 @@ func (m *Model) fetchTasks() (reloadData, error) {
 	ctx, cancel := m.taskOperationContext()
 	defer cancel()
 
-	tasks, err := task.Export(ctx, filters...)
+	tasks, err := m.taskwarriorClient().Export(ctx, filters...)
 	if err != nil {
 		return reloadData{}, err
 	}
 
-	task.SortTasks(tasks)
+	m.taskwarriorClient().SortTasks(tasks)
 	return reloadData{
 		tasks:          tasks,
 		ultraFilterIDs: m.ultraFilteredTaskIDs(),
@@ -537,9 +553,9 @@ func (m *Model) fetchTasks() (reloadData, error) {
 
 func (m *Model) processTasks(data *reloadData) {
 	m.tasks = data.tasks
-	m.total = task.TotalTasks(data.tasks)
-	m.inProgress = task.InProgressTasks(data.tasks)
-	m.due = task.DueTasks(data.tasks, time.Now())
+	m.total = m.taskwarriorClient().TotalTasks(data.tasks)
+	m.inProgress = m.taskwarriorClient().InProgressTasks(data.tasks)
+	m.due = m.taskwarriorClient().DueTasks(data.tasks, time.Now())
 
 	if m.showTaskDetail {
 		m.refreshCurrentTaskDetail()
@@ -767,7 +783,7 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 				}
 			}
 			ctx, cancel := m.taskOperationContext()
-			err := task.DoneContext(ctx, id)
+			err := m.taskwarriorClient().DoneContext(ctx, id)
 			cancel()
 			if err != nil {
 				m.showError(err)

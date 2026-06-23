@@ -19,6 +19,70 @@ import (
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
+type fakeTaskwarrior struct {
+	task.Client
+
+	tasks         []task.Task
+	exportFilters [][]string
+	addLines      []string
+}
+
+var _ task.Taskwarrior = (*fakeTaskwarrior)(nil)
+
+func (f *fakeTaskwarrior) Export(_ context.Context, filters ...string) ([]task.Task, error) {
+	f.exportFilters = append(f.exportFilters, append([]string(nil), filters...))
+	return append([]task.Task(nil), f.tasks...), nil
+}
+
+func (f *fakeTaskwarrior) AddLineContext(_ context.Context, line string) error {
+	f.addLines = append(f.addLines, line)
+	f.tasks = append(f.tasks, task.Task{
+		ID:          len(f.tasks) + 1,
+		UUID:        fmt.Sprintf("fake-%d", len(f.tasks)+1),
+		Description: line,
+		Status:      "pending",
+	})
+	return nil
+}
+
+func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "existing", Status: "pending"},
+		},
+	}
+
+	m, err := NewWithTaskwarrior([]string{"project:home"}, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	if len(fake.exportFilters) != 1 {
+		t.Fatalf("export calls = %d, want 1", len(fake.exportFilters))
+	}
+	if !reflect.DeepEqual(fake.exportFilters[0], []string{"project:home", "status:pending"}) {
+		t.Fatalf("export filters = %v", fake.exportFilters[0])
+	}
+
+	m.addingTask = true
+	m.addInput.SetValue("new task +agent")
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if !reflect.DeepEqual(fake.addLines, []string{"new task +agent"}) {
+		t.Fatalf("add lines = %v", fake.addLines)
+	}
+	if len(fake.exportFilters) != 2 {
+		t.Fatalf("export calls after add = %d, want 2", len(fake.exportFilters))
+	}
+	if len(m.tasks) != 2 {
+		t.Fatalf("model tasks = %d, want 2", len(m.tasks))
+	}
+	if m.tasks[1].Description != "new task +agent" {
+		t.Fatalf("added task description = %q", m.tasks[1].Description)
+	}
+}
+
 func TestAnnotateHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")

@@ -7,8 +7,6 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-
-	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // handleTextInput provides generic text input handling for all input modes
@@ -49,14 +47,14 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.replaceAnnotations {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
-			if err := task.ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
+			if err := m.taskwarriorClient().ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 			m.replaceAnnotations = false
 		} else {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
-			if err := task.AnnotateContext(ctx, m.annotateID, value); err != nil {
+			if err := m.taskwarriorClient().AnnotateContext(ctx, m.annotateID, value); err != nil {
 				return err
 			}
 		}
@@ -87,7 +85,7 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		if err := task.SetDescriptionContext(ctx, m.descID, value); err != nil {
+		if err := m.taskwarriorClient().SetDescriptionContext(ctx, m.descID, value); err != nil {
 			return err
 		}
 		if err := m.reload(); err != nil {
@@ -135,12 +133,12 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
 			if len(adds) > 0 {
-				if err := task.AddTagsContext(ctx, m.tagsID, adds); err != nil {
+				if err := m.taskwarriorClient().AddTagsContext(ctx, m.tagsID, adds); err != nil {
 					return err
 				}
 			}
 			if len(removes) > 0 {
-				if err := task.RemoveTagsContext(ctx, m.tagsID, removes); err != nil {
+				if err := m.taskwarriorClient().RemoveTagsContext(ctx, m.tagsID, removes); err != nil {
 					return err
 				}
 			}
@@ -171,7 +169,7 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		ctx, cancel := m.taskOperationContext()
-		err := task.SetDueDateContext(ctx, m.dueID, m.dueDate.Format("2006-01-02"))
+		err := m.taskwarriorClient().SetDueDateContext(ctx, m.dueID, m.dueDate.Format("2006-01-02"))
 		cancel()
 		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
@@ -220,7 +218,7 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		if err := task.SetRecurrenceContext(ctx, m.recurID, value); err != nil {
+		if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurID, value); err != nil {
 			return err
 		}
 		if err := m.reload(); err != nil {
@@ -250,7 +248,7 @@ func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		return task.SetProjectContext(ctx, m.projID, value)
+		return m.taskwarriorClient().SetProjectContext(ctx, m.projID, value)
 	}
 
 	onExit := func() {
@@ -282,7 +280,7 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		ctx, cancel := m.taskOperationContext()
-		err := task.SetPriorityContext(ctx, m.priorityID, priority)
+		err := m.taskwarriorClient().SetPriorityContext(ctx, m.priorityID, priority)
 		cancel()
 		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
@@ -361,7 +359,7 @@ func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		ctx, cancel := m.taskOperationContext()
-		err := task.AddLineContext(ctx, m.addInput.Value())
+		err := m.taskwarriorClient().AddLineContext(ctx, m.addInput.Value())
 		cancel()
 		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)

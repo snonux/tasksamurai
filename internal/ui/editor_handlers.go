@@ -7,8 +7,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-
-	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // handleEditDone handles completion of external editor
@@ -57,7 +55,7 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	newDesc := strings.TrimSpace(string(content))
 	if m.currentTaskDetail != nil {
 		ctx, cancel := m.taskOperationContext()
-		err = task.SetDescriptionContext(ctx, m.currentTaskDetail.ID, newDesc)
+		err = m.taskwarriorClient().SetDescriptionContext(ctx, m.currentTaskDetail.ID, newDesc)
 		cancel()
 		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error updating description: %v", err)
