@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/magefile/mage/sh"
 )
@@ -32,6 +33,25 @@ func Run() error {
 func Test() error {
 	fmt.Println("Running tests...")
 	return sh.Run("go", "test", "./...")
+}
+
+// Verify runs formatting and static checks before tests.
+func Verify() error {
+	fmt.Println("Checking gofmt...")
+	out, err := sh.Output("gofmt", "-l", ".")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) != "" {
+		return fmt.Errorf("gofmt needed for:\n%s", out)
+	}
+
+	fmt.Println("Running errcheck...")
+	if err := sh.Run("errcheck", "./..."); err != nil {
+		return err
+	}
+
+	return Test()
 }
 
 // Install installs tasksamurai to $GOPATH/bin

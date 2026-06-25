@@ -261,14 +261,14 @@ func TestAnnotateHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -367,14 +367,14 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -429,14 +429,14 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -485,8 +485,8 @@ func TestEditDescriptionCmdPreparesLaunchWithoutRunningEditor(t *testing.T) {
 	}
 
 	origEditor := os.Getenv("EDITOR")
-	os.Setenv("EDITOR", editorPath)
-	t.Cleanup(func() { os.Setenv("EDITOR", origEditor) })
+	_ = os.Setenv("EDITOR", editorPath)
+	t.Cleanup(func() { _ = os.Setenv("EDITOR", origEditor) })
 
 	cmd := editDescriptionCmd("old description")
 	msg := cmd()
@@ -601,14 +601,14 @@ func TestHandleFilterModeReportsReloadError(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -657,14 +657,14 @@ func TestDoneHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -707,14 +707,14 @@ func TestUndoHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -767,14 +767,14 @@ func TestDeleteHotkeyUndo(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -826,14 +826,14 @@ func TestDeleteRecurringHotkeyUndo(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -994,14 +994,14 @@ func TestDeleteHotkeyInUltraMode(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1040,14 +1040,14 @@ func TestDeleteHotkeyInDetailMode(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1097,14 +1097,14 @@ func TestOpenURLHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, browserPath)
@@ -1161,14 +1161,14 @@ func TestDueDateHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1215,14 +1215,14 @@ func TestRandomDueDateHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1270,14 +1270,14 @@ func TestRecurrenceHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1460,14 +1460,14 @@ func TestPriorityHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1508,14 +1508,14 @@ func TestAddHotkey(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1560,14 +1560,14 @@ func TestNavigationHotkeys(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1657,14 +1657,14 @@ func TestAgentFilterHotkeyDefaultsToThree(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1696,14 +1696,14 @@ func TestAgentFilterHotkeyCanBeRebound(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New([]string{"project:home"}, "firefox")
@@ -1752,14 +1752,14 @@ func TestAgentFilterHotkeyNamedKeysAreCanonicalized(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1802,14 +1802,14 @@ func TestAgentFilterHotkeyRejectsUppercaseNamedKeyCollision(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -1853,14 +1853,14 @@ func TestAgentFilterHotkeyCollisionIsRejected(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	m, err := New(nil, "firefox")
@@ -2036,15 +2036,15 @@ func setupSharedSearchTaskSet(t *testing.T, tmp string) string {
 
 func setupEnv(t *testing.T, taskPath string) {
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", filepath.Dir(taskPath)+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", filepath.Dir(taskPath)+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	tmp := filepath.Dir(taskPath)
-	os.Setenv("TASKDATA", tmp)
-	os.Setenv("TASKRC", "/dev/null")
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 }
 

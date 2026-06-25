@@ -17,7 +17,7 @@ import (
 // target directory does not exist.
 func TestSetDebugLog(t *testing.T) {
 	// Ensure the package-level state is clean before and after.
-	t.Cleanup(func() { SetDebugLog("") }) //nolint:errcheck
+	t.Cleanup(func() { _ = SetDebugLog("") })
 
 	// Negative: directory does not exist — must return an error.
 	if err := SetDebugLog("/nonexistent-dir-xyz/debug.log"); err == nil {
@@ -40,7 +40,9 @@ func TestSetDebugLog(t *testing.T) {
 
 	// The run helper uses dbg.writer — verify that a write actually reaches
 	// the log file. We fake a task invocation by writing directly.
-	fmt.Fprintln(dbg.writer, "test-entry")
+	if _, err := fmt.Fprintln(dbg.writer, "test-entry"); err != nil {
+		t.Fatalf("write debug log: %v", err)
+	}
 	content, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read log file: %v", err)
@@ -79,8 +81,8 @@ func TestAddAndExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	if err := Add("hello world", []string{"tag", "anothertag", "tasksamuraitesting"}); err != nil {
@@ -134,8 +136,8 @@ func TestRunLineSplitsCapturesAndStripsTaskPrefix(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	result, err := RunLine(context.Background(), `task add "hello world" project:home`)
 	if err != nil {
@@ -171,8 +173,8 @@ func TestRunShellLineDisablesRecurrencePrompt(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	if _, err := RunShellLine(context.Background(), `task 260 modify project:foo`); err != nil {
 		t.Fatalf("RunShellLine: %v", err)
@@ -200,8 +202,8 @@ func TestRunLineReturnsCapturedErrorOutput(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	result, err := RunLine(context.Background(), "bad command")
 	if err == nil {
@@ -737,8 +739,8 @@ func TestLoadCompletionSources(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	sources := LoadCompletionSources(context.Background())
 	if strings.Join(sources.Commands, ",") != "add,modify" {
@@ -782,8 +784,8 @@ func TestRecurringSeries(t *testing.T) {
 	}
 
 	origPath := os.Getenv("PATH")
-	os.Setenv("PATH", tmp+":"+origPath)
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
 
 	tasks, err := RecurringSeries(context.Background(), "parent-uuid")
 	if err != nil {
@@ -820,8 +822,8 @@ func TestModifyHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		os.Unsetenv("TASKDATA")
-		os.Unsetenv("TASKRC")
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
 	})
 
 	if err := Add("hello", nil); err != nil {

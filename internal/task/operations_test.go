@@ -38,7 +38,7 @@ func TestModifyTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := modifyTask(tt.id, tt.args...)
-			
+
 			// We can't test actual taskwarrior commands without it installed
 			// So we just test the validation
 			if tt.wantErr {
@@ -85,7 +85,7 @@ func TestSimpleTaskCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := simpleTaskCommand(tt.id, tt.command)
-			
+
 			// We can't test actual taskwarrior commands without it installed
 			// So we just test the validation
 			if tt.wantErr {
@@ -102,7 +102,7 @@ func TestSimpleTaskCommand(t *testing.T) {
 func TestTaskOperationsValidation(t *testing.T) {
 	// Test that all task operations validate IDs
 	invalidID := -1
-	
+
 	operations := []struct {
 		name string
 		fn   func() error
@@ -119,7 +119,7 @@ func TestTaskOperationsValidation(t *testing.T) {
 		{"Annotate", func() error { return Annotate(invalidID, "note") }},
 		{"Denotate", func() error { return Denotate(invalidID, "note") }},
 	}
-	
+
 	for _, op := range operations {
 		t.Run(op.name, func(t *testing.T) {
 			err := op.fn()
