@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // wordWrap wraps text to fit within the specified width, breaking at word boundaries
@@ -59,10 +61,10 @@ const (
 // It delegates each visual section to a focused helper so that the
 // overall structure is easy to follow at a glance.
 func (m *Model) renderTaskDetail() string {
-	if m.currentTaskDetail == nil {
+	t := m.currentDetailTask()
+	if t == nil {
 		return "No task selected"
 	}
-	t := m.currentTaskDetail
 
 	titleStyle, labelStyle, valueStyle, descStyle := m.detailStyles()
 
@@ -99,7 +101,7 @@ func (m *Model) detailStyles() (title, label, value, desc lipgloss.Style) {
 // optional Recurrence) to lines and returns the updated slice together with the
 // field index of the next unrendered field (Description).
 func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lipgloss.Style) ([]string, int) {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	cf := 0 // current field counter
 
 	lines = append(lines, m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, cf))
@@ -130,7 +132,7 @@ func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lip
 // renderDetailPriorityField renders the Priority row, showing the selection
 // widget when the user is actively changing it.
 func (m *Model) renderDetailPriorityField(labelStyle, valueStyle lipgloss.Style, cf int) string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if m.prioritySelecting && m.priorityID == t.ID {
 		return m.renderEditingField("Priority", m.priorityView(false), labelStyle, cf)
 	}
@@ -156,7 +158,7 @@ func (m *Model) renderDetailPriorityField(labelStyle, valueStyle lipgloss.Style,
 // renderDetailTagsField renders the Tags row, showing the text input when
 // the user is actively editing it.
 func (m *Model) renderDetailTagsField(labelStyle, valueStyle lipgloss.Style, cf int) string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if m.tagsEditing && m.tagsID == t.ID {
 		orig := m.tagsInput.Prompt
 		m.tagsInput.Prompt = ""
@@ -174,7 +176,7 @@ func (m *Model) renderDetailTagsField(labelStyle, valueStyle lipgloss.Style, cf 
 // renderDetailDueField renders the Due row, showing the date picker when
 // the user is actively editing it.
 func (m *Model) renderDetailDueField(labelStyle, valueStyle lipgloss.Style, cf int) string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if m.dueEditing && m.dueID == t.ID {
 		return m.renderEditingField("Due", m.dueView(false), labelStyle, cf)
 	}
@@ -184,7 +186,7 @@ func (m *Model) renderDetailDueField(labelStyle, valueStyle lipgloss.Style, cf i
 // renderDetailProjectField renders the Project row, showing the text input
 // when the user is actively editing it.
 func (m *Model) renderDetailProjectField(labelStyle, valueStyle lipgloss.Style, cf int) string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if m.projEditing && m.projID == t.ID {
 		orig := m.projInput.Prompt
 		m.projInput.Prompt = ""
@@ -202,7 +204,7 @@ func (m *Model) renderDetailProjectField(labelStyle, valueStyle lipgloss.Style, 
 // renderDetailRecurField renders the Recurrence row, showing the text input
 // when the user is actively editing it.
 func (m *Model) renderDetailRecurField(labelStyle lipgloss.Style, cf int) string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if m.recurEditing && m.recurID == t.ID {
 		orig := m.recurInput.Prompt
 		m.recurInput.Prompt = ""
@@ -216,7 +218,7 @@ func (m *Model) renderDetailRecurField(labelStyle lipgloss.Style, cf int) string
 // renderDetailDescription appends the Description section (label + wrapped body)
 // to lines, applying selection/blink highlighting and search match colouring.
 func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	lines = append(lines, "")
 
 	ls, vs := labelStyle, descStyle
@@ -255,7 +257,7 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 // renderDetailAnnotations appends the Annotations section to lines when the
 // task has annotations, applying selection highlighting and search colouring.
 func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
-	t := m.currentTaskDetail
+	t := m.currentDetailTask()
 	if len(t.Annotations) == 0 {
 		return lines
 	}
@@ -358,23 +360,34 @@ func (m *Model) formatTaskDate(dateStr string) string {
 	return dateStr
 }
 
-// refreshCurrentTaskDetail updates the current task detail pointer after a reload
-func (m *Model) refreshCurrentTaskDetail() {
-	if m.currentTaskDetail == nil {
-		return
-	}
-
-	id := m.currentTaskDetail.ID
+func (m *Model) taskByID(id int) *task.Task {
 	for i := range m.tasks {
 		if m.tasks[i].ID == id {
-			m.currentTaskDetail = &m.tasks[i]
-			return
+			return &m.tasks[i]
 		}
+	}
+	return nil
+}
+
+func (m *Model) currentDetailTask() *task.Task {
+	if !m.showTaskDetail || m.currentTaskDetailID == 0 {
+		return nil
+	}
+	return m.taskByID(m.currentTaskDetailID)
+}
+
+// refreshCurrentTaskDetail validates detail state after a reload.
+func (m *Model) refreshCurrentTaskDetail() {
+	if m.currentTaskDetailID == 0 {
+		return
+	}
+	if m.currentDetailTask() != nil {
+		return
 	}
 
 	// Task no longer exists, clear detail view
 	m.showTaskDetail = false
-	m.currentTaskDetail = nil
+	m.currentTaskDetailID = 0
 }
 
 // detailDescriptionFieldIndex returns the navigable field index for the
@@ -382,7 +395,8 @@ func (m *Model) refreshCurrentTaskDetail() {
 // occupies index fieldRecur (9), pushing Description to index 10.  Without
 // Recur, Description is at index 9.
 func (m *Model) detailDescriptionFieldIndex() int {
-	if m.currentTaskDetail != nil && m.currentTaskDetail.Recur != "" {
+	t := m.currentDetailTask()
+	if t != nil && t.Recur != "" {
 		return fieldRecur + 1 // 10
 	}
 	return fieldRecur // 9
@@ -390,7 +404,8 @@ func (m *Model) detailDescriptionFieldIndex() int {
 
 // getDetailFieldCount returns the actual number of navigable fields for the current task
 func (m *Model) getDetailFieldCount() int {
-	if m.currentTaskDetail == nil {
+	t := m.currentDetailTask()
+	if t == nil {
 		return 0
 	}
 
@@ -398,12 +413,12 @@ func (m *Model) getDetailFieldCount() int {
 	count := 10
 
 	// Add recurrence if present
-	if m.currentTaskDetail.Recur != "" {
+	if t.Recur != "" {
 		count++
 	}
 
 	// Add annotations if present
-	if len(m.currentTaskDetail.Annotations) > 0 {
+	if len(t.Annotations) > 0 {
 		count++
 	}
 

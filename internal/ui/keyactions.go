@@ -213,8 +213,8 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) getTaskForDelete() *task.Task {
-	if m.showTaskDetail && m.currentTaskDetail != nil {
-		return m.currentTaskDetail
+	if m.showTaskDetail {
+		return m.currentDetailTask()
 	}
 	return m.getTaskAtCursor()
 }
@@ -689,22 +689,18 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Find the task with this ID
-	for i := range m.tasks {
-		if m.tasks[i].ID == id {
-			m.showTaskDetail = true
-			m.currentTaskDetail = &m.tasks[i]
-			m.detailSearching = false
-			m.detailSearchRegex = nil
-			m.detailFieldIndex = 0
-			m.detailBlinkField = -1
-			m.detailBlinkOn = false
-			m.detailBlinkCount = 0
-			m.detailSearchInput = textinput.New()
-			m.detailSearchInput.Placeholder = "Search..."
-			m.detailSearchInput.SetWidth(30)
-			break
-		}
+	if m.taskByID(id) != nil {
+		m.showTaskDetail = true
+		m.currentTaskDetailID = id
+		m.detailSearching = false
+		m.detailSearchRegex = nil
+		m.detailFieldIndex = 0
+		m.detailBlinkField = -1
+		m.detailBlinkOn = false
+		m.detailBlinkCount = 0
+		m.detailSearchInput = textinput.New()
+		m.detailSearchInput.Placeholder = "Search..."
+		m.detailSearchInput.SetWidth(30)
 	}
 
 	return m, nil

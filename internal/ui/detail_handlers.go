@@ -96,19 +96,21 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // for the blink animation and so the (now-completed) task isn't shown as
 // pending after the reload triggered by startBlink.
 func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
-	if m.currentTaskDetail == nil {
+	t := m.currentDetailTask()
+	if t == nil {
 		return m, nil
 	}
-	id := m.currentTaskDetail.ID
+	id := t.ID
 	m.closeDetailView()
 	return m, m.startBlink(id, true)
 }
 
 func (m *Model) handleDetailDeleteTask() (tea.Model, tea.Cmd) {
-	if m.currentTaskDetail == nil {
+	t := m.currentDetailTask()
+	if t == nil {
 		return m, nil
 	}
-	tsk := *m.currentTaskDetail
+	tsk := *t
 	m.closeDetailView()
 	count, recurring, err := m.deleteTaskWithUndo(tsk)
 	if err != nil {
@@ -143,7 +145,7 @@ func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
 // done, undo).
 func (m *Model) closeDetailView() {
 	m.showTaskDetail = false
-	m.currentTaskDetail = nil
+	m.currentTaskDetailID = 0
 	m.detailSearching = false
 	m.detailSearchRegex = nil
 	m.detailSearchInput.SetValue("")
@@ -153,10 +155,10 @@ func (m *Model) closeDetailView() {
 // detail view. Fields 0-2 (ID, UUID, Status) and 6, 8 (Start, Entry) are
 // read-only; all others delegate to the appropriate activation helper.
 func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
-	if m.currentTaskDetail == nil {
+	t := m.currentDetailTask()
+	if t == nil {
 		return m, nil
 	}
-	t := m.currentTaskDetail
 	id := t.ID
 
 	// Fixed-position fields (indices always match the fieldXxx constants).

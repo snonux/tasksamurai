@@ -225,7 +225,7 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
 	if msg.String() == "enter" {
 		if m.showTaskDetail {
-			if m.currentTaskDetail != nil && m.currentTaskDetail.Recur != "" {
+			if t := m.currentDetailTask(); t != nil && t.Recur != "" {
 				return model, m.startDetailBlink(fieldRecur)
 			}
 		}

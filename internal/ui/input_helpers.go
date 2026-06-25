@@ -113,8 +113,8 @@ func (m *Model) getTaskAtCursor() *task.Task {
 // getTaskForOpenURL returns the task that should be used by the open-URL
 // hotkey, honoring the active view's highlighted task.
 func (m *Model) getTaskForOpenURL() *task.Task {
-	if m.showTaskDetail && m.currentTaskDetail != nil {
-		return m.currentTaskDetail
+	if m.showTaskDetail {
+		return m.currentDetailTask()
 	}
 
 	if m.showUltra {

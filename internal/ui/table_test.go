@@ -209,6 +209,81 @@ func TestNewWithTaskwarriorRejectsNilClient(t *testing.T) {
 	}
 }
 
+func TestHandleShowTaskDetailTracksTaskID(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "original detail", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+
+	if !m.showTaskDetail {
+		t.Fatalf("detail view was not shown")
+	}
+	if m.currentTaskDetailID != 1 {
+		t.Fatalf("current detail task ID = %d, want 1", m.currentTaskDetailID)
+	}
+	if got := m.renderTaskDetail(); !strings.Contains(got, "original detail") {
+		t.Fatalf("rendered detail %q does not include original task description", got)
+	}
+}
+
+func TestTaskDetailUsesReplacedTaskSlice(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "old detail", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+	m.tasks = []task.Task{
+		{ID: 1, UUID: "fake-1", Description: "new detail", Status: "pending"},
+	}
+
+	got := m.renderTaskDetail()
+	if !strings.Contains(got, "new detail") {
+		t.Fatalf("rendered detail %q does not include replacement task description", got)
+	}
+	if strings.Contains(got, "old detail") {
+		t.Fatalf("rendered detail %q still includes stale task description", got)
+	}
+}
+
+func TestRefreshCurrentTaskDetailClosesMissingTask(t *testing.T) {
+	m := Model{
+		detailViewState: detailViewState{
+			showTaskDetail:      true,
+			currentTaskDetailID: 1,
+		},
+		tasks: []task.Task{
+			{ID: 2, UUID: "fake-2", Description: "different task", Status: "pending"},
+		},
+	}
+
+	m.refreshCurrentTaskDetail()
+
+	if m.showTaskDetail {
+		t.Fatalf("detail view stayed open for missing task")
+	}
+	if m.currentTaskDetailID != 0 {
+		t.Fatalf("current detail task ID = %d, want 0", m.currentTaskDetailID)
+	}
+	if got := m.renderTaskDetail(); got != "No task selected" {
+		t.Fatalf("rendered detail = %q, want no task selected", got)
+	}
+}
+
 func TestZeroValueModelTaskwarriorClientFailsFast(t *testing.T) {
 	defer func() {
 		r := recover()
@@ -443,7 +518,7 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	m.currentTaskDetail = &task.Task{ID: 1, Description: "old description"}
+	m.currentTaskDetailID = 1
 	m.showTaskDetail = true
 	m.detailDescEditing = true
 
@@ -1310,8 +1385,9 @@ func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
 	m := newRecurrenceDetailModel(t, "")
 
 	m.showTaskDetail = true
-	m.currentTaskDetail = &m.tasks[0]
-	m.activateRecurEdit(m.currentTaskDetail.ID, m.currentTaskDetail.Recur)
+	m.currentTaskDetailID = m.tasks[0].ID
+	current := m.currentDetailTask()
+	m.activateRecurEdit(current.ID, current.Recur)
 	m.recurInput.SetValue("daily")
 
 	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1320,11 +1396,12 @@ func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("recurrence edit did not start a blink command")
 	}
-	if m.currentTaskDetail == nil {
+	current = m.currentDetailTask()
+	if current == nil {
 		t.Fatalf("current task detail was cleared")
 	}
-	if m.currentTaskDetail.Recur != "daily" {
-		t.Fatalf("current detail recurrence = %q, want daily", m.currentTaskDetail.Recur)
+	if current.Recur != "daily" {
+		t.Fatalf("current detail recurrence = %q, want daily", current.Recur)
 	}
 	if m.detailBlinkField != fieldRecur {
 		t.Fatalf("detail blink field = %d, want recurrence field %d", m.detailBlinkField, fieldRecur)
@@ -1341,9 +1418,10 @@ func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) 
 	m := newRecurrenceDetailModel(t, "daily")
 
 	m.showTaskDetail = true
-	m.currentTaskDetail = &m.tasks[0]
+	m.currentTaskDetailID = m.tasks[0].ID
 	m.detailBlinkField = -1
-	m.activateRecurEdit(m.currentTaskDetail.ID, m.currentTaskDetail.Recur)
+	current := m.currentDetailTask()
+	m.activateRecurEdit(current.ID, current.Recur)
 	m.recurInput.SetValue("")
 
 	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -1352,11 +1430,12 @@ func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) 
 	if cmd == nil {
 		t.Fatalf("recurrence removal did not start a fallback blink command")
 	}
-	if m.currentTaskDetail == nil {
+	current = m.currentDetailTask()
+	if current == nil {
 		t.Fatalf("current task detail was cleared")
 	}
-	if m.currentTaskDetail.Recur != "" {
-		t.Fatalf("current detail recurrence = %q, want empty", m.currentTaskDetail.Recur)
+	if current.Recur != "" {
+		t.Fatalf("current detail recurrence = %q, want empty", current.Recur)
 	}
 	if m.detailBlinkField == fieldRecur {
 		t.Fatalf("detail blink targeted recurrence field after recurrence row was removed")

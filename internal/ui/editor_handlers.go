@@ -44,9 +44,10 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 
 	// Update the description
 	newDesc := strings.TrimSpace(string(content))
-	if m.currentTaskDetail != nil {
+	t := m.currentDetailTask()
+	if t != nil {
 		ctx, cancel := m.taskOperationContext()
-		err = m.taskwarriorClient().SetDescriptionContext(ctx, m.currentTaskDetail.ID, newDesc)
+		err = m.taskwarriorClient().SetDescriptionContext(ctx, t.ID, newDesc)
 		cancel()
 		if err != nil {
 			return m, m.showStatusTimed(fmt.Sprintf("Error updating description: %v", err))
