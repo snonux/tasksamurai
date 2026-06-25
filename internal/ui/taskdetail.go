@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 
@@ -26,7 +27,7 @@ func wordWrap(text string, width int) []string {
 	for i := 1; i < len(words); i++ {
 		word := words[i]
 		testLine := currentLine + " " + word
-		if len(testLine) > width {
+		if runeLen(testLine) > width {
 			lines = append(lines, currentLine)
 			currentLine = word
 		} else {
@@ -38,6 +39,10 @@ func wordWrap(text string, width int) []string {
 	}
 
 	return lines
+}
+
+func runeLen(s string) int {
+	return utf8.RuneCountInString(s)
 }
 
 // Define field indices for navigation
