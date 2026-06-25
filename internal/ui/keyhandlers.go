@@ -274,7 +274,7 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
-		m.currentTaskDetailID = 0
+		m.clearCurrentTaskDetail()
 		m.detailSearching = false
 		m.detailSearchRegex = nil
 		m.detailSearchInput.SetValue("")
@@ -313,7 +313,7 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
-		m.currentTaskDetailID = 0
+		m.clearCurrentTaskDetail()
 		m.detailSearching = false
 		m.detailSearchRegex = nil
 		m.detailSearchInput.SetValue("")

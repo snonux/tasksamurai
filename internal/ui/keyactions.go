@@ -689,9 +689,9 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.taskByID(id) != nil {
+	if t := m.taskByID(id); t != nil {
 		m.showTaskDetail = true
-		m.currentTaskDetailID = id
+		m.setCurrentTaskDetail(t)
 		m.detailSearching = false
 		m.detailSearchRegex = nil
 		m.detailFieldIndex = 0

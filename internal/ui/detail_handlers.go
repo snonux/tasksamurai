@@ -145,7 +145,7 @@ func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
 // done, undo).
 func (m *Model) closeDetailView() {
 	m.showTaskDetail = false
-	m.currentTaskDetailID = 0
+	m.clearCurrentTaskDetail()
 	m.detailSearching = false
 	m.detailSearchRegex = nil
 	m.detailSearchInput.SetValue("")

@@ -209,7 +209,7 @@ func TestNewWithTaskwarriorRejectsNilClient(t *testing.T) {
 	}
 }
 
-func TestHandleShowTaskDetailTracksTaskID(t *testing.T) {
+func TestHandleShowTaskDetailTracksTaskUUID(t *testing.T) {
 	fake := &fakeTaskwarrior{
 		tasks: []task.Task{
 			{ID: 1, UUID: "fake-1", Description: "original detail", Status: "pending"},
@@ -226,11 +226,39 @@ func TestHandleShowTaskDetailTracksTaskID(t *testing.T) {
 	if !m.showTaskDetail {
 		t.Fatalf("detail view was not shown")
 	}
-	if m.currentTaskDetailID != 1 {
-		t.Fatalf("current detail task ID = %d, want 1", m.currentTaskDetailID)
+	if m.currentTaskDetailUUID != "fake-1" {
+		t.Fatalf("current detail task UUID = %q, want fake-1", m.currentTaskDetailUUID)
+	}
+	if m.currentTaskDetailFallbackID != 0 {
+		t.Fatalf("current detail fallback ID = %d, want 0", m.currentTaskDetailFallbackID)
 	}
 	if got := m.renderTaskDetail(); !strings.Contains(got, "original detail") {
 		t.Fatalf("rendered detail %q does not include original task description", got)
+	}
+}
+
+func TestHandleShowTaskDetailFallsBackToTaskIDWhenUUIDMissing(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, Description: "legacy detail", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+
+	if m.currentTaskDetailUUID != "" {
+		t.Fatalf("current detail task UUID = %q, want empty fallback", m.currentTaskDetailUUID)
+	}
+	if m.currentTaskDetailFallbackID != 1 {
+		t.Fatalf("current detail fallback ID = %d, want 1", m.currentTaskDetailFallbackID)
+	}
+	if got := m.renderTaskDetail(); !strings.Contains(got, "legacy detail") {
+		t.Fatalf("rendered detail %q does not include legacy task description", got)
 	}
 }
 
@@ -260,11 +288,82 @@ func TestTaskDetailUsesReplacedTaskSlice(t *testing.T) {
 	}
 }
 
+func TestTaskDetailRejectsSameNumericIDDifferentUUIDAfterReload(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "original detail", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+	m.tasks = []task.Task{
+		{ID: 1, UUID: "fake-2", Description: "wrong detail", Status: "pending"},
+	}
+
+	m.refreshCurrentTaskDetail()
+
+	if m.showTaskDetail {
+		t.Fatalf("detail view stayed open for different UUID with same numeric ID")
+	}
+	if m.currentTaskDetailUUID != "" {
+		t.Fatalf("current detail task UUID = %q, want cleared", m.currentTaskDetailUUID)
+	}
+	if m.currentTaskDetailFallbackID != 0 {
+		t.Fatalf("current detail fallback ID = %d, want 0", m.currentTaskDetailFallbackID)
+	}
+	if got := m.renderTaskDetail(); got != "No task selected" {
+		t.Fatalf("rendered detail = %q, want no task selected", got)
+	}
+}
+
+func TestTaskDetailUsesSameUUIDAfterNumericIDChanges(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "old detail", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+	m.tasks = []task.Task{
+		{ID: 7, UUID: "fake-1", Description: "renumbered detail", Status: "pending"},
+	}
+
+	m.refreshCurrentTaskDetail()
+
+	if !m.showTaskDetail {
+		t.Fatalf("detail view closed for same UUID with new numeric ID")
+	}
+	current := m.currentDetailTask()
+	if current == nil {
+		t.Fatalf("current detail task was nil")
+	}
+	if current.ID != 7 {
+		t.Fatalf("current detail task ID = %d, want 7", current.ID)
+	}
+	got := m.renderTaskDetail()
+	if !strings.Contains(got, "renumbered detail") {
+		t.Fatalf("rendered detail %q does not include renumbered task description", got)
+	}
+	if strings.Contains(got, "old detail") {
+		t.Fatalf("rendered detail %q still includes stale task description", got)
+	}
+}
+
 func TestRefreshCurrentTaskDetailClosesMissingTask(t *testing.T) {
 	m := Model{
 		detailViewState: detailViewState{
-			showTaskDetail:      true,
-			currentTaskDetailID: 1,
+			showTaskDetail:        true,
+			currentTaskDetailUUID: "fake-1",
 		},
 		tasks: []task.Task{
 			{ID: 2, UUID: "fake-2", Description: "different task", Status: "pending"},
@@ -276,8 +375,11 @@ func TestRefreshCurrentTaskDetailClosesMissingTask(t *testing.T) {
 	if m.showTaskDetail {
 		t.Fatalf("detail view stayed open for missing task")
 	}
-	if m.currentTaskDetailID != 0 {
-		t.Fatalf("current detail task ID = %d, want 0", m.currentTaskDetailID)
+	if m.currentTaskDetailUUID != "" {
+		t.Fatalf("current detail task UUID = %q, want cleared", m.currentTaskDetailUUID)
+	}
+	if m.currentTaskDetailFallbackID != 0 {
+		t.Fatalf("current detail fallback ID = %d, want 0", m.currentTaskDetailFallbackID)
 	}
 	if got := m.renderTaskDetail(); got != "No task selected" {
 		t.Fatalf("rendered detail = %q, want no task selected", got)
@@ -518,8 +620,8 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	m.currentTaskDetailID = 1
 	m.showTaskDetail = true
+	m.currentTaskDetailUUID = "x"
 	m.detailDescEditing = true
 
 	tempFile := filepath.Join(tmp, "desc.txt")
@@ -1385,7 +1487,7 @@ func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
 	m := newRecurrenceDetailModel(t, "")
 
 	m.showTaskDetail = true
-	m.currentTaskDetailID = m.tasks[0].ID
+	m.setCurrentTaskDetail(&m.tasks[0])
 	current := m.currentDetailTask()
 	m.activateRecurEdit(current.ID, current.Recur)
 	m.recurInput.SetValue("daily")
@@ -1418,7 +1520,7 @@ func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) 
 	m := newRecurrenceDetailModel(t, "daily")
 
 	m.showTaskDetail = true
-	m.currentTaskDetailID = m.tasks[0].ID
+	m.setCurrentTaskDetail(&m.tasks[0])
 	m.detailBlinkField = -1
 	current := m.currentDetailTask()
 	m.activateRecurEdit(current.ID, current.Recur)

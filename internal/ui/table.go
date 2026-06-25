@@ -82,15 +82,16 @@ type searchState struct {
 // Blink fields here are separate from blinkState because they drive a
 // per-field highlight inside the detail view rather than a table row.
 type detailViewState struct {
-	showTaskDetail      bool
-	currentTaskDetailID int
-	detailSearching     bool
-	detailSearchInput   textinput.Model
-	detailSearchRegex   *regexp.Regexp
-	detailFieldIndex    int  // currently selected field (-1 = none)
-	detailBlinkField    int  // field currently blinking (-1 = none)
-	detailBlinkOn       bool // whether the blink is currently on
-	detailBlinkCount    int  // number of blink cycles completed so far
+	showTaskDetail              bool
+	currentTaskDetailUUID       string
+	currentTaskDetailFallbackID int
+	detailSearching             bool
+	detailSearchInput           textinput.Model
+	detailSearchRegex           *regexp.Regexp
+	detailFieldIndex            int  // currently selected field (-1 = none)
+	detailBlinkField            int  // field currently blinking (-1 = none)
+	detailBlinkOn               bool // whether the blink is currently on
+	detailBlinkCount            int  // number of blink cycles completed so far
 }
 
 // ultraState holds the state for the ultra mode task list and its search UI.

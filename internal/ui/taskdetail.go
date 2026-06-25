@@ -369,16 +369,58 @@ func (m *Model) taskByID(id int) *task.Task {
 	return nil
 }
 
-func (m *Model) currentDetailTask() *task.Task {
-	if !m.showTaskDetail || m.currentTaskDetailID == 0 {
+func (m *Model) taskByUUID(uuid string) *task.Task {
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" {
 		return nil
 	}
-	return m.taskByID(m.currentTaskDetailID)
+	for i := range m.tasks {
+		if m.tasks[i].UUID == uuid {
+			return &m.tasks[i]
+		}
+	}
+	return nil
+}
+
+func (m *Model) currentDetailTask() *task.Task {
+	if !m.showTaskDetail {
+		return nil
+	}
+	if m.currentTaskDetailUUID != "" {
+		return m.taskByUUID(m.currentTaskDetailUUID)
+	}
+	if m.currentTaskDetailFallbackID != 0 {
+		return m.taskByID(m.currentTaskDetailFallbackID)
+	}
+	return nil
+}
+
+func (m *Model) setCurrentTaskDetail(t *task.Task) {
+	// UUID is stable across Taskwarrior renumbering. Numeric ID is used only
+	// for legacy/defensive compatibility when a task has no UUID.
+	m.currentTaskDetailUUID = strings.TrimSpace(t.UUID)
+	if m.currentTaskDetailUUID != "" {
+		m.currentTaskDetailFallbackID = 0
+		return
+	}
+	m.currentTaskDetailFallbackID = t.ID
+}
+
+func (m *Model) clearCurrentTaskDetail() {
+	m.currentTaskDetailUUID = ""
+	m.currentTaskDetailFallbackID = 0
+}
+
+func (m *Model) hasCurrentTaskDetailIdentity() bool {
+	if m.currentTaskDetailUUID != "" {
+		return true
+	}
+	return m.currentTaskDetailFallbackID != 0
 }
 
 // refreshCurrentTaskDetail validates detail state after a reload.
 func (m *Model) refreshCurrentTaskDetail() {
-	if m.currentTaskDetailID == 0 {
+	if !m.hasCurrentTaskDetailIdentity() {
 		return
 	}
 	if m.currentDetailTask() != nil {
@@ -387,7 +429,7 @@ func (m *Model) refreshCurrentTaskDetail() {
 
 	// Task no longer exists, clear detail view
 	m.showTaskDetail = false
-	m.currentTaskDetailID = 0
+	m.clearCurrentTaskDetail()
 }
 
 // detailDescriptionFieldIndex returns the navigable field index for the
