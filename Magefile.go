@@ -16,10 +16,8 @@ import (
 
 const binaryName = "tasksamurai"
 
-// Default builds the tasksamurai binary.
-func Default() {
-	mg.Deps(Build)
-}
+// Default is the target Mage runs when no target is specified.
+var Default = Build
 
 // Build compiles the tasksamurai binary.
 func Build() error {
@@ -30,12 +28,12 @@ func Build() error {
 	return nil
 }
 
-// Run builds and starts tasksamurai with any provided arguments.
+// Run builds and starts tasksamurai.
 func Run() error {
 	mg.Deps(Build)
 
 	fmt.Println("Running tasksamurai...")
-	if err := sh.RunV("./"+binaryName, targetArgs("run")...); err != nil {
+	if err := sh.RunV("./" + binaryName); err != nil {
 		return fmt.Errorf("run %s: %w", binaryName, err)
 	}
 	return nil
@@ -75,16 +73,10 @@ func Install() error {
 	mg.Deps(Build)
 
 	fmt.Println("Installing tasksamurai...")
-	goPath := os.Getenv("GOPATH")
-	if goPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("resolve home directory: %w", err)
-		}
-		goPath = filepath.Join(home, "go")
+	binDir, err := installBinDir()
+	if err != nil {
+		return err
 	}
-
-	binDir := filepath.Join(goPath, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return fmt.Errorf("create install directory %s: %w", binDir, err)
 	}
@@ -107,17 +99,20 @@ func Clean() error {
 	return nil
 }
 
-func targetArgs(target string) []string {
-	for i, arg := range os.Args[1:] {
-		if !strings.EqualFold(arg, target) {
-			continue
+func installBinDir() (string, error) {
+	goPath := os.Getenv("GOPATH")
+	if goPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
 		}
-
-		args := os.Args[i+2:]
-		if len(args) > 0 && args[0] == "--" {
-			return args[1:]
+		goPath = filepath.Join(home, "go")
+	} else {
+		goPath = filepath.SplitList(goPath)[0]
+		if goPath == "" {
+			return "", fmt.Errorf("resolve GOPATH: first path entry is empty")
 		}
-		return args
 	}
-	return nil
+
+	return filepath.Join(goPath, "bin"), nil
 }
