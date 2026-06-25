@@ -2898,6 +2898,86 @@ func TestUltraEntryResizeAndNavigationBindings(t *testing.T) {
 	}
 }
 
+func TestUltraEnsureVisibleOffsets(t *testing.T) {
+	tasks := []task.Task{
+		{ID: 1, UUID: "1", Description: "alpha", Status: "pending"},
+		{ID: 2, UUID: "2", Description: "beta bravo", Status: "pending"},
+		{ID: 3, UUID: "3", Description: "charlie delta", Status: "pending"},
+	}
+
+	tests := []struct {
+		name       string
+		tasks      []task.Task
+		height     int
+		cursor     int
+		offset     int
+		wantCursor int
+		wantOffset int
+	}{
+		{
+			name:       "empty list clamps cursor and offset",
+			height:     7,
+			cursor:     2,
+			offset:     2,
+			wantCursor: 0,
+			wantOffset: 0,
+		},
+		{
+			name:       "cursor above offset scrolls to cursor",
+			tasks:      tasks,
+			height:     7,
+			cursor:     0,
+			offset:     2,
+			wantCursor: 0,
+			wantOffset: 0,
+		},
+		{
+			name:       "cursor below visible window scrolls down",
+			tasks:      tasks,
+			height:     7,
+			cursor:     2,
+			offset:     0,
+			wantCursor: 2,
+			wantOffset: 1,
+		},
+		{
+			name: "cursor card taller than viewport scrolls directly to cursor",
+			tasks: []task.Task{
+				{ID: 1, UUID: "1", Description: "alpha", Status: "pending"},
+				{ID: 2, UUID: "2", Description: strings.Repeat("long description ", 30), Status: "pending"},
+				{ID: 3, UUID: "3", Description: "charlie", Status: "pending"},
+			},
+			height:     5,
+			cursor:     1,
+			offset:     0,
+			wantCursor: 1,
+			wantOffset: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := NewWithTaskwarrior(nil, "firefox", &fakeTaskwarrior{tasks: tt.tasks})
+			if err != nil {
+				t.Fatalf("NewWithTaskwarrior: %v", err)
+			}
+			m.tbl.SetWidth(60)
+			m.windowHeight = tt.height
+			m.ultraCursor = tt.cursor
+			m.ultraOffset = tt.offset
+
+			m.ultraEnsureVisible()
+
+			if got := m.ultraCursor; got != tt.wantCursor {
+				t.Fatalf("cursor = %d, want %d", got, tt.wantCursor)
+			}
+			if got := m.ultraOffset; got != tt.wantOffset {
+				t.Fatalf("offset = %d, want %d", got, tt.wantOffset)
+			}
+		})
+	}
+}
+
 func TestUltraBlinkUsesVisibleSelectionAndRendersBlink(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupUltraTaskSet(t, tmp)

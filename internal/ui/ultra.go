@@ -187,45 +187,8 @@ func (m *Model) ultraVisibleCount() int {
 		return 0
 	}
 
-	width := m.ultraRenderWidth()
-	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
-	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
-	_, overlayHeight := m.ultraOverlay()
-
-	budget := m.ultraCardBudget(top, bottom, overlayHeight)
-	if budget <= 0 {
-		return 0
-	}
-
-	start := m.ultraVisibleStart(len(tasks))
-	selected := m.ultraVisibleCursor(tasks)
-	used := 0
-	count := 0
-	for i := start; i < len(tasks); i++ {
-		card := m.renderUltraCard(tasks[i], width, i == selected, m.ultraSearchRegex)
-		if card == "" {
-			continue
-		}
-
-		cardHeight := lipgloss.Height(card)
-		if count > 0 {
-			if used+1+cardHeight > budget {
-				break
-			}
-			used++
-		} else if cardHeight > budget {
-			break
-		}
-
-		if used+cardHeight > budget {
-			break
-		}
-
-		used += cardHeight
-		count++
-	}
-
-	return count
+	budget, heights := m.ultraCardMetrics(tasks)
+	return ultraVisibleCountFrom(heights, m.ultraVisibleStart(len(tasks)), budget)
 }
 
 func (m *Model) ultraTaskList() []task.Task {
@@ -950,6 +913,82 @@ func ultraDueValue(m *Model, due string) string {
 	return ultraOrDash(val)
 }
 
+func (m *Model) ultraCardMetrics(tasks []task.Task) (int, []int) {
+	width := m.ultraRenderWidth()
+	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
+	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
+	_, overlayHeight := m.ultraOverlay()
+
+	budget := m.ultraCardBudget(top, bottom, overlayHeight)
+	selected := m.ultraVisibleCursor(tasks)
+	heights := make([]int, len(tasks))
+	for i, t := range tasks {
+		card := m.renderUltraCard(t, width, i == selected, m.ultraSearchRegex)
+		if card == "" {
+			continue
+		}
+		heights[i] = lipgloss.Height(card)
+	}
+	return budget, heights
+}
+
+func ultraVisibleCountFrom(heights []int, start, budget int) int {
+	if budget <= 0 || start < 0 || start >= len(heights) {
+		return 0
+	}
+
+	used := 0
+	count := 0
+	for i := start; i < len(heights); i++ {
+		height := heights[i]
+		if height <= 0 {
+			continue
+		}
+
+		if count > 0 {
+			if used+1+height > budget {
+				break
+			}
+			used++
+		} else if height > budget {
+			break
+		}
+
+		if used+height > budget {
+			break
+		}
+
+		used += height
+		count++
+	}
+	return count
+}
+
+func ultraOffsetToShowCursor(heights []int, cursor, budget int) int {
+	if budget <= 0 || cursor < 0 || cursor >= len(heights) || heights[cursor] > budget {
+		return cursor
+	}
+
+	used := heights[cursor]
+	if used <= 0 {
+		return cursor
+	}
+
+	start := cursor
+	for i := cursor - 1; i >= 0; i-- {
+		height := heights[i]
+		if height <= 0 {
+			continue
+		}
+		if used+1+height > budget {
+			break
+		}
+		used += 1 + height
+		start = i
+	}
+	return start
+}
+
 func (m *Model) ultraEnsureVisible() {
 	tasks := m.ultraTaskList()
 	if len(tasks) == 0 {
@@ -971,37 +1010,21 @@ func (m *Model) ultraEnsureVisible() {
 		m.ultraOffset = len(tasks) - 1
 	}
 
-	for range tasks {
-		visible := m.ultraVisibleCount()
-		if visible <= 0 {
-			if m.ultraOffset == m.ultraCursor {
-				return
-			}
-			m.ultraOffset = m.ultraCursor
-			continue
-		}
-
-		start := m.ultraVisibleStart(len(tasks))
-		end := start + visible - 1
-		if m.ultraCursor < start {
-			if m.ultraOffset == m.ultraCursor {
-				return
-			}
-			m.ultraOffset = m.ultraCursor
-			continue
-		}
-		if m.ultraCursor > end {
-			next := m.ultraCursor - visible + 1
-			if next < 0 {
-				next = 0
-			}
-			if next == m.ultraOffset {
-				return
-			}
-			m.ultraOffset = next
-			continue
-		}
+	budget, heights := m.ultraCardMetrics(tasks)
+	visible := ultraVisibleCountFrom(heights, m.ultraVisibleStart(len(tasks)), budget)
+	if visible <= 0 {
+		m.ultraOffset = m.ultraCursor
 		return
+	}
+
+	start := m.ultraVisibleStart(len(tasks))
+	end := start + visible - 1
+	if m.ultraCursor < start {
+		m.ultraOffset = m.ultraCursor
+		return
+	}
+	if m.ultraCursor > end {
+		m.ultraOffset = ultraOffsetToShowCursor(heights, m.ultraCursor, budget)
 	}
 }
 
