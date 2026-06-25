@@ -110,6 +110,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "a, A", Desc: "add/replace annotations"},
 				{Key: "J", Desc: "edit project"},
 				{Key: "R", Desc: "edit recurrence"},
+				{Key: "ctrl+r", Desc: "edit recurring series recurrence"},
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
 				{Key: "f", Desc: "change filter"},
 			},
@@ -1266,4 +1267,12 @@ func (m *Model) handleUltraSetRecurrence() (tea.Model, tea.Cmd) {
 	}
 
 	return m.handleSetRecurrence()
+}
+
+func (m *Model) handleUltraSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	if _, ok := m.ultraPrepareSelectedTask(); !ok {
+		return m, nil
+	}
+
+	return m.handleSetRecurringSeriesRecurrence()
 }

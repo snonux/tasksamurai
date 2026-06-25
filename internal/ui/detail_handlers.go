@@ -269,6 +269,8 @@ func (m *Model) activateProjectEdit(id int, currentProject string) {
 func (m *Model) activateRecurEdit(id int, currentRecur string) {
 	m.clearEditingModes()
 	m.recurID = id
+	m.recurSeries = false
+	m.recurRoot = ""
 	m.recurEditing = true
 	m.recurInput.SetValue(currentRecur)
 	m.recurInput.Focus()

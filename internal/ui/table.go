@@ -159,6 +159,8 @@ type editState struct {
 
 	recurEditing bool
 	recurID      int
+	recurSeries  bool
+	recurRoot    string
 	recurInput   textinput.Model
 
 	projEditing bool
@@ -392,6 +394,8 @@ func (m *Model) clearEditingModes() {
 	m.tagsEditing = false
 	m.dueEditing = false
 	m.recurEditing = false
+	m.recurSeries = false
+	m.recurRoot = ""
 	m.projEditing = false
 	m.filterEditing = false
 	m.addingTask = false
@@ -991,6 +995,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "w, W", Desc: "set/remove due date"},
 				{Key: "r", Desc: "set random due date"},
 				{Key: "R", Desc: "edit recurrence"},
+				{Key: "ctrl+r", Desc: "edit recurring series recurrence"},
 				{Key: "t", Desc: "edit tags"},
 				{Key: "J", Desc: "edit project"},
 				{Key: "T", Desc: "convert first tag to project"},
@@ -1500,6 +1505,7 @@ var reservedAgentHotkeys = map[string]struct{}{
 	"J":      {},
 	"N":      {},
 	"R":      {},
+	"ctrl+r": {},
 	"T":      {},
 	"U":      {},
 	"W":      {},

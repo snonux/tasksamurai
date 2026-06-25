@@ -24,6 +24,7 @@ type Taskwarrior interface {
 	RemoveTagsContext(ctx context.Context, id int, tags []string) error
 	SetDueDateContext(ctx context.Context, id int, due string) error
 	SetRecurrenceContext(ctx context.Context, id int, rec string) error
+	SetRecurringSeriesRecurrenceContext(ctx context.Context, rootUUID, rec string) error
 	SetProjectContext(ctx context.Context, id int, project string) error
 	SetPriorityContext(ctx context.Context, id int, priority string) error
 	StartContext(ctx context.Context, id int) error
@@ -121,6 +122,11 @@ func (Client) SetDueDateContext(ctx context.Context, id int, due string) error {
 // SetRecurrenceContext changes a task recurrence value.
 func (Client) SetRecurrenceContext(ctx context.Context, id int, rec string) error {
 	return SetRecurrenceContext(ctx, id, rec)
+}
+
+// SetRecurringSeriesRecurrenceContext changes a recurring series recurrence value.
+func (Client) SetRecurringSeriesRecurrenceContext(ctx context.Context, rootUUID, rec string) error {
+	return SetRecurringSeriesRecurrenceContext(ctx, rootUUID, rec)
 }
 
 // SetProjectContext changes a task project.

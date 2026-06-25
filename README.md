@@ -20,6 +20,9 @@ Press `H` to view all available hotkeys.
 
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
 
+Press `R` to edit the selected task's recurrence. On a recurring task, press
+`Ctrl+R` to edit the recurrence across the known recurring series.
+
 Press `:` in either table or ultra mode to open a Taskwarrior command prompt.
 The prompt supplies `task`; type arguments such as `add Buy milk`, `projects`,
 or `+home list`. Press `;` to open the same prompt pre-filled with the selected

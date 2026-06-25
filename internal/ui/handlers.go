@@ -209,8 +209,14 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurID, value); err != nil {
-			return err
+		if m.recurSeries {
+			if err := m.taskwarriorClient().SetRecurringSeriesRecurrenceContext(ctx, m.recurRoot, value); err != nil {
+				return err
+			}
+		} else {
+			if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurID, value); err != nil {
+				return err
+			}
 		}
 		if err := m.reload(); err != nil {
 			return fmt.Errorf("reloading tasks: %w", err)
@@ -220,6 +226,8 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	onExit := func() {
 		m.recurEditing = false
+		m.recurSeries = false
+		m.recurRoot = ""
 	}
 
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)

@@ -21,12 +21,26 @@ import (
 )
 
 type fakeTaskwarrior struct {
-	tasks         []task.Task
-	exportFilters [][]string
-	addLines      []string
+	tasks                  []task.Task
+	exportFilters          [][]string
+	addLines               []string
+	recurrences            []fakeRecurrenceChange
+	seriesRecurrences      []fakeSeriesRecurrenceChange
+	setRecurrenceErr       error
+	setSeriesRecurrenceErr error
 }
 
 var _ task.Taskwarrior = (*fakeTaskwarrior)(nil)
+
+type fakeRecurrenceChange struct {
+	id  int
+	rec string
+}
+
+type fakeSeriesRecurrenceChange struct {
+	rootUUID string
+	rec      string
+}
 
 func (f *fakeTaskwarrior) Export(_ context.Context, filters ...string) ([]task.Task, error) {
 	f.exportFilters = append(f.exportFilters, append([]string(nil), filters...))
@@ -105,9 +119,14 @@ func (f *fakeTaskwarrior) SetDueDateContext(context.Context, int, string) error 
 	return nil
 }
 
-func (f *fakeTaskwarrior) SetRecurrenceContext(context.Context, int, string) error {
-	f.unexpected("SetRecurrenceContext")
-	return nil
+func (f *fakeTaskwarrior) SetRecurrenceContext(_ context.Context, id int, rec string) error {
+	f.recurrences = append(f.recurrences, fakeRecurrenceChange{id: id, rec: rec})
+	return f.setRecurrenceErr
+}
+
+func (f *fakeTaskwarrior) SetRecurringSeriesRecurrenceContext(_ context.Context, rootUUID, rec string) error {
+	f.seriesRecurrences = append(f.seriesRecurrences, fakeSeriesRecurrenceChange{rootUUID: rootUUID, rec: rec})
+	return f.setSeriesRecurrenceErr
 }
 
 func (f *fakeTaskwarrior) SetProjectContext(context.Context, int, string) error {
@@ -147,6 +166,10 @@ func (f *fakeTaskwarrior) RecurringSeries(context.Context, string) ([]task.Task,
 
 func (f *fakeTaskwarrior) unexpected(method string) {
 	panic(fmt.Sprintf("unexpected fake Taskwarrior call: %s", method))
+}
+
+func ctrlRKey() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
 }
 
 func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
@@ -1480,6 +1503,70 @@ func TestRecurrenceHotkey(t *testing.T) {
 
 	if strings.TrimSpace(string(data)) != "1 modify recur:daily" {
 		t.Fatalf("recur not set: %q", data)
+	}
+}
+
+func TestRecurringSeriesRecurrenceHotkey(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 7, UUID: "child", Parent: "root", Description: "child", Status: "pending", Recur: "daily", RType: "periodic"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+	if !m.recurEditing {
+		t.Fatalf("recurring series recurrence edit was not activated")
+	}
+	if !m.recurSeries {
+		t.Fatalf("recurrence edit is not marked as series scoped")
+	}
+	if m.recurRoot != "root" {
+		t.Fatalf("recurring root = %q, want root", m.recurRoot)
+	}
+	m.recurInput.SetValue("weekly")
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	want := []fakeSeriesRecurrenceChange{{rootUUID: "root", rec: "weekly"}}
+	if !reflect.DeepEqual(fake.seriesRecurrences, want) {
+		t.Fatalf("series recurrence changes = %#v, want %#v", fake.seriesRecurrences, want)
+	}
+	if len(fake.recurrences) != 0 {
+		t.Fatalf("single recurrence changes = %#v, want none", fake.recurrences)
+	}
+	if m.recurSeries || m.recurRoot != "" {
+		t.Fatalf("series recurrence state not reset: series=%v root=%q", m.recurSeries, m.recurRoot)
+	}
+}
+
+func TestRecurringSeriesRecurrenceHotkeyRejectsNonRecurringTask(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "single", Description: "single", Status: "pending"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+
+	if m.recurEditing {
+		t.Fatalf("recurrence edit activated for non-recurring task")
+	}
+	if len(fake.seriesRecurrences) != 0 {
+		t.Fatalf("series recurrence changes = %#v, want none", fake.seriesRecurrences)
+	}
+	if got, want := m.statusMsg, "Selected task is not recurring; use R to edit this task"; got != want {
+		t.Fatalf("statusMsg = %q, want %q", got, want)
 	}
 }
 

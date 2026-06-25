@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -821,6 +822,100 @@ func TestRecurringSeries(t *testing.T) {
 	}
 	if got := strings.TrimSpace(string(data)); got != "(parent-uuid or parent:parent-uuid) status.any: export rc.json.array=off" {
 		t.Fatalf("unexpected args: %q", got)
+	}
+}
+
+func TestSetRecurringSeriesRecurrenceContext(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "commands.txt")
+
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "(root or parent:root)" ] && [ "$2" = "status.any:" ] && [ "$3" = "export" ]; then
+  echo '{"id":0,"uuid":"root","description":"template","status":"recurring","recur":"daily"}'
+  echo '{"id":1,"uuid":"child-1","parent":"root","description":"child 1","status":"pending","recur":"daily"}'
+  echo '{"id":2,"uuid":"child-2","parent":"root","description":"child 2","status":"pending","recur":"daily"}'
+  exit 0
+fi
+echo "$@" >> %s
+`, shellQuote(logFile))
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", tmp+":"+origPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("PATH", origPath); err != nil {
+			t.Errorf("restore PATH: %v", err)
+		}
+	})
+
+	if err := SetRecurringSeriesRecurrenceContext(context.Background(), "root", "weekly"); err != nil {
+		t.Fatalf("SetRecurringSeriesRecurrenceContext: %v", err)
+	}
+
+	got := readLinesFile(t, logFile)
+	want := []string{
+		"rc.recurrence.confirmation=no child-1 modify recur:weekly",
+		"rc.recurrence.confirmation=no child-2 modify recur:weekly",
+		"rc.recurrence.confirmation=no root modify recur:weekly",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("commands:\ngot  %#v\nwant %#v", got, want)
+	}
+}
+
+func TestSetRecurringSeriesRecurrenceContextRollsBackCompletedUpdates(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	logFile := filepath.Join(tmp, "commands.txt")
+
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "(root or parent:root)" ] && [ "$2" = "status.any:" ] && [ "$3" = "export" ]; then
+  echo '{"id":0,"uuid":"root","description":"template","status":"recurring","recur":"daily"}'
+  echo '{"id":1,"uuid":"child-1","parent":"root","description":"child 1","status":"pending","recur":"daily"}'
+  echo '{"id":2,"uuid":"child-2","parent":"root","description":"child 2","status":"pending","recur":"monthly"}'
+  exit 0
+fi
+echo "$@" >> %s
+if [ "$2" = "child-2" ] && [ "$4" = "recur:weekly" ]; then
+  echo "child-2 failed" >&2
+  exit 1
+fi
+`, shellQuote(logFile))
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", tmp+":"+origPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("PATH", origPath); err != nil {
+			t.Errorf("restore PATH: %v", err)
+		}
+	})
+
+	err := SetRecurringSeriesRecurrenceContext(context.Background(), "root", "weekly")
+	if err == nil {
+		t.Fatal("expected SetRecurringSeriesRecurrenceContext error")
+	}
+	if !strings.Contains(err.Error(), "set recurrence for child-2") {
+		t.Fatalf("error = %v, want child-2 context", err)
+	}
+
+	got := readLinesFile(t, logFile)
+	want := []string{
+		"rc.recurrence.confirmation=no child-1 modify recur:weekly",
+		"rc.recurrence.confirmation=no child-2 modify recur:weekly",
+		"rc.recurrence.confirmation=no child-1 modify recur:daily",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("commands:\ngot  %#v\nwant %#v", got, want)
 	}
 }
 

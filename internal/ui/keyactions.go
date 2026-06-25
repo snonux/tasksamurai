@@ -414,8 +414,46 @@ func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
 
 	m.clearEditingModes()
 	m.recurID = id
+	m.recurSeries = false
+	m.recurRoot = ""
 	m.recurEditing = true
 	m.recurInput.SetValue(task.Recur)
+	m.recurInput.Focus()
+	m.updateTableHeight()
+	return m, nil
+}
+
+func (m *Model) handleSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	id, err := m.getSelectedTaskID()
+	if err != nil {
+		return m, nil
+	}
+
+	task := m.getTaskAtCursor()
+	if task == nil {
+		return m, nil
+	}
+	return m.activateRecurringSeriesRecurrenceEdit(id, *task)
+}
+
+func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (tea.Model, tea.Cmd) {
+	if !isRecurringTask(tsk) {
+		m.statusMsg = "Selected task is not recurring; use R to edit this task"
+		return m, nil
+	}
+
+	rootUUID := recurringRootUUID(tsk)
+	if rootUUID == "" {
+		m.showError(fmt.Errorf("recurring task has no root UUID"))
+		return m, nil
+	}
+
+	m.clearEditingModes()
+	m.recurID = id
+	m.recurSeries = true
+	m.recurRoot = rootUUID
+	m.recurEditing = true
+	m.recurInput.SetValue(tsk.Recur)
 	m.recurInput.Focus()
 	m.updateTableHeight()
 	return m, nil

@@ -6,18 +6,19 @@ import (
 )
 
 type sharedKeyHandlers struct {
-	editTask      func() (tea.Model, tea.Cmd)
-	toggleStart   func() (tea.Model, tea.Cmd)
-	markDone      func() (tea.Model, tea.Cmd)
-	deleteTask    func() (tea.Model, tea.Cmd)
-	setPriority   func() (tea.Model, tea.Cmd)
-	setDueDate    func() (tea.Model, tea.Cmd)
-	removeDueDate func() (tea.Model, tea.Cmd)
-	editTags      func() (tea.Model, tea.Cmd)
-	annotate      func(replace bool) (tea.Model, tea.Cmd)
-	editProject   func() (tea.Model, tea.Cmd)
-	setRecurrence func() (tea.Model, tea.Cmd)
-	addTask       func() (tea.Model, tea.Cmd)
+	editTask       func() (tea.Model, tea.Cmd)
+	toggleStart    func() (tea.Model, tea.Cmd)
+	markDone       func() (tea.Model, tea.Cmd)
+	deleteTask     func() (tea.Model, tea.Cmd)
+	setPriority    func() (tea.Model, tea.Cmd)
+	setDueDate     func() (tea.Model, tea.Cmd)
+	removeDueDate  func() (tea.Model, tea.Cmd)
+	editTags       func() (tea.Model, tea.Cmd)
+	annotate       func(replace bool) (tea.Model, tea.Cmd)
+	editProject    func() (tea.Model, tea.Cmd)
+	setRecurrence  func() (tea.Model, tea.Cmd)
+	setRecurSeries func() (tea.Model, tea.Cmd)
+	addTask        func() (tea.Model, tea.Cmd)
 }
 
 type keyBindingMode uint8
@@ -52,6 +53,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"W"}, modes: keyBindingAll, desc: "remove due date", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.removeDueDate })},
 	{keys: []string{"r"}, modes: keyBindingAll, desc: "set random due date", action: modelKeyAction((*Model).handleRandomDueDate)},
 	{keys: []string{"R"}, modes: keyBindingAll, desc: "edit recurrence", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setRecurrence })},
+	{keys: []string{"ctrl+r"}, modes: keyBindingAll, desc: "edit recurring series recurrence", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setRecurSeries })},
 	{keys: []string{"p"}, modes: keyBindingAll, desc: "set priority", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setPriority })},
 	{keys: []string{"a"}, modes: keyBindingAll, desc: "add annotations", action: sharedAnnotateKeyAction(false)},
 	{keys: []string{"A"}, modes: keyBindingAll, desc: "replace annotations", action: sharedAnnotateKeyAction(true)},
@@ -143,34 +145,36 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) normalSharedKeyHandlers() sharedKeyHandlers {
 	return sharedKeyHandlers{
-		editTask:      m.handleEditTask,
-		toggleStart:   m.handleToggleStart,
-		markDone:      m.handleMarkDone,
-		deleteTask:    m.handleDeleteTask,
-		setPriority:   m.handleSetPriority,
-		setDueDate:    m.handleSetDueDate,
-		removeDueDate: m.handleRemoveDueDate,
-		editTags:      m.handleEditTags,
-		annotate:      m.handleAnnotate,
-		editProject:   m.handleEditProject,
-		setRecurrence: m.handleSetRecurrence,
-		addTask:       m.handleAddTask,
+		editTask:       m.handleEditTask,
+		toggleStart:    m.handleToggleStart,
+		markDone:       m.handleMarkDone,
+		deleteTask:     m.handleDeleteTask,
+		setPriority:    m.handleSetPriority,
+		setDueDate:     m.handleSetDueDate,
+		removeDueDate:  m.handleRemoveDueDate,
+		editTags:       m.handleEditTags,
+		annotate:       m.handleAnnotate,
+		editProject:    m.handleEditProject,
+		setRecurrence:  m.handleSetRecurrence,
+		setRecurSeries: m.handleSetRecurringSeriesRecurrence,
+		addTask:        m.handleAddTask,
 	}
 }
 
 func (m *Model) ultraSharedKeyHandlers() sharedKeyHandlers {
 	return sharedKeyHandlers{
-		editTask:      m.handleUltraEditTask,
-		toggleStart:   m.handleUltraToggleStart,
-		markDone:      m.handleUltraMarkDone,
-		deleteTask:    m.handleUltraDeleteTask,
-		setPriority:   m.handleUltraSetPriority,
-		setDueDate:    m.handleUltraSetDueDate,
-		removeDueDate: m.handleUltraRemoveDueDate,
-		editTags:      m.handleUltraEditTags,
-		annotate:      m.handleUltraAnnotate,
-		editProject:   m.handleUltraEditProject,
-		setRecurrence: m.handleUltraSetRecurrence,
+		editTask:       m.handleUltraEditTask,
+		toggleStart:    m.handleUltraToggleStart,
+		markDone:       m.handleUltraMarkDone,
+		deleteTask:     m.handleUltraDeleteTask,
+		setPriority:    m.handleUltraSetPriority,
+		setDueDate:     m.handleUltraSetDueDate,
+		removeDueDate:  m.handleUltraRemoveDueDate,
+		editTags:       m.handleUltraEditTags,
+		annotate:       m.handleUltraAnnotate,
+		editProject:    m.handleUltraEditProject,
+		setRecurrence:  m.handleUltraSetRecurrence,
+		setRecurSeries: m.handleUltraSetRecurringSeriesRecurrence,
 		addTask: func() (tea.Model, tea.Cmd) {
 			m.ultraClearFocusedID()
 			return m.handleAddTask()

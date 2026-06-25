@@ -255,6 +255,72 @@ func SetRecurrenceContext(ctx context.Context, id int, rec string) error {
 	return modifyTaskContext(ctx, id, "recur:"+rec)
 }
 
+// SetRecurringSeriesRecurrenceContext sets the recurrence for every known task
+// in a recurring series identified by rootUUID.
+func SetRecurringSeriesRecurrenceContext(ctx context.Context, rootUUID, rec string) error {
+	tasks, err := RecurringSeries(ctx, rootUUID)
+	if err != nil {
+		return err
+	}
+	tasks = recurringSeriesUpdateOrder(tasks, rootUUID)
+	if len(tasks) == 0 {
+		return fmt.Errorf("recurring series %s not found", rootUUID)
+	}
+
+	completed := make([]Task, 0, len(tasks))
+	for _, tsk := range tasks {
+		if tsk.UUID == "" {
+			continue
+		}
+		if err := setRecurrenceUUIDContext(ctx, tsk.UUID, rec); err != nil {
+			if rollbackErr := restoreRecurringSeriesRecurrences(completed); rollbackErr != nil {
+				return fmt.Errorf("set recurrence for %s: %w; rollback failed: %w", tsk.UUID, err, rollbackErr)
+			}
+			return fmt.Errorf("set recurrence for %s: %w", tsk.UUID, err)
+		}
+		completed = append(completed, tsk)
+	}
+	if len(completed) == 0 {
+		return fmt.Errorf("recurring series %s has no task UUIDs", rootUUID)
+	}
+	return nil
+}
+
+func recurringSeriesUpdateOrder(tasks []Task, rootUUID string) []Task {
+	ordered := make([]Task, 0, len(tasks))
+	var root []Task
+	for _, tsk := range tasks {
+		if tsk.UUID == "" {
+			continue
+		}
+		if tsk.UUID == rootUUID {
+			root = append(root, tsk)
+			continue
+		}
+		ordered = append(ordered, tsk)
+	}
+	return append(ordered, root...)
+}
+
+func restoreRecurringSeriesRecurrences(tasks []Task) error {
+	ctx, cancel := rollbackContext()
+	defer cancel()
+
+	for i := len(tasks) - 1; i >= 0; i-- {
+		if err := setRecurrenceUUIDContext(ctx, tasks[i].UUID, tasks[i].Recur); err != nil {
+			return fmt.Errorf("restore recurrence for %s: %w", tasks[i].UUID, err)
+		}
+	}
+	return nil
+}
+
+func setRecurrenceUUIDContext(ctx context.Context, uuid, rec string) error {
+	if uuid == "" {
+		return fmt.Errorf("empty task UUID")
+	}
+	return runContext(ctx, "rc.recurrence.confirmation=no", uuid, "modify", "recur:"+rec)
+}
+
 // SetDueDate sets the due date for the task with the given id.
 func SetDueDate(id int, due string) error {
 	return SetDueDateContext(context.Background(), id, due)
