@@ -187,8 +187,21 @@ func (m *Model) ultraVisibleCount() int {
 		return 0
 	}
 
-	budget, heights := m.ultraCardMetrics(tasks)
-	return ultraVisibleCountFrom(heights, m.ultraVisibleStart(len(tasks)), budget)
+	width := m.ultraRenderWidth()
+	top := m.ultraStatusLine(m.ultraModeStatus(tasks), width)
+	bottom := m.ultraStatusLine(m.ultraCursorStatus(tasks), width)
+	_, overlayHeight := m.ultraOverlay()
+
+	budget := m.ultraCardBudget(top, bottom, overlayHeight)
+	selected := m.ultraVisibleCursor(tasks)
+	start := m.ultraVisibleStart(len(tasks))
+	return ultraVisibleCountMeasured(len(tasks), start, budget, func(i int) int {
+		card := m.renderUltraCard(tasks[i], width, i == selected, m.ultraSearchRegex)
+		if card == "" {
+			return 0
+		}
+		return lipgloss.Height(card)
+	})
 }
 
 func (m *Model) ultraTaskList() []task.Task {
@@ -933,14 +946,20 @@ func (m *Model) ultraCardMetrics(tasks []task.Task) (int, []int) {
 }
 
 func ultraVisibleCountFrom(heights []int, start, budget int) int {
-	if budget <= 0 || start < 0 || start >= len(heights) {
+	return ultraVisibleCountMeasured(len(heights), start, budget, func(i int) int {
+		return heights[i]
+	})
+}
+
+func ultraVisibleCountMeasured(total, start, budget int, heightAt func(int) int) int {
+	if budget <= 0 || start < 0 || start >= total {
 		return 0
 	}
 
 	used := 0
 	count := 0
-	for i := start; i < len(heights); i++ {
-		height := heights[i]
+	for i := start; i < total; i++ {
+		height := heightAt(i)
 		if height <= 0 {
 			continue
 		}

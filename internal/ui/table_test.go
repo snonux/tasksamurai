@@ -2978,6 +2978,24 @@ func TestUltraEnsureVisibleOffsets(t *testing.T) {
 	}
 }
 
+func TestUltraVisibleCountMeasuredStopsAfterViewport(t *testing.T) {
+	heights := []int{2, 2, 2, 2, 2}
+	var measured []int
+
+	got := ultraVisibleCountMeasured(len(heights), 0, 5, func(i int) int {
+		measured = append(measured, i)
+		return heights[i]
+	})
+
+	if got != 2 {
+		t.Fatalf("visible count = %d, want 2", got)
+	}
+	wantMeasured := []int{0, 1, 2}
+	if !reflect.DeepEqual(measured, wantMeasured) {
+		t.Fatalf("measured indexes = %v, want %v", measured, wantMeasured)
+	}
+}
+
 func TestUltraBlinkUsesVisibleSelectionAndRendersBlink(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupUltraTaskSet(t, tmp)
