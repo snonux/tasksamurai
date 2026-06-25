@@ -42,10 +42,7 @@ func Run() error {
 // Test runs all tests.
 func Test() error {
 	fmt.Println("Running tests...")
-	if err := sh.RunV("go", "test", "./..."); err != nil {
-		return fmt.Errorf("test: %w", err)
-	}
-	return nil
+	return runTests()
 }
 
 // Verify runs formatting and static checks before tests.
@@ -115,4 +112,14 @@ func installBinDir() (string, error) {
 	}
 
 	return filepath.Join(goPath, "bin"), nil
+}
+
+func runTests() error {
+	if err := sh.RunV("go", "test", "./..."); err != nil {
+		return fmt.Errorf("test packages: %w", err)
+	}
+	if err := sh.RunV("go", "test", "-tags", "mage", "."); err != nil {
+		return fmt.Errorf("test Magefile: %w", err)
+	}
+	return nil
 }
