@@ -212,6 +212,13 @@ func TestRunLineReturnsCapturedErrorOutput(t *testing.T) {
 	if result.Stderr != "bad-output\n" {
 		t.Fatalf("stderr = %q", result.Stderr)
 	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error = %v, want wrapped *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Fatalf("exit code = %d, want 2", exitErr.ExitCode())
+	}
 	if !strings.Contains(err.Error(), "bad-output") {
 		t.Fatalf("error did not include stderr: %v", err)
 	}
@@ -258,6 +265,13 @@ func TestExportReturnsCapturedErrorOutput(t *testing.T) {
 	_, err := Export(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error = %v, want wrapped *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 2 {
+		t.Fatalf("exit code = %d, want 2", exitErr.ExitCode())
 	}
 	if !strings.Contains(err.Error(), "export-failed") {
 		t.Fatalf("error did not include stderr: %v", err)

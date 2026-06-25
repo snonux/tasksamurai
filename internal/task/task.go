@@ -240,7 +240,7 @@ func RunArgs(ctx context.Context, args []string) (RunResult, error) {
 			return result, fmt.Errorf("task command: %w", ctxErr)
 		}
 		if strings.TrimSpace(result.Stderr) != "" {
-			return result, fmt.Errorf("%v: %s", err, strings.TrimSpace(result.Stderr))
+			return result, fmt.Errorf("%w: %s", err, strings.TrimSpace(result.Stderr))
 		}
 		return result, err
 	}
@@ -304,7 +304,7 @@ func Export(ctx context.Context, filters ...string) ([]Task, error) {
 		}
 		// Include stderr output in the error message
 		if stderr.Len() > 0 {
-			return nil, fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 		}
 		return nil, err
 	}
