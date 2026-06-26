@@ -22,7 +22,7 @@ var Default = Build
 // Build compiles the tasksamurai binary.
 func Build() error {
 	fmt.Println("Building tasksamurai...")
-	if err := sh.RunV("go", "build", "-o", binaryName, "./cmd/tasksamurai"); err != nil {
+	if err := sh.RunV("go", "build", "-buildvcs=false", "-o", binaryName, "./cmd/tasksamurai"); err != nil {
 		return fmt.Errorf("build %s: %w", binaryName, err)
 	}
 	return nil
