@@ -232,6 +232,12 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
 	if msg.String() == "enter" {
+		// On failure, handleTextInput returns without calling onExit, so
+		// recurEditing stays true: skip the success blink and keep the
+		// timed error command returned above.
+		if m.recurEditing {
+			return model, cmd
+		}
 		if m.showTaskDetail {
 			if t := m.currentDetailTask(); t != nil && t.Recur != "" {
 				return model, m.startDetailBlink(fieldRecur)

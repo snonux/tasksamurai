@@ -1545,6 +1545,132 @@ func TestRecurringSeriesRecurrenceHotkey(t *testing.T) {
 	}
 }
 
+func TestRecurringSeriesRecurrenceEscExitsAndResetsSeriesState(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 7, UUID: "child", Parent: "root", Description: "child", Status: "pending", Recur: "daily", RType: "periodic"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+	if !m.recurEditing || !m.recurSeries || m.recurRoot != "root" {
+		t.Fatalf("series edit not active: editing=%v series=%v root=%q", m.recurEditing, m.recurSeries, m.recurRoot)
+	}
+
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = *mv.(*Model)
+
+	if m.recurEditing {
+		t.Fatalf("esc did not exit recurrence editing")
+	}
+	if m.recurSeries || m.recurRoot != "" {
+		t.Fatalf("series state not reset on esc: series=%v root=%q", m.recurSeries, m.recurRoot)
+	}
+	if len(fake.seriesRecurrences) != 0 {
+		t.Fatalf("esc committed a series update: %#v", fake.seriesRecurrences)
+	}
+}
+
+func TestRecurringSeriesRecurrenceFailurePreservesErrorCommand(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 7, UUID: "child", Parent: "root", Description: "child", Status: "pending", Recur: "daily", RType: "periodic"},
+		},
+		setSeriesRecurrenceErr: errors.New("series failed"),
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+	m.recurInput.SetValue("weekly")
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if cmd == nil {
+		t.Fatalf("expected timed error command")
+	}
+	if !m.recurEditing {
+		t.Fatalf("recurrence input should stay active after failure")
+	}
+	if m.blinkID != 0 {
+		t.Fatalf("success blink started for failed recurrence edit: blinkID=%d", m.blinkID)
+	}
+	if !strings.Contains(m.statusMsg, "series failed") {
+		t.Fatalf("statusMsg = %q, want recurrence error", m.statusMsg)
+	}
+}
+
+func TestRecurringSeriesRecurrenceFailureKeepsTimedErrorWhenBlinkDisabled(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 7, UUID: "child", Parent: "root", Description: "child", Status: "pending", Recur: "daily", RType: "periodic"},
+		},
+		setSeriesRecurrenceErr: errors.New("series failed"),
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	m.blinkEnabled = false
+
+	mv, _ := (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+	m.recurInput.SetValue("weekly")
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+
+	if cmd == nil {
+		t.Fatalf("expected timed error command when blink is disabled")
+	}
+	if !strings.Contains(m.statusMsg, "series failed") {
+		t.Fatalf("statusMsg = %q, want recurrence error", m.statusMsg)
+	}
+}
+
+func TestRecurringSeriesRecurrenceHotkeyInDetailMode(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 7, UUID: "child", Parent: "root", Description: "child", Status: "pending", Recur: "daily", RType: "periodic"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+	if !m.showTaskDetail {
+		t.Fatalf("enter did not open detail mode")
+	}
+
+	mv, _ = (&m).Update(ctrlRKey())
+	m = *mv.(*Model)
+
+	if !m.recurEditing {
+		t.Fatalf("detail ctrl+r did not activate recurrence editing")
+	}
+	if !m.recurSeries {
+		t.Fatalf("detail ctrl+r did not mark recurrence edit as series scoped")
+	}
+	if m.recurRoot != "root" {
+		t.Fatalf("recurring root = %q, want root", m.recurRoot)
+	}
+	if m.recurInput.Value() != "daily" {
+		t.Fatalf("recur input = %q, want daily", m.recurInput.Value())
+	}
+}
+
 func TestRecurringSeriesRecurrenceHotkeyRejectsNonRecurringTask(t *testing.T) {
 	fake := &fakeTaskwarrior{
 		tasks: []task.Task{

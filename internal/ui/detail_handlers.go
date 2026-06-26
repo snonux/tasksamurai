@@ -83,6 +83,8 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailDeleteTask()
 	case "U":
 		return m.handleDetailUndo()
+	case "ctrl+r":
+		return m.handleDetailSetRecurringSeriesRecurrence()
 	case "i", "enter":
 		// Check if current field is editable
 		return m.handleDetailFieldEdit()
@@ -138,6 +140,14 @@ func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
 	}
 	m.closeDetailView()
 	return m.handleUndo()
+}
+
+func (m *Model) handleDetailSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	t := m.currentDetailTask()
+	if t == nil {
+		return m, nil
+	}
+	return m.activateRecurringSeriesRecurrenceEdit(t.ID, *t)
 }
 
 // closeDetailView resets the detail-view state so the table view is shown

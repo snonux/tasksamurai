@@ -1431,7 +1431,7 @@ func (m *Model) agentFilterHotkeyLabel() string {
 }
 
 func validateAgentFilterHotkey(key string) error {
-	key = strings.TrimSpace(key)
+	key = normalizeAgentFilterHotkey(key)
 	if key == "" {
 		return nil
 	}
@@ -1462,7 +1462,8 @@ func normalizeAgentFilterHotkey(key string) string {
 	if key == "" || len(key) == 1 {
 		return key
 	}
-	switch strings.ToLower(key) {
+	lowerKey := strings.ToLower(key)
+	switch lowerKey {
 	case "down":
 		return "down"
 	case "end":
@@ -1487,6 +1488,9 @@ func normalizeAgentFilterHotkey(key string) string {
 		return "tab"
 	case "up":
 		return "up"
+	}
+	if strings.HasPrefix(lowerKey, "ctrl+") {
+		return "ctrl+" + strings.ToLower(key[5:])
 	}
 	return key
 }

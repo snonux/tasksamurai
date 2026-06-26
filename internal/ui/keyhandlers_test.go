@@ -45,3 +45,20 @@ func TestAgentFilterHotkeyValidationRejectsSharedKeyBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentFilterHotkeyRejectsCtrlRCaseVariants(t *testing.T) {
+	for _, key := range []string{"ctrl+r", "Ctrl+R", "CTRL+R"} {
+		t.Run(key, func(t *testing.T) {
+			var m Model
+			if err := m.SetAgentFilterHotkey(key); err == nil {
+				t.Fatalf("expected collision for agent hotkey %q", key)
+			}
+			if err := validateAgentFilterHotkey(key); err == nil {
+				t.Fatalf("expected direct validation collision for agent hotkey %q", key)
+			}
+			if got := m.agentFilterHotkeyLabel(); got != "3" {
+				t.Fatalf("colliding hotkey changed label: got %q want %q", got, "3")
+			}
+		})
+	}
+}
