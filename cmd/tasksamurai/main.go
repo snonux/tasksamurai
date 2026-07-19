@@ -24,6 +24,10 @@ func main() {
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
 	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
+	// Empty by default: YouTube links then open with --browser-cmd like any
+	// other URL. Set this to route youtube.com/youtu.be links to an
+	// alternative browser (e.g. chromium) that plays them better.
+	youtubeBrowserCmd := flag.String("youtube-browser-cmd", "", "command used to open youtube.com/youtu.be links (defaults to --browser-cmd)")
 	agentHotkey := flag.String("agent-hotkey", "3", "key used to toggle the +agent/-agent filter")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
@@ -48,6 +52,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "invalid --agent-hotkey:", err)
 		fmt.Fprintln(os.Stderr, "using default hotkey 3")
 	}
+	m.SetYouTubeBrowserCmd(*youtubeBrowserCmd)
 	m.SetDisco(*disco)
 	m.SetUltra(*ultra)
 

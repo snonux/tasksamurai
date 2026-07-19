@@ -35,7 +35,12 @@ var (
 	// fileRefRegex matches an @-prefixed file reference such as
 	// "@path/to/file.txt". The leading (^|\s) anchor keeps it from matching
 	// the "@host" part of an email address; capture group 2 is the path.
-	fileRefRegex     = regexp.MustCompile(`(^|\s)@(\S+)`)
+	fileRefRegex = regexp.MustCompile(`(^|\s)@(\S+)`)
+	// youtubeHostRegex matches the host of a YouTube video link so the "o"
+	// key can route it to an alternative browser. It covers youtube.com (with
+	// optional www./m. subdomains) and the youtu.be short-link domain. Case is
+	// ignored because hostnames are case-insensitive.
+	youtubeHostRegex = regexp.MustCompile(`(?i)^(www\.|m\.)?(youtube\.com|youtu\.be)$`)
 	searchRegexCache = make(map[string]*regexp.Regexp, 16)
 	searchRegexMu    sync.RWMutex
 )
@@ -221,10 +226,15 @@ type Model struct {
 	inProgress int
 	due        int
 
-	filters           []string
-	tasks             []task.Task
-	undoStack         []undoAction
-	browserCmd        string
+	filters    []string
+	tasks      []task.Task
+	undoStack  []undoAction
+	browserCmd string
+	// youtubeBrowserCmd, when non-empty, overrides browserCmd for YouTube
+	// links opened with the "o" key. This lets the user route videos to a
+	// browser better suited for them (e.g. chromium) while keeping the
+	// default browser (e.g. firefox) for everything else.
+	youtubeBrowserCmd string
 	agentFilterHotkey string
 	taskwarrior       task.Taskwarrior
 
@@ -1434,6 +1444,14 @@ func (m *Model) SetAgentFilterHotkey(key string) error {
 	}
 	m.agentFilterHotkey = key
 	return nil
+}
+
+// SetYouTubeBrowserCmd configures the browser command used specifically for
+// YouTube links opened with the "o" key. An empty value (the default) means
+// YouTube links are opened with the regular browser command like any other
+// URL. Surrounding whitespace is trimmed so a blank flag value counts as unset.
+func (m *Model) SetYouTubeBrowserCmd(cmd string) {
+	m.youtubeBrowserCmd = strings.TrimSpace(cmd)
 }
 
 func (m *Model) agentFilterHotkeyLabel() string {

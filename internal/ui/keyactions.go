@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -108,7 +109,7 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	}
 
 	if url := findTaskURL(task); url != "" {
-		return m, openURLCmd(m.browserCmd, url, task.ID)
+		return m, openURLCmd(m.browserForURL(url), url, task.ID)
 	}
 
 	if path := findTaskFileRef(task); path != "" {
@@ -116,6 +117,30 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// browserForURL picks the command used to open rawURL. YouTube video links are
+// routed to the configured alternative browser (youtubeBrowserCmd) when one is
+// set, so videos can play in a browser better suited for them; every other URL
+// (and YouTube links when no alternative is configured) uses the default
+// browserCmd.
+func (m *Model) browserForURL(rawURL string) string {
+	if m.youtubeBrowserCmd != "" && isYouTubeURL(rawURL) {
+		return m.youtubeBrowserCmd
+	}
+	return m.browserCmd
+}
+
+// isYouTubeURL reports whether rawURL points at a YouTube video link. The host
+// is parsed with net/url and matched against youtubeHostRegex so that only the
+// real host is considered — a path or query string that merely mentions
+// "youtube.com" (e.g. https://example.com/?u=youtube.com) does not match.
+func isYouTubeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return youtubeHostRegex.MatchString(u.Hostname())
 }
 
 // findTaskURL returns the first http(s) URL found in the task description, or
