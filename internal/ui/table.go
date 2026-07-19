@@ -36,6 +36,11 @@ var (
 	// "@path/to/file.txt". The leading (^|\s) anchor keeps it from matching
 	// the "@host" part of an email address; capture group 2 is the path.
 	fileRefRegex = regexp.MustCompile(`(^|\s)@(\S+)`)
+	// fileRefSpacedRegex matches the "@ path/to/file.txt" form where a space
+	// follows the @. Because "@ word" is extremely common in prose (e.g.
+	// "meet @ 5pm"), a match here is only treated as a file reference when the
+	// resolved path actually exists on disk; capture group 2 is the path.
+	fileRefSpacedRegex = regexp.MustCompile(`(^|\s)@\s+(\S+)`)
 	// youtubeHostRegex matches the host of a YouTube video link so the "o"
 	// key can route it to an alternative browser. It covers youtube.com (with
 	// optional www./m. subdomains) and the youtu.be short-link domain. Case is

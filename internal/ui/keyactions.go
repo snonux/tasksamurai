@@ -171,14 +171,35 @@ func findTaskFileRef(t *task.Task) string {
 	return ""
 }
 
-// extractFileRef parses an "@path/to/file.txt" reference out of text and
-// returns the resolved filesystem path (empty when no reference is present).
+// extractFileRef parses a file reference out of text and returns the resolved
+// filesystem path (empty when no reference is present). Two forms are accepted:
+//
+//   - "@path/to/file.txt" (no space) — taken as-is, so a not-yet-existing file
+//     can still be opened/created in the editor.
+//   - "@ path/to/file.txt" (space after @) — only accepted when the resolved
+//     path exists on disk, because "@ word" is common in prose and would
+//     otherwise produce false matches.
+//
+// The no-space form is tried first so it keeps precedence.
 func extractFileRef(text string) string {
-	match := fileRefRegex.FindStringSubmatch(text)
-	if match == nil {
-		return ""
+	if match := fileRefRegex.FindStringSubmatch(text); match != nil {
+		if path := resolveFileRefPath(match[2]); path != "" {
+			return path
+		}
 	}
-	return resolveFileRefPath(match[2])
+	if match := fileRefSpacedRegex.FindStringSubmatch(text); match != nil {
+		if path := resolveFileRefPath(match[2]); path != "" && fileExists(path) {
+			return path
+		}
+	}
+	return ""
+}
+
+// fileExists reports whether path names an existing filesystem entry. It is the
+// guard that disambiguates the "@ path" form from ordinary "@ word" prose.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // resolveFileRefPath cleans up a raw @-reference path. Trailing punctuation

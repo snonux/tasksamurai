@@ -50,6 +50,37 @@ func TestResolveFileRefPathTilde(t *testing.T) {
 	}
 }
 
+// TestExtractFileRefSpaced verifies the "@ path" form: a space after the @ is
+// only treated as a file reference when the resolved path exists on disk, so
+// ordinary "@ word" prose does not false-match.
+func TestExtractFileRefSpaced(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "real.txt")
+	if err := os.WriteFile(existing, []byte("hi"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	missing := filepath.Join(dir, "nope.txt")
+
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"spaced existing file", "please open @ " + existing, existing},
+		{"spaced missing file", "please open @ " + missing, ""},
+		{"spaced prose not a file", "let's meet @ 5pm today", ""},
+		{"no-space form still wins", "@main.go and @ " + existing, "main.go"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extractFileRef(tc.text); got != tc.want {
+				t.Fatalf("extractFileRef(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestFindTaskFileRefFallsBackToAnnotations verifies that the description is
 // scanned first and annotations are used only when the description has no
 // reference.
