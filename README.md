@@ -69,7 +69,7 @@ tasksamurai -- -excludetag +includetag
 ### Flags
 
 - `--browser-cmd <command>`: command used to open URLs (default: firefox on Linux, open on macOS)
-- `--youtube-browser-cmd <command>`: command used to open `youtube.com` / `youtu.be` links with the `o` key (default: unset, so YouTube links use `--browser-cmd`). Set it to, e.g., `chromium` to play YouTube videos in a different browser than your default.
+- `--youtube-browser-cmd <command>`: command used to open `youtube.com` / `youtu.be` links with the `o` key (default: `chromium`, so YouTube videos play in a browser better suited for them than the general `--browser-cmd` default). Set it to `""` to route YouTube links through `--browser-cmd` like any other URL.
 - `--agent-hotkey <key>`: hotkey used to toggle the `+agent` / `-agent` filter (default: `3`)
 - `--debug-log <path>`: path to debug log file for Taskwarrior commands
 - `--debug-dir <directory>`: directory for runtime debug output (goroutine dumps, profiles)
