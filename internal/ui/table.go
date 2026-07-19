@@ -31,7 +31,11 @@ var priorityOptions = []string{"H", "M", "L", ""}
 const taskOperationTimeout = 30 * time.Second
 
 var (
-	urlRegex         = regexp.MustCompile(`https?://\S+`)
+	urlRegex = regexp.MustCompile(`https?://\S+`)
+	// fileRefRegex matches an @-prefixed file reference such as
+	// "@path/to/file.txt". The leading (^|\s) anchor keeps it from matching
+	// the "@host" part of an email address; capture group 2 is the path.
+	fileRefRegex     = regexp.MustCompile(`(^|\s)@(\S+)`)
 	searchRegexCache = make(map[string]*regexp.Regexp, 16)
 	searchRegexMu    sync.RWMutex
 )
@@ -260,6 +264,13 @@ type shellCompletionMsg struct {
 }
 
 type openURLDoneMsg struct {
+	err    error
+	taskID int
+}
+
+// openFileDoneMsg is emitted when the foreground editor launched for an
+// @path/to/file.txt reference (via the "o" key) finishes.
+type openFileDoneMsg struct {
 	err    error
 	taskID int
 }
@@ -662,6 +673,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleShellCompletion(msg)
 	case openURLDoneMsg:
 		return m.handleOpenURLDone(msg)
+	case openFileDoneMsg:
+		return m.handleOpenFileDone(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
 	case clearStatusMsg:

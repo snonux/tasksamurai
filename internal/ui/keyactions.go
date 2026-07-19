@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -94,26 +96,81 @@ func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleOpenURL implements the "o" key. URLs take precedence over file
+// references: the binding began life as an open-URL action, so a task that
+// carries both keeps opening the URL. When no URL is present the description
+// and annotations are scanned for an @path/to/file.txt reference, which is
+// opened in $EDITOR in the foreground instead.
 func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	task := m.getTaskForOpenURL()
 	if task == nil {
 		return m, nil
 	}
 
-	url := urlRegex.FindString(task.Description)
-	if url == "" {
-		for _, ann := range task.Annotations {
-			url = urlRegex.FindString(ann.Description)
-			if url != "" {
-				break
-			}
-		}
-	}
-	if url == "" {
-		return m, nil
+	if url := findTaskURL(task); url != "" {
+		return m, openURLCmd(m.browserCmd, url, task.ID)
 	}
 
-	return m, openURLCmd(m.browserCmd, url, task.ID)
+	if path := findTaskFileRef(task); path != "" {
+		return m, openFileInEditorCmd(path, task.ID)
+	}
+
+	return m, nil
+}
+
+// findTaskURL returns the first http(s) URL found in the task description, or
+// failing that in any annotation.
+func findTaskURL(t *task.Task) string {
+	if url := urlRegex.FindString(t.Description); url != "" {
+		return url
+	}
+	for _, ann := range t.Annotations {
+		if url := urlRegex.FindString(ann.Description); url != "" {
+			return url
+		}
+	}
+	return ""
+}
+
+// findTaskFileRef returns the resolved path of the first @file reference found
+// in the task description, or failing that in any annotation.
+func findTaskFileRef(t *task.Task) string {
+	if path := extractFileRef(t.Description); path != "" {
+		return path
+	}
+	for _, ann := range t.Annotations {
+		if path := extractFileRef(ann.Description); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+// extractFileRef parses an "@path/to/file.txt" reference out of text and
+// returns the resolved filesystem path (empty when no reference is present).
+func extractFileRef(text string) string {
+	match := fileRefRegex.FindStringSubmatch(text)
+	if match == nil {
+		return ""
+	}
+	return resolveFileRefPath(match[2])
+}
+
+// resolveFileRefPath cleans up a raw @-reference path. Trailing punctuation
+// that commonly abuts a path in prose is trimmed, a leading "~" is expanded to
+// the user's home directory, and relative paths are left untouched so the
+// editor resolves them against the process working directory.
+func resolveFileRefPath(raw string) string {
+	raw = strings.TrimRight(raw, ".,;:)")
+	if raw == "" {
+		return ""
+	}
+	if raw == "~" || strings.HasPrefix(raw, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(raw[1:], "/"))
+		}
+	}
+	return raw
 }
 
 func openURLCmd(browserCmd, url string, taskID int) tea.Cmd {
@@ -132,6 +189,34 @@ func openURLCmd(browserCmd, url string, taskID int) tea.Cmd {
 func (m *Model) handleOpenURLDone(msg openURLDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.showError(msg.err)
+		return m, nil
+	}
+	return m, m.startBlink(msg.taskID, false)
+}
+
+// openFileInEditorCmd opens path in $EDITOR (falling back to vi) in the
+// foreground. It mirrors launchDescriptionEditorCmd: tea.ExecProcess suspends
+// the TUI, runs the editor attached to the real terminal, and restores the TUI
+// once the editor exits.
+func openFileInEditorCmd(path string, taskID int) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	c := exec.Command(editor, path)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return openFileDoneMsg{err: err, taskID: taskID}
+	})
+}
+
+func (m *Model) handleOpenFileDone(msg openFileDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.showError(fmt.Errorf("editor: %w", msg.err))
 		return m, nil
 	}
 	return m, m.startBlink(msg.taskID, false)
