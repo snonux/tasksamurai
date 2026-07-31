@@ -52,8 +52,23 @@ var (
 
 type cellMatch struct {
 	row int
-	col int
+	col int // display column index (position within activeColumns)
 }
+
+// Logical column indices. The display order is determined by activeColumns(),
+// so these constants stay stable even when the compact view hides some of them.
+const (
+	colPri         = 0
+	colID          = 1
+	colAge         = 2
+	colDue         = 3
+	colRecur       = 4
+	colProject     = 5
+	colTags        = 6
+	colAnnotations = 7
+	colDescription = 8
+	colUrgency     = 9
+)
 
 type undoRestore struct {
 	uuid   string
@@ -246,7 +261,7 @@ type Model struct {
 	theme        Theme
 	defaultTheme Theme
 	disco        bool // disco mode changes theme on every task modification
-
+	compactView  bool // compact view shows only Pri, Project, Description, Urg
 	statusMsg string // temporary status message shown in status bar
 
 	taskContext       context.Context
@@ -541,18 +556,7 @@ func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior
 }
 
 func (m *Model) newTable(rows []atable.Row) (atable.Model, atable.Styles) {
-	cols := []atable.Column{
-		{Title: "Pri", Width: m.priWidth},
-		{Title: "ID", Width: m.idWidth},
-		{Title: "Age", Width: m.ageWidth},
-		{Title: "Due", Width: m.dueWidth},
-		{Title: "Recur", Width: m.recurWidth},
-		{Title: "Project", Width: m.projWidth},
-		{Title: "Tags", Width: m.tagsWidth},
-		{Title: "Annotations", Width: m.annWidth},
-		{Title: "Description", Width: m.descWidth},
-		{Title: "Urg", Width: m.urgWidth},
-	}
+	cols := m.buildColumns()
 	t := atable.New(
 		atable.WithColumns(cols),
 		atable.WithRows(rows),
@@ -637,18 +641,26 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 			continue
 		}
 		if m.searchRegex.MatchString(tsk.Project) {
-			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 5})
+			if c := m.logicalToDisplay(colProject); c >= 0 {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+			}
 		}
 		tags := strings.Join(tsk.Tags, " ")
 		if m.searchRegex.MatchString(tags) {
-			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 6})
+			if c := m.logicalToDisplay(colTags); c >= 0 {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+			}
 		}
 		if m.searchRegex.MatchString(tsk.Description) {
-			m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 8})
+			if c := m.logicalToDisplay(colDescription); c >= 0 {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+			}
 		}
 		for _, a := range tsk.Annotations {
 			if m.searchRegex.MatchString(a.Description) {
-				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: 7})
+				if c := m.logicalToDisplay(colAnnotations); c >= 0 {
+					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+				}
 				break
 			}
 		}
@@ -1049,6 +1061,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "c, C", Desc: "random/reset theme"},
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
+				{Key: "v", Desc: "toggle compact view"},
 			},
 		},
 		{
@@ -1205,75 +1218,90 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	cellStyle := rowStyle.Inherit(styles.Cell)
 	selStyle := cellStyle.Inherit(styles.Selected)
 
-	getStyle := func(col int) lipgloss.Style {
-		if col == selectedCol {
+	selLogical := -1
+	if selectedCol >= 0 {
+		selLogical = m.displayToLogical(selectedCol)
+	}
+	getStyle := func(logical int) lipgloss.Style {
+		if logical == selLogical {
 			return selStyle
 		}
 		return cellStyle
 	}
 
 	priStr := m.formatPriority(t.Priority, m.priWidth)
-	idStr := getStyle(1).Render(strconv.Itoa(t.ID))
-	ageStr := getStyle(2).Render(age)
+	idStr := getStyle(colID).Render(strconv.Itoa(t.ID))
+	ageStr := getStyle(colAge).Render(age)
 	dueStr := m.formatDue(t.Due, m.dueWidth)
-	recurStr := m.highlightCell(getStyle(4), re, recur)
-	projStr := m.highlightCell(getStyle(5), re, t.Project)
-	tagStr := m.highlightCell(getStyle(6), re, tags)
+	recurStr := m.highlightCell(getStyle(colRecur), re, recur)
+	projStr := m.highlightCell(getStyle(colProject), re, t.Project)
+	tagStr := m.highlightCell(getStyle(colTags), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
 	if n := len(anns); n > 0 {
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
-	annStr := m.highlightCellMatch(getStyle(7), re, annRaw, annCount)
-	descStr := m.highlightCell(getStyle(8), re, t.Description)
-	urgStr := getStyle(9).Render(m.formatUrgency(urg, m.urgWidth))
+	annStr := m.highlightCellMatch(getStyle(colAnnotations), re, annRaw, annCount)
+	descStr := m.highlightCell(getStyle(colDescription), re, t.Description)
+	urgStr := getStyle(colUrgency).Render(m.formatUrgency(urg, m.urgWidth))
 
-	return atable.Row{
-		priStr,
-		idStr,
-		ageStr,
-		dueStr,
-		recurStr,
-		projStr,
-		tagStr,
-		annStr,
-		descStr,
-		urgStr,
+	cells := map[int]string{
+		colPri:         priStr,
+		colID:          idStr,
+		colAge:         ageStr,
+		colDue:         dueStr,
+		colRecur:       recurStr,
+		colProject:     projStr,
+		colTags:        tagStr,
+		colAnnotations: annStr,
+		colDescription: descStr,
+		colUrgency:     urgStr,
 	}
+
+	active := m.activeColumns()
+	row := make(atable.Row, 0, len(active))
+	for _, c := range active {
+		row = append(row, cells[c])
+	}
+	return row
 }
 
 func (m *Model) expandedCellView() string {
 	row := m.tbl.Cursor()
 	col := m.tbl.ColumnCursor()
-	if row < 0 || row >= len(m.tasks) || col < 0 || col > 9 {
+	if row < 0 || row >= len(m.tasks) || col < 0 {
+		return ""
+	}
+	logical := m.displayToLogical(col)
+	if logical < 0 {
 		return ""
 	}
 	t := m.tasks[row]
 	var val string
-	switch col {
-	case 0:
+	switch logical {
+	case colPri:
 		val = ansi.Strip(m.formatPriority(t.Priority, m.priWidth))
-	case 1:
+	case colID:
 		val = strconv.Itoa(t.ID)
-	case 2:
+	case colAge:
 		val, _ = taskAgeText(t.Entry)
-	case 3:
+	case colDue:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
-	case 4:
+	case colRecur:
 		val = t.Recur
-	case 5:
+	case colProject:
 		val = t.Project
-	case 6:
+	case colTags:
 		val = strings.Join(t.Tags, " ")
-	case 7:
+	case colAnnotations:
 		var anns []string
 		for _, a := range t.Annotations {
 			anns = append(anns, a.Description)
 		}
 		val = strings.Join(anns, "; ")
-	case 8:
+	case colDescription:
 		val = t.Description
-	case 9:
+	case colUrgency:
 		val = fmt.Sprintf("%.1f", t.Urgency)
 	}
 	header := ""
@@ -1385,8 +1413,16 @@ func (m *Model) computeColumnWidths() {
 	if total == 0 {
 		total = 80
 	}
-	base := m.idWidth + m.priWidth + m.ageWidth + m.dueWidth + m.recurWidth + m.tagsWidth + m.annWidth + m.urgWidth + m.projWidth
-	base += 9 // spaces between columns
+	active := m.activeColumns()
+	base := 0
+	for _, c := range active {
+		if c == colDescription {
+			continue
+		}
+		_, w := m.columnSpec(c)
+		base += w
+	}
+	base += len(active) - 1 // spaces between columns
 	m.descWidth = total - base
 	if m.descWidth < 1 {
 		m.descWidth = 1
@@ -1397,20 +1433,74 @@ func (m *Model) computeColumnWidths() {
 	}
 }
 
-func (m *Model) applyColumns() {
-	cols := []atable.Column{
-		{Title: "Pri", Width: m.priWidth},
-		{Title: "ID", Width: m.idWidth},
-		{Title: "Age", Width: m.ageWidth},
-		{Title: "Due", Width: m.dueWidth},
-		{Title: "Recur", Width: m.recurWidth},
-		{Title: "Project", Width: m.projWidth},
-		{Title: "Tags", Width: m.tagsWidth},
-		{Title: "Annotations", Width: m.annWidth},
-		{Title: "Description", Width: m.descWidth},
-		{Title: "Urg", Width: m.urgWidth},
+// activeColumns returns the logical column indices in display order.
+// Compact view trims the table to Pri, Project, Description, Urg.
+func (m *Model) activeColumns() []int {
+	if m.compactView {
+		return []int{colPri, colProject, colDescription, colUrgency}
 	}
-	m.tbl.SetColumns(cols)
+	return []int{colPri, colID, colAge, colDue, colRecur, colProject, colTags, colAnnotations, colDescription, colUrgency}
+}
+
+// columnSpec returns the header title and stored width for a logical column.
+func (m *Model) columnSpec(logical int) (title string, width int) {
+	switch logical {
+	case colPri:
+		return "Pri", m.priWidth
+	case colID:
+		return "ID", m.idWidth
+	case colAge:
+		return "Age", m.ageWidth
+	case colDue:
+		return "Due", m.dueWidth
+	case colRecur:
+		return "Recur", m.recurWidth
+	case colProject:
+		return "Project", m.projWidth
+	case colTags:
+		return "Tags", m.tagsWidth
+	case colAnnotations:
+		return "Annotations", m.annWidth
+	case colDescription:
+		return "Description", m.descWidth
+	case colUrgency:
+		return "Urg", m.urgWidth
+	}
+	return "", 0
+}
+
+func (m *Model) buildColumns() []atable.Column {
+	active := m.activeColumns()
+	cols := make([]atable.Column, 0, len(active))
+	for _, c := range active {
+		title, width := m.columnSpec(c)
+		cols = append(cols, atable.Column{Title: title, Width: width})
+	}
+	return cols
+}
+
+// displayToLogical maps a display (table) column index to its logical column.
+func (m *Model) displayToLogical(display int) int {
+	active := m.activeColumns()
+	if display < 0 || display >= len(active) {
+		return -1
+	}
+	return active[display]
+}
+
+// logicalToDisplay maps a logical column index to its display position, or -1
+// when the column is not currently visible.
+func (m *Model) logicalToDisplay(logical int) int {
+	for i, c := range m.activeColumns() {
+		if c == logical {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m *Model) applyColumns() {
+	m.tbl.SetColumns(m.buildColumns())
 }
 
 func (m *Model) applyTheme() {

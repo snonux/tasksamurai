@@ -496,6 +496,69 @@ func TestAnnotateHotkey(t *testing.T) {
 	}
 }
 
+func TestToggleCompactView(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+
+	script := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d1\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"project\":\"home\",\"tags\":[]}'\n" +
+		"  echo '{\"id\":2,\"uuid\":\"y\",\"description\":\"d2\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"project\":\"work\",\"tags\":[]}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
+
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got := len(m.tbl.Columns()); got != 10 {
+		t.Fatalf("default columns = %d, want 10", got)
+	}
+
+	// Toggle to compact view; this used to panic because renderRow iterated
+	// stale 10-cell rows against the new 4-column slice.
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'v', Text: "v"})
+	m = *mv.(*Model)
+	if got := len(m.tbl.Columns()); got != 4 {
+		t.Fatalf("compact columns = %d, want 4", got)
+	}
+	if got, want := len(m.tbl.Rows()[0]), 4; got != want {
+		t.Fatalf("compact row cell count = %d, want %d", got, want)
+	}
+	if !m.compactView {
+		t.Fatalf("compactView flag not set")
+	}
+
+	// Toggle back to full view.
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'v', Text: "v"})
+	m = *mv.(*Model)
+	if got := len(m.tbl.Columns()); got != 10 {
+		t.Fatalf("restored columns = %d, want 10", got)
+	}
+	if got, want := len(m.tbl.Rows()[0]), 10; got != want {
+		t.Fatalf("restored row cell count = %d, want %d", got, want)
+	}
+	if m.compactView {
+		t.Fatalf("compactView flag not cleared")
+	}
+}
+
 func TestFormatDueUsesCalendarDayLabels(t *testing.T) {
 	loc, now := useSofiaLocalTime(t)
 
@@ -2466,6 +2529,28 @@ func TestEscClosesHelp(t *testing.T) {
 	}
 }
 
+func TestHelpListsCompactViewToggle(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := setupBasicTask(t, tmp)
+	setupEnv(t, taskPath)
+
+	m, err := New(nil, "firefox")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'H', Text: "H"})
+	m = *mv.(*Model)
+	if !m.showHelp {
+		t.Fatalf("help not shown")
+	}
+
+	view := ansi.Strip(m.activeHelpContent())
+	if !strings.Contains(view, "toggle compact view") {
+		t.Fatalf("help content missing compact view binding: %q", view)
+	}
+}
+
 func TestEscDoesNotQuitFromTable(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupBasicTask(t, tmp)
@@ -2715,6 +2800,9 @@ func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	}
 	if strings.Contains(view, "edit current field") {
 		t.Fatalf("ultra help rendered normal-only inline edit binding: %q", view)
+	}
+	if !strings.Contains(view, "toggle compact view") {
+		t.Fatalf("ultra help content missing compact view binding: %q", view)
 	}
 
 	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEsc})

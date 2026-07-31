@@ -739,6 +739,31 @@ func (m *Model) handleToggleDisco() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleToggleCompactView switches between the full table and the compact
+// (Pri, Project, Description, Urg) view, recomputing column widths and
+// rebuilding the rows so the change is applied immediately.
+func (m *Model) handleToggleCompactView() (tea.Model, tea.Cmd) {
+	m.compactView = !m.compactView
+	// Drop the existing rows first: computeColumnWidths re-applies the columns,
+	// and renderRow panics if it iterates stale rows whose cell count exceeds
+	// the new (smaller) column set. Rebuilding happens after the column swap.
+	m.tbl.SetRows(nil)
+	m.computeColumnWidths()
+	rows := m.buildTaskRows(m.tasks)
+	m.tbl.SetRows(rows)
+	// Clamp the column cursor into range in case it now points past the end.
+	if cols := m.tbl.Columns(); len(cols) > 0 {
+		m.tbl.SetColumnCursor(m.tbl.ColumnCursor()) // SetColumnCursor clamps to len(cols)-1
+	}
+	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
+	if m.compactView {
+		m.statusMsg = "Compact view"
+	} else {
+		m.statusMsg = "Full view"
+	}
+	return m, nil
+}
+
 func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 	m.blinkEnabled = !m.blinkEnabled
 	if m.blinkEnabled {
@@ -898,20 +923,20 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		return get(tsk)
 	}
 
-	switch m.tbl.ColumnCursor() {
-	case 0: // Priority
+	switch m.displayToLogical(m.tbl.ColumnCursor()) {
+	case colPri: // Priority
 		m.activatePriorityEdit(id, taskStr(func(t *task.Task) string { return t.Priority }))
-	case 3: // Due date
+	case colDue: // Due date
 		m.activateDueEdit(id, taskStr(func(t *task.Task) string { return t.Due }))
-	case 4: // Recurrence
+	case colRecur: // Recurrence
 		m.activateRecurEdit(id, taskStr(func(t *task.Task) string { return t.Recur }))
-	case 5: // Project
+	case colProject: // Project
 		m.activateProjectEdit(id, taskStr(func(t *task.Task) string { return t.Project }))
-	case 6: // Tags
+	case colTags: // Tags
 		m.activateTagsEdit(id)
-	case 7: // Annotations
+	case colAnnotations: // Annotations
 		return m.activateAnnotationsEdit(id, tsk)
-	case 8: // Description
+	case colDescription: // Description
 		return m.activateDescriptionEdit(id, tsk)
 	default:
 		// Other columns: toggle expanded-cell panel.

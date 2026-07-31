@@ -67,6 +67,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"C"}, modes: keyBindingAll, desc: "reset theme", action: modelKeyAction((*Model).handleResetTheme)},
 	{keys: []string{"x"}, modes: keyBindingAll, desc: "toggle disco mode", action: modelKeyAction((*Model).handleToggleDisco)},
 	{keys: []string{"B"}, modes: keyBindingAll, desc: "toggle blinking", action: modelKeyAction((*Model).handleToggleBlink)},
+	{keys: []string{"v"}, modes: keyBindingAll, desc: "toggle compact view", action: modelKeyAction((*Model).handleToggleCompactView)},
 	{keys: []string{"space"}, modes: keyBindingAll, desc: "refresh tasks", action: modelKeyAction((*Model).handleRefresh)},
 }
 

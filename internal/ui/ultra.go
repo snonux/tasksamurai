@@ -130,6 +130,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "c, C", Desc: "random/reset theme"},
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
+				{Key: "v", Desc: "toggle compact view"},
 			},
 		},
 		{
