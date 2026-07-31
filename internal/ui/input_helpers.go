@@ -2,10 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"codeberg.org/snonux/tasksamurai/internal/task"
 )
@@ -91,14 +89,16 @@ func (m *Model) handleEditingModes(msg tea.KeyPressMsg) (handled bool, model tea
 	return false, m, nil
 }
 
-// getSelectedTaskID extracts the task ID from the selected row
+// getSelectedTaskID extracts the task ID for the row under the cursor. It
+// resolves the ID from the in-memory task list rather than reading a table
+// cell, so it works in any view (including the compact view, which omits the
+// dedicated ID column).
 func (m *Model) getSelectedTaskID() (int, error) {
-	row := m.tbl.SelectedRow()
-	if row == nil {
+	t := m.getTaskAtCursor()
+	if t == nil {
 		return 0, fmt.Errorf("no row selected")
 	}
-	idStr := ansi.Strip(row[1])
-	return strconv.Atoi(idStr)
+	return t.ID, nil
 }
 
 // getTaskAtCursor returns the task at the current cursor position

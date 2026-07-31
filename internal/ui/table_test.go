@@ -559,6 +559,43 @@ func TestToggleCompactView(t *testing.T) {
 	}
 }
 
+// TestShowTaskDetailWorksInCompactView is a regression test: the compact view
+// omits the dedicated ID column, so resolving the selected task by reading
+// table cell index 1 returned the project string instead of an ID and every
+// hotkey that needs the selected ID (e.g. "enter" to open the detail view)
+// silently failed. The ID must come from the cursor's task, not a cell.
+func TestShowTaskDetailWorksInCompactView(t *testing.T) {
+	fake := &fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "fake-1", Description: "compact detail", Status: "pending", Project: "home"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	// Switch to the compact (Pri, Project, Description, Urg) view — no ID column.
+	mv, _ := (&m).handleToggleCompactView()
+	m = *mv.(*Model)
+	if !m.compactView {
+		t.Fatalf("compactView flag not set")
+	}
+	if got := len(m.tbl.Columns()); got != 4 {
+		t.Fatalf("compact columns = %d, want 4", got)
+	}
+
+	// "enter" must still open the detail view for the selected task.
+	mv, _ = (&m).handleShowTaskDetail()
+	m = *mv.(*Model)
+	if !m.showTaskDetail {
+		t.Fatalf("detail view was not shown from compact view")
+	}
+	if got := m.renderTaskDetail(); !strings.Contains(got, "compact detail") {
+		t.Fatalf("rendered detail %q does not include the task description", got)
+	}
+}
+
 func TestFormatDueUsesCalendarDayLabels(t *testing.T) {
 	loc, now := useSofiaLocalTime(t)
 
