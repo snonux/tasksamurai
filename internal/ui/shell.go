@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 	"unicode"
@@ -29,6 +31,94 @@ func shellRunCmd(parent context.Context, tw task.Taskwarrior, line string, selec
 func (m *Model) shellCommandContext() context.Context {
 	m.initTaskContext()
 	return m.taskContext
+}
+
+// shellEditLaunchMsg is emitted once the temp file holding the :prompt text
+// has been written; Update responds by suspending the TUI and launching
+// $EDITOR on it.
+type shellEditLaunchMsg struct {
+	tempFile string
+	err      error
+}
+
+// shellEditDoneMsg is emitted when the editor launched from the : prompt
+// finishes. tempFile is removed by the handler after reading the content
+// back into the prompt.
+type shellEditDoneMsg struct {
+	err      error
+	tempFile string
+}
+
+// prepareShellEditCmd writes the current prompt text to a temp file and
+// returns a shellEditLaunchMsg so Update can launch $EDITOR on it. Splitting
+// the launch into a prepare step (returns a msg) and an exec step mirrors the
+// description-editor flow and keeps tea.ExecProcess at the top level.
+func prepareShellEditCmd(content string) tea.Cmd {
+	return func() tea.Msg {
+		f, err := os.CreateTemp("", "tasksamurai-shell-*.txt")
+		if err != nil {
+			return shellEditLaunchMsg{err: err}
+		}
+		if _, err := f.WriteString(content); err != nil {
+			f.Close()
+			os.Remove(f.Name())
+			return shellEditLaunchMsg{err: err}
+		}
+		name := f.Name()
+		if err := f.Close(); err != nil {
+			os.Remove(name)
+			return shellEditLaunchMsg{err: err}
+		}
+		return shellEditLaunchMsg{tempFile: name}
+	}
+}
+
+// launchShellEditorCmd suspends the TUI and runs $EDITOR on the temp file.
+// When the editor exits it emits a shellEditDoneMsg carrying the temp path.
+func launchShellEditorCmd(tempFile string) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+	c := exec.Command(editor, tempFile)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return shellEditDoneMsg{err: err, tempFile: tempFile}
+	})
+}
+
+// handleShellEditDone reads the edited temp file back into the : prompt,
+// keeping the prompt open so the user can review and press Enter to run.
+// Taskwarrior commands are single-line, so any newlines the editor
+// introduced are collapsed to spaces.
+func (m *Model) handleShellEditDone(msg shellEditDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.tempFile != "" {
+		defer os.Remove(msg.tempFile)
+	}
+	if msg.err != nil {
+		m.showError(fmt.Errorf("opening editor: %w", msg.err))
+		return m, nil
+	}
+	data, err := os.ReadFile(msg.tempFile)
+	if err != nil {
+		m.showError(fmt.Errorf("reading edited prompt: %w", err))
+		return m, nil
+	}
+	line := strings.ReplaceAll(string(data), "\r\n", " ")
+	line = strings.ReplaceAll(line, "\r", " ")
+	line = strings.ReplaceAll(line, "\n", " ")
+	line = strings.TrimSpace(line)
+	m.shellInput.SetValue(line)
+	m.shellInput.CursorEnd()
+	m.refreshShellSuggestions()
+	if line == "" {
+		m.statusMsg = "Editor saved an empty prompt"
+	} else {
+		m.statusMsg = "Edited in $EDITOR \u2014 press Enter to run"
+	}
+	return m, nil
 }
 
 func (m *Model) handleShellPrompt() (tea.Model, tea.Cmd) {
@@ -76,6 +166,11 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shellInput.Blur()
 		m.updateTableHeight()
 		return m, nil
+	case "ctrl+o":
+		// Pop the current prompt text out into $EDITOR. The TUI suspends while
+		// the editor runs; on return the edited text is loaded back into the
+		// prompt (still open) so the user can review and press Enter to run.
+		return m, prepareShellEditCmd(m.shellInput.Value())
 	case "tab":
 		m.refreshShellSuggestions()
 		if len(m.shellCompletion.Commands) == 0 {

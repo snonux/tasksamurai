@@ -27,7 +27,10 @@ Press `:` in either table or ultra mode to open a Taskwarrior command prompt.
 The prompt supplies `task`; type arguments such as `add Buy milk`, `projects`,
 or `+home list`. Press `;` to open the same prompt pre-filled with the selected
 task UUID, ready for commands like `modify`, `annotate`, or `done`. Press `Tab`
-for completion, `Enter` to run, and `Esc` to cancel. Commands that print output
+for completion, `Enter` to run, and `Esc` to cancel. Press `Ctrl+O` while in
+the prompt to pop the current command line out into `$EDITOR`; when you save and
+quit, the edited text is loaded back into the prompt so you can review it and press
+`Enter` to run. Commands that print output
 open a scrollable output panel.
 
 Task Samurai has several toggle keys. Press `v` to switch between the full

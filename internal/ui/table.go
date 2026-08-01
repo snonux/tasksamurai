@@ -727,6 +727,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDescEditDone(msg)
 	case shellDoneMsg:
 		return m.handleShellDone(msg)
+	case shellEditLaunchMsg:
+		if msg.err != nil {
+			m.showError(fmt.Errorf("preparing editor: %w", msg.err))
+			return m, nil
+		}
+		return m, launchShellEditorCmd(msg.tempFile)
+	case shellEditDoneMsg:
+		return m.handleShellEditDone(msg)
 	case shellCompletionMsg:
 		return m.handleShellCompletion(msg)
 	case openURLDoneMsg:
@@ -1115,6 +1123,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "f", Desc: "change filter"},
 				{Key: ":", Desc: "run task command prompt"},
 				{Key: ";", Desc: "run task command prompt for selected task"},
+				{Key: "ctrl+o", Desc: "edit :prompt in $EDITOR"},
 				{Key: "/, ?", Desc: "search"},
 				{Key: "n, N", Desc: "next/previous match"},
 				{Key: "space", Desc: "refresh tasks"},
