@@ -428,6 +428,13 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 	if len(m.filters) > 0 {
 		title += " | filter: " + strings.Join(m.filters, " ")
 	}
+	if m.autoRefresh {
+		interval := m.autoRefreshInterval
+		if interval <= 0 {
+			interval = autoRefreshDefaultInterval
+		}
+		title += fmt.Sprintf(" | auto-refresh: on (%s)", interval)
+	}
 	return fmt.Sprintf("%s | search: %s | %d tasks", title, filter, len(tasks))
 }
 

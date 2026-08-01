@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"codeberg.org/snonux/tasksamurai/internal/task"
 )
 
 // TestHandleToggleAutoRefresh verifies that toggling auto-refresh flips the
@@ -135,5 +137,22 @@ func TestTopStatusLineAutoRefreshIndicator(t *testing.T) {
 	m.autoRefreshInterval = 0
 	if !strings.Contains(m.topStatusLine(), autoRefreshDefaultInterval.String()) {
 		t.Fatalf("expected default interval %s in indicator, got %q", autoRefreshDefaultInterval, m.topStatusLine())
+	}
+}
+
+// TestUltraModeStatusAutoRefreshIndicator checks that the auto-refresh
+// indicator is also shown in ultra mode's status line when enabled.
+func TestUltraModeStatusAutoRefreshIndicator(t *testing.T) {
+	m := Model{}
+	tasks := []task.Task{{ID: 1}}
+
+	if strings.Contains(m.ultraModeStatus(tasks), "auto-refresh") {
+		t.Fatalf("did not expect auto-refresh indicator in ultra status when disabled")
+	}
+
+	m.autoRefresh = true
+	m.autoRefreshInterval = 10 * time.Second
+	if !strings.Contains(m.ultraModeStatus(tasks), "auto-refresh: on") {
+		t.Fatalf("expected auto-refresh indicator in ultra status when enabled")
 	}
 }
