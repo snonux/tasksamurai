@@ -30,6 +30,15 @@ task UUID, ready for commands like `modify`, `annotate`, or `done`. Press `Tab`
 for completion, `Enter` to run, and `Esc` to cancel. Commands that print output
 open a scrollable output panel.
 
+Task Samurai has several toggle keys. Press `v` to switch between the full
+table and a compact view (Pri, Project, Description, Urg). Press `Z` to toggle
+auto-refresh, which reloads the task list every 10 seconds as if you pressed
+`space`; a persistent `auto-refresh: on (10s)` indicator appears in the status line
+(works in compact and ultra mode too, and reloads pause while you are typing).
+Press `B` to toggle the row blink animation after task modifications, and press
+`x` to toggle disco mode, which picks a random theme on every task change.
+All of these are also listed on the in-app help screen (`H`).
+
 ## Screenshot
 
 ![Task Samurai screenshot](screenshot.png)
