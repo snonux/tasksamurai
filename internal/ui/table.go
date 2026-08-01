@@ -91,6 +91,16 @@ type blinkState struct {
 	blinkEnabled  bool // when false, skip animation and complete immediately
 }
 
+// autoRefreshState drives the periodic background reload of the task list.
+// When autoRefresh is enabled the model reloads tasks every
+// autoRefreshInterval, as if the user pressed "space". Reloads are skipped
+// while any input/editing mode is active so user input is never clobbered.
+type autoRefreshState struct {
+	autoRefresh         bool          // whether periodic reload is enabled
+	autoRefreshInterval time.Duration // delay between automatic reloads
+	autoRefreshGen      int           // generation token; stale ticks are dropped
+}
+
 // searchState holds task-table and help-screen search state.
 // Both search modes share this struct because only one is active at a time.
 type searchState struct {
@@ -217,15 +227,16 @@ type Model struct {
 	tbl       atable.Model
 	tblStyles atable.Styles
 
-	blinkState      // row blink animation (see blinkState)
-	searchState     // task-table and help-screen search (see searchState)
-	detailViewState // task detail overlay (see detailViewState)
-	ultraState      // ultra mode task list and search state (see ultraState)
-	detailEditState // detail-overlay external description editor state
-	ultraModeState  // ultra-mode lifecycle flags
-	helpState       // help-screen viewport state
-	shellState      // Taskwarrior command prompt and output panel
-	editState       // inline field editing (see editState)
+	blinkState       // row blink animation (see blinkState)
+	autoRefreshState // periodic background reload (see autoRefreshState)
+	searchState      // task-table and help-screen search (see searchState)
+	detailViewState  // task detail overlay (see detailViewState)
+	ultraState       // ultra mode task list and search state (see ultraState)
+	detailEditState  // detail-overlay external description editor state
+	ultraModeState   // ultra-mode lifecycle flags
+	helpState        // help-screen viewport state
+	shellState       // Taskwarrior command prompt and output panel
+	editState        // inline field editing (see editState)
 
 	cellExpanded bool
 
@@ -260,9 +271,9 @@ type Model struct {
 
 	theme        Theme
 	defaultTheme Theme
-	disco        bool // disco mode changes theme on every task modification
-	compactView  bool // compact view shows only Pri, Project, Description, Urg
-	statusMsg string // temporary status message shown in status bar
+	disco        bool   // disco mode changes theme on every task modification
+	compactView  bool   // compact view shows only Pri, Project, Description, Urg
+	statusMsg    string // temporary status message shown in status bar
 
 	taskContext       context.Context
 	cancelTaskContext context.CancelFunc
@@ -307,6 +318,14 @@ type openFileDoneMsg struct {
 
 type blinkMsg struct{}
 
+// autoRefreshMsg is emitted by the auto-refresh timer to trigger a
+// background reload of the task list. The gen field carries the generation
+// token that was current when the tick was scheduled; a mismatch means the
+// loop has been restarted (toggled off then on) and this tick is stale.
+type autoRefreshMsg struct {
+	gen int
+}
+
 type descriptionTempFile interface {
 	Name() string
 	WriteString(string) (int, error)
@@ -343,6 +362,10 @@ const blinkInterval = 150 * time.Millisecond
 // blinkCycles is the number of times to blink before stopping.
 // The total blink duration is blinkInterval * blinkCycles.
 const blinkCycles = 8
+
+// autoRefreshDefaultInterval is the delay between automatic task reloads
+// when auto-refresh is enabled.
+const autoRefreshDefaultInterval = 10 * time.Second
 
 func prepareDescriptionTempFile(description string, newTempFile func() (descriptionTempFile, error)) (string, error) {
 	tmpFile, err := newTempFile()
@@ -405,6 +428,14 @@ func launchDescriptionEditorCmd(tmpPath string) tea.Cmd {
 
 func blinkCmd() tea.Cmd {
 	return tea.Tick(blinkInterval, func(time.Time) tea.Msg { return blinkMsg{} })
+}
+
+// autoRefreshCmd schedules the next auto-refresh tick after the configured
+// interval. The gen token is echoed back in the resulting autoRefreshMsg so
+// stale ticks from a previous loop incarnation can be ignored. Returning it
+// from Update keeps the reload loop alive.
+func autoRefreshCmd(interval time.Duration, gen int) tea.Cmd {
+	return tea.Tick(interval, func(time.Time) tea.Msg { return autoRefreshMsg{gen: gen} })
 }
 
 func (m *Model) taskwarriorClient() task.Taskwarrior {
@@ -704,6 +735,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleOpenFileDone(msg)
 	case blinkMsg:
 		return m.handleBlinkMsg()
+	case autoRefreshMsg:
+		return m.handleAutoRefresh(msg)
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
@@ -855,6 +888,38 @@ func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 	}
 
 	return m, blinkCmd()
+}
+
+// anyInputActive reports whether the user is currently entering text or
+// navigating an overlay (annotate, filter, search, shell prompt, detail
+// search, ultra search, or any inline field editor). Auto-refresh reloads
+// are skipped while this is true so the reload never clobbers user input.
+func (m *Model) anyInputActive() bool {
+	return m.annotating || m.descEditing || m.tagsEditing || m.dueEditing ||
+		m.recurEditing || m.projEditing || m.filterEditing || m.addingTask ||
+		m.prioritySelecting || m.searching || m.shellActive ||
+		m.shellOutputVisible || m.detailSearching || m.ultraSearching ||
+		m.detailDescEditing || m.editID != 0
+}
+
+// handleAutoRefresh reloads the task list on the periodic auto-refresh tick
+// and reschedules the next tick. The reload is skipped (but the loop kept
+// alive) while the user is editing so input is never disrupted. Stale ticks
+// from a previous loop incarnation (after an off/on toggle) are dropped via
+// the generation token so duplicate loops cannot accumulate. Toggling
+// auto-refresh off stops the loop by not rescheduling.
+func (m *Model) handleAutoRefresh(msg autoRefreshMsg) (tea.Model, tea.Cmd) {
+	if !m.autoRefresh || msg.gen != m.autoRefreshGen {
+		return m, nil
+	}
+	interval := m.autoRefreshInterval
+	if interval <= 0 {
+		interval = autoRefreshDefaultInterval
+	}
+	if !m.anyInputActive() {
+		m.reloadAndReport()
+	}
+	return m, autoRefreshCmd(interval, m.autoRefreshGen)
 }
 
 // View renders the table UI.
@@ -1062,6 +1127,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},
+				{Key: "Z", Desc: "toggle auto-refresh"},
 			},
 		},
 		{
@@ -1091,6 +1157,13 @@ func (m *Model) topStatusLine() string {
 	line := fmt.Sprintf("Task Samurai %s", internal.Version)
 	if len(m.filters) > 0 {
 		line += " | filter: " + strings.Join(m.filters, " ")
+	}
+	if m.autoRefresh {
+		interval := m.autoRefreshInterval
+		if interval <= 0 {
+			interval = autoRefreshDefaultInterval
+		}
+		line += fmt.Sprintf(" | auto-refresh: on (%s)", interval)
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).

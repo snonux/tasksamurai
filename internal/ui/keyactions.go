@@ -774,6 +774,25 @@ func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleToggleAutoRefresh enables or disables the periodic background reload
+// of the task list. When enabled it kicks off the reload timer; when disabled
+// the running loop stops itself on the next tick (see handleAutoRefresh).
+// Bumping autoRefreshGen on each (re)enable invalidates any ticks still in
+// flight from a previous loop so duplicate reload loops cannot accumulate.
+func (m *Model) handleToggleAutoRefresh() (tea.Model, tea.Cmd) {
+	m.autoRefresh = !m.autoRefresh
+	if !m.autoRefresh {
+		m.statusMsg = "Auto-refresh off"
+		return m, nil
+	}
+	if m.autoRefreshInterval <= 0 {
+		m.autoRefreshInterval = autoRefreshDefaultInterval
+	}
+	m.autoRefreshGen++
+	m.statusMsg = fmt.Sprintf("Auto-refresh on (every %s)", m.autoRefreshInterval)
+	return m, autoRefreshCmd(m.autoRefreshInterval, m.autoRefreshGen)
+}
+
 func toggleAgentFilter(filters []string) []string {
 	next := "+agent"
 	index := -1
