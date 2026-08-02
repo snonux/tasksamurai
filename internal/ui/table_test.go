@@ -559,6 +559,91 @@ func TestToggleCompactView(t *testing.T) {
 	}
 }
 
+func TestColumnWidthsAreLimitedInNormalAndCompactViews(t *testing.T) {
+	m := Model{
+		tasks: []task.Task{{
+			Project: "project-name-that-is-too-long",
+			Recur:   "recurrence-that-is-too-long",
+			Tags:    []string{"tag-name-that-is-too-long"},
+		}},
+	}
+	m.tbl.SetWidth(80)
+
+	for _, compact := range []bool{false, true} {
+		m.compactView = compact
+		m.computeColumnWidths()
+		for _, col := range m.buildColumns() {
+			if col.Title == "Description" {
+				continue
+			}
+			if col.Width > maxColumnWidth {
+				t.Errorf("compact=%t column %q width = %d, want at most %d", compact, col.Title, col.Width, maxColumnWidth)
+			}
+		}
+		if m.projWidth != maxColumnWidth {
+			t.Errorf("compact=%t project width = %d, want %d", compact, m.projWidth, maxColumnWidth)
+		}
+		if m.descWidth <= maxColumnWidth {
+			t.Errorf("compact=%t description width = %d, want flexible width greater than %d", compact, m.descWidth, maxColumnWidth)
+		}
+	}
+
+	m.tasks[0].Project = "日本語日本語"
+	m.computeColumnWidths()
+	if got, want := m.projWidth, 12; got != want {
+		t.Errorf("wide project width = %d, want terminal width %d", got, want)
+	}
+}
+
+func TestColumnValuesRespectMaximumRenderedWidth(t *testing.T) {
+	tests := []struct {
+		name    string
+		project string
+		want    string
+	}{
+		{name: "at limit", project: "123456789012345", want: "123456789012345"},
+		{name: "over limit", project: "project-name-that-is-too-long", want: "project-name-t…"},
+		{name: "wide characters", project: "日本語日本語日本語", want: "日本語日本語日…"},
+		{name: "ANSI styled", project: "\x1b[31m1234567890123456\x1b[0m", want: "12345678901234…"},
+	}
+	for _, tt := range tests {
+		for _, compact := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/compact=%t", tt.name, compact), func(t *testing.T) {
+				m := Model{
+					compactView: compact,
+					tasks: []task.Task{{
+						ID:          1,
+						Project:     tt.project,
+						Description: "description-content-is-not-capped",
+					}},
+				}
+				m.tbl.SetWidth(80)
+				m.computeColumnWidths()
+				rows := m.buildTaskRows(m.tasks)
+				m.newTable(rows)
+				m.tbl.SetWidth(80)
+				m.tbl.SetHeight(10)
+
+				rendered := m.tbl.View()
+				stripped := ansi.Strip(rendered)
+				if !strings.Contains(stripped, tt.want) {
+					t.Fatalf("rendered table does not contain %q: %q", tt.want, stripped)
+				}
+				if !strings.Contains(stripped, "description-cont") {
+					t.Fatalf("description was capped at %d cells: %q", maxColumnWidth, stripped)
+				}
+				projectColumn := m.tbl.Columns()[m.logicalToDisplay(colProject)]
+				if projectColumn.Width > maxColumnWidth {
+					t.Fatalf("rendered project column width = %d, want at most %d", projectColumn.Width, maxColumnWidth)
+				}
+				if tt.name == "ANSI styled" && !strings.Contains(rendered, "\x1b[31m") {
+					t.Fatal("rendered ANSI-styled value lost its red SGR sequence")
+				}
+			})
+		}
+	}
+}
+
 // TestShowTaskDetailWorksInCompactView is a regression test: the compact view
 // omits the dedicated ID column, so resolving the selected task by reading
 // table cell index 1 returned the project string instead of an ID and every

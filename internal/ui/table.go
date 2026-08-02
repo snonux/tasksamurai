@@ -30,6 +30,8 @@ var priorityOptions = []string{"H", "M", "L", ""}
 
 const taskOperationTimeout = 30 * time.Second
 
+const maxColumnWidth = 15
+
 var (
 	urlRegex = regexp.MustCompile(`https?://\S+`)
 	// fileRefRegex matches an @-prefixed file reference such as
@@ -1450,46 +1452,46 @@ func (m *Model) computeColumnWidths() {
 	maxAnn := 1
 	maxProj := 1
 	for _, t := range m.tasks {
-		if l := len(strconv.Itoa(t.ID)); l > maxID {
+		if l := ansi.StringWidth(strconv.Itoa(t.ID)); l > maxID {
 			maxID = l
 		}
 		age, _ := taskAgeText(t.Entry)
-		if l := len(age); l > maxAge {
+		if l := ansi.StringWidth(age); l > maxAge {
 			maxAge = l
 		}
 		urg := fmt.Sprintf("%.1f", t.Urgency)
-		if l := len(urg); l > maxUrg {
+		if l := ansi.StringWidth(urg); l > maxUrg {
 			maxUrg = l
 		}
 		due := formatDueText(t.Due)
-		if l := len(due); l > maxDue {
+		if l := ansi.StringWidth(due); l > maxDue {
 			maxDue = l
 		}
-		if l := len(t.Recur); l > maxRecur {
+		if l := ansi.StringWidth(t.Recur); l > maxRecur {
 			maxRecur = l
 		}
-		if l := len(t.Project); l > maxProj {
+		if l := ansi.StringWidth(t.Project); l > maxProj {
 			maxProj = l
 		}
 		tags := strings.Join(t.Tags, " ")
-		if l := len(tags); l > maxTags {
+		if l := ansi.StringWidth(tags); l > maxTags {
 			maxTags = l
 		}
 		ann := len(t.Annotations)
-		if l := len(strconv.FormatInt(int64(ann), 16)); l > maxAnn {
+		if l := ansi.StringWidth(strconv.FormatInt(int64(ann), 16)); l > maxAnn {
 			maxAnn = l
 		}
 	}
 
-	m.idWidth = maxID
+	m.idWidth = min(maxID, maxColumnWidth)
 	m.priWidth = 1
-	m.ageWidth = maxAge
-	m.urgWidth = maxUrg
-	m.dueWidth = maxDue
-	m.recurWidth = maxRecur
-	m.tagsWidth = maxTags
-	m.annWidth = maxAnn
-	m.projWidth = maxProj
+	m.ageWidth = min(maxAge, maxColumnWidth)
+	m.urgWidth = min(maxUrg, maxColumnWidth)
+	m.dueWidth = min(maxDue, maxColumnWidth)
+	m.recurWidth = min(maxRecur, maxColumnWidth)
+	m.tagsWidth = min(maxTags, maxColumnWidth)
+	m.annWidth = min(maxAnn, maxColumnWidth)
+	m.projWidth = min(maxProj, maxColumnWidth)
 
 	total := m.tbl.Width()
 	if total == 0 {
