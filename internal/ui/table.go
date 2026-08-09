@@ -246,7 +246,6 @@ type Model struct {
 
 	idWidth    int
 	priWidth   int
-	ageWidth   int
 	urgWidth   int
 	dueWidth   int
 	recurWidth int
@@ -1288,8 +1287,6 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 		rowStyle = rowStyle.Reverse(true)
 	}
 
-	age, _ := taskAgeText(t.Entry)
-
 	tags := strings.Join(t.Tags, " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 	recur := t.Recur
@@ -1315,7 +1312,6 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 
 	priStr := m.formatPriority(t.Priority, m.priWidth)
 	idStr := getStyle(colID).Render(strconv.Itoa(t.ID))
-	ageStr := getStyle(colAge).Render(age)
 	dueStr := m.formatDue(t.Due, m.dueWidth)
 	recurStr := m.highlightCell(getStyle(colRecur), re, recur)
 	projStr := m.highlightCell(getStyle(colProject), re, t.Project)
@@ -1332,7 +1328,6 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	cells := map[int]string{
 		colPri:         priStr,
 		colID:          idStr,
-		colAge:         ageStr,
 		colDue:         dueStr,
 		colRecur:       recurStr,
 		colProject:     projStr,
@@ -1367,8 +1362,6 @@ func (m *Model) expandedCellView() string {
 		val = ansi.Strip(m.formatPriority(t.Priority, m.priWidth))
 	case colID:
 		val = strconv.Itoa(t.ID)
-	case colAge:
-		val, _ = taskAgeText(t.Entry)
 	case colDue:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case colRecur:
@@ -1444,7 +1437,6 @@ func (m *Model) updateTableHeight() {
 
 func (m *Model) computeColumnWidths() {
 	maxID := 1
-	maxAge := 0
 	maxUrg := 0
 	maxDue := 0
 	maxRecur := 1
@@ -1454,10 +1446,6 @@ func (m *Model) computeColumnWidths() {
 	for _, t := range m.tasks {
 		if l := ansi.StringWidth(strconv.Itoa(t.ID)); l > maxID {
 			maxID = l
-		}
-		age, _ := taskAgeText(t.Entry)
-		if l := ansi.StringWidth(age); l > maxAge {
-			maxAge = l
 		}
 		urg := fmt.Sprintf("%.1f", t.Urgency)
 		if l := ansi.StringWidth(urg); l > maxUrg {
@@ -1485,7 +1473,6 @@ func (m *Model) computeColumnWidths() {
 
 	m.idWidth = min(maxID, maxColumnWidth)
 	m.priWidth = 1
-	m.ageWidth = min(maxAge, maxColumnWidth)
 	m.urgWidth = min(maxUrg, maxColumnWidth)
 	m.dueWidth = min(maxDue, maxColumnWidth)
 	m.recurWidth = min(maxRecur, maxColumnWidth)
@@ -1523,7 +1510,7 @@ func (m *Model) activeColumns() []int {
 	if m.compactView {
 		return []int{colPri, colProject, colDescription, colUrgency}
 	}
-	return []int{colPri, colID, colAge, colDue, colRecur, colProject, colTags, colAnnotations, colDescription, colUrgency}
+	return []int{colPri, colID, colDue, colRecur, colProject, colTags, colAnnotations, colDescription, colUrgency}
 }
 
 // columnSpec returns the header title and stored width for a logical column.
@@ -1533,8 +1520,6 @@ func (m *Model) columnSpec(logical int) (title string, width int) {
 		return "Pri", m.priWidth
 	case colID:
 		return "ID", m.idWidth
-	case colAge:
-		return "Age", m.ageWidth
 	case colDue:
 		return "Due", m.dueWidth
 	case colRecur:

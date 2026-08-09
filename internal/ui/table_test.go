@@ -527,8 +527,8 @@ func TestToggleCompactView(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if got := len(m.tbl.Columns()); got != 10 {
-		t.Fatalf("default columns = %d, want 10", got)
+	if got := len(m.tbl.Columns()); got != 9 {
+		t.Fatalf("default columns = %d, want 9", got)
 	}
 
 	// Toggle to compact view; this used to panic because renderRow iterated
@@ -548,10 +548,10 @@ func TestToggleCompactView(t *testing.T) {
 	// Toggle back to full view.
 	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'v', Text: "v"})
 	m = *mv.(*Model)
-	if got := len(m.tbl.Columns()); got != 10 {
-		t.Fatalf("restored columns = %d, want 10", got)
+	if got := len(m.tbl.Columns()); got != 9 {
+		t.Fatalf("restored columns = %d, want 9", got)
 	}
-	if got, want := len(m.tbl.Rows()[0]), 10; got != want {
+	if got, want := len(m.tbl.Rows()[0]), 9; got != want {
 		t.Fatalf("restored row cell count = %d, want %d", got, want)
 	}
 	if m.compactView {
@@ -4448,8 +4448,8 @@ func TestUltraResizeSyncRefreshesNormalSearchSelection(t *testing.T) {
 	if got := m.tbl.Cursor(); got != 0 {
 		t.Fatalf("initial search cursor = %d, want 0", got)
 	}
-	if got := m.tbl.ColumnCursor(); got != 8 {
-		t.Fatalf("initial search column = %d, want 8", got)
+	if got := m.tbl.ColumnCursor(); got != 7 {
+		t.Fatalf("initial search column = %d, want 7", got)
 	}
 
 	step(tea.KeyPressMsg{Code: 'u', Text: "u"})
