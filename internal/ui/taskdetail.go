@@ -8,7 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"codeberg.org/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 // wordWrap wraps text to fit within the specified width, breaking at word boundaries

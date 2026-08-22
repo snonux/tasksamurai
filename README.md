@@ -51,7 +51,7 @@ All of these are also listed on the in-app help screen (`H`).
 There are two ways to install the `tasksamurai` command:
 
 ```bash
-go install codeberg.org/snonux/tasksamurai/cmd/tasksamurai@latest
+go install github.com/snonux/tasksamurai/cmd/tasksamurai@latest
 ```
 
 Alternatively, clone this repository and run:

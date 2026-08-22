@@ -7,9 +7,9 @@ import (
 
 	"runtime"
 
-	"codeberg.org/snonux/tasksamurai/internal/debug"
-	"codeberg.org/snonux/tasksamurai/internal/task"
-	"codeberg.org/snonux/tasksamurai/internal/ui"
+	"github.com/snonux/tasksamurai/internal/debug"
+	"github.com/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
 )

@@ -20,10 +20,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"codeberg.org/snonux/tasksamurai/internal"
-	atable "codeberg.org/snonux/tasksamurai/internal/atable"
-	"codeberg.org/snonux/tasksamurai/internal/task"
-	uihelp "codeberg.org/snonux/tasksamurai/internal/ui/help"
+	"github.com/snonux/tasksamurai/internal"
+	atable "github.com/snonux/tasksamurai/internal/atable"
+	"github.com/snonux/tasksamurai/internal/task"
+	uihelp "github.com/snonux/tasksamurai/internal/ui/help"
 )
 
 var priorityOptions = []string{"H", "M", "L", ""}

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"codeberg.org/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 // TestExtractFileRef verifies that @path/to/file.txt style references are

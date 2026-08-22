@@ -12,7 +12,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"codeberg.org/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 func useSofiaLocalTime(t *testing.T) (*time.Location, time.Time) {

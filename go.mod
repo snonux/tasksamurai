@@ -1,4 +1,4 @@
-module codeberg.org/snonux/tasksamurai
+module github.com/snonux/tasksamurai
 
 go 1.24.2
 

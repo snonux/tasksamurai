@@ -13,7 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"codeberg.org/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 const shellCommandTimeout = 2 * time.Minute

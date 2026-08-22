@@ -17,7 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"codeberg.org/snonux/tasksamurai/internal/task"
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 type fakeTaskwarrior struct {
