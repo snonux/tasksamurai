@@ -2,9 +2,7 @@
 
 package debug
 
-// SetDebugDir sets the directory where debug output files will be written.
-// In production builds, runtime signal diagnostics are disabled.
-func SetDebugDir(dir string) {}
-
-// InitSignalHandlers is a no-op in production builds.
+// InitSignalHandlers is a no-op in production builds. SetDebugDir,
+// DumpStateMsg, and SetSender remain available (see state.go) but nothing
+// ever triggers a dump without the debugsignals build tag.
 func InitSignalHandlers() {}

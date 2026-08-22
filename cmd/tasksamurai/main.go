@@ -62,6 +62,10 @@ func main() {
 	fmt.Print("\033[H\033[2J")
 
 	p := tea.NewProgram(&m)
+	// Registered so SIGUSR1 (debugsignals builds) can ask the running model
+	// to dump its own UI state, not just goroutine stacks - see
+	// docs/debugging.md.
+	debug.SetSender(p)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)

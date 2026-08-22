@@ -22,6 +22,7 @@ import (
 
 	"github.com/snonux/tasksamurai/internal"
 	atable "github.com/snonux/tasksamurai/internal/atable"
+	"github.com/snonux/tasksamurai/internal/debug"
 	"github.com/snonux/tasksamurai/internal/task"
 	uihelp "github.com/snonux/tasksamurai/internal/ui/help"
 )
@@ -717,6 +718,11 @@ func (m *Model) Init() tea.Cmd { return nil }
 // Update handles key and window events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case debug.DumpStateMsg:
+		// Handled unconditionally, ahead of every mode check below, so a
+		// SIGUSR1 dump still works even if a stuck mode flag is exactly
+		// what's swallowing every other keypress.
+		return m.dumpState()
 	case tea.WindowSizeMsg:
 		// Handle resize in all modes, including during input
 		return m.handleWindowResize(msg)

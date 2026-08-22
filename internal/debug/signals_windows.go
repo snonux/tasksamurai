@@ -7,12 +7,6 @@ import (
 	"os"
 )
 
-// SetDebugDir sets the directory where debug output files will be written.
-// On Windows, signal handlers are not supported, so this is a no-op.
-func SetDebugDir(dir string) {
-	// No-op on Windows
-}
-
 // InitSignalHandlers sets up signal handlers for runtime diagnostics.
 // On Windows, SIGUSR1 and SIGUSR2 are not available, so this prints a warning.
 func InitSignalHandlers() {

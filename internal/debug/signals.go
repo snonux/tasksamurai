@@ -15,21 +15,13 @@ import (
 	"time"
 )
 
-var (
-	// debugDir is the directory where debug output files are written
-	debugDir string
-	// dumping prevents concurrent dump attempts
-	dumping int32
-)
-
-// SetDebugDir sets the directory where debug output files will be written.
-// If empty, the current working directory is used.
-func SetDebugDir(dir string) {
-	debugDir = dir
-}
+// dumping prevents concurrent dump attempts
+var dumping int32
 
 // InitSignalHandlers sets up signal handlers for runtime diagnostics.
-// SIGUSR1: Dump goroutine stacks
+// SIGUSR1: Dump goroutine stacks, plus a UI state snapshot if a program has
+// been registered via SetSender (see the "d does nothing" case: a stuck
+// mode flag rather than a genuine hang won't show up in a goroutine dump).
 // SIGUSR2: Dump full runtime profiles (goroutines, heap, cpu, block)
 func InitSignalHandlers() {
 	sigChan := make(chan os.Signal, 1)
@@ -40,6 +32,7 @@ func InitSignalHandlers() {
 			switch sig {
 			case syscall.SIGUSR1:
 				dumpGoroutines()
+				RequestStateDump()
 			case syscall.SIGUSR2:
 				dumpFullProfile()
 			}
