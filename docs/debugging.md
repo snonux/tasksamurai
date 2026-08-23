@@ -28,6 +28,14 @@ somewhere else. This is functionally different from a goroutine deadlock,
 and a goroutine dump alone won't show it: the UI goroutine is still running
 fine, it's just dispatching input to the wrong place.
 
+Note that the very first gate, `blinkID`, is the one with no visual tell:
+the table looks completely normal, arrow keys/`j`/`k` still move the cursor
+(`handleBlinkingState` forwards navigation), and every other key is dropped.
+Two ways to strand it were fixed in `startBlink`/`handleBlinkMsg` — a blink
+started for a task with no row in the current table, and a detail-view blink
+swallowing an in-flight row blink's tick — so if you see it again, it is a
+third path that leaves `blinkID` set with no `blinkCmd()` tick scheduled.
+
 The other possibility is a genuine hang — the Bubble Tea event loop itself
 blocked on something (an external `task` command, an editor subprocess, a
 channel op) — which *does* show up as a blocked goroutine.

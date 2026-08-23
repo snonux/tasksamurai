@@ -489,8 +489,44 @@ func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
 	}
 	m.detailBlinkField = fieldIndex
 	m.detailBlinkOn = true
-	m.detailBlinkCount = blinkCycles
+	// Counts up to blinkCycles as ticks arrive. Seeding it with blinkCycles
+	// made the very first tick hit the stop condition, so the field flashed
+	// once instead of blinking for blinkInterval * blinkCycles.
+	m.detailBlinkCount = 0
 	return blinkCmd()
+}
+
+// finishBlinkImmediately ends a blink that will never be animated: either
+// blinking is disabled, or the task has no row in the current table to flash.
+// It performs the deferred "done" the animation would have run at the end of
+// the cycle, then clears the blink state and reloads.
+//
+// Clearing blinkID is what keeps the UI responsive. Update() routes every
+// keypress to handleBlinkingState while blinkID != 0, and only a blinkMsg
+// tick clears it again. Returning with blinkID set but no tick scheduled
+// wedges the session for good: navigation keys still work while every action
+// key is silently swallowed. See docs/debugging.md.
+func (m *Model) finishBlinkImmediately(id int, markDone bool) {
+	if markDone {
+		for _, tsk := range m.tasks {
+			if tsk.ID == id {
+				m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
+				break
+			}
+		}
+		ctx, cancel := m.taskOperationContext()
+		err := m.taskwarriorClient().DoneContext(ctx, id)
+		cancel()
+		if err != nil {
+			m.showError(err)
+		}
+	}
+	m.blinkID = 0
+	m.blinkRow = -1
+	m.blinkOn = false
+	m.blinkCount = 0
+	m.blinkMarkDone = false
+	m.reloadAndReport()
 }
 
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
@@ -498,25 +534,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 	m.blinkMarkDone = markDone
 
 	if !m.blinkEnabled {
-		// If blinking is disabled, still complete the task immediately
-		// by simulating the end of the blink cycle
-		if markDone {
-			for _, tsk := range m.tasks {
-				if tsk.ID == id {
-					m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
-					break
-				}
-			}
-			ctx, cancel := m.taskOperationContext()
-			err := m.taskwarriorClient().DoneContext(ctx, id)
-			cancel()
-			if err != nil {
-				m.showError(err)
-			}
-		}
-		m.blinkID = 0
-		m.blinkMarkDone = false
-		m.reloadAndReport()
+		m.finishBlinkImmediately(id, markDone)
 		return nil
 	}
 
@@ -528,6 +546,12 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 		}
 	}
 	if m.blinkRow == -1 {
+		// The task is not visible in the current table: callers reload before
+		// blinking, so an edit that pushed the task out of the active filter
+		// (a due date moved past the filter window, a new wait date) leaves
+		// nothing to animate. Finish the blink now rather than returning with
+		// blinkID set and no tick scheduled.
+		m.finishBlinkImmediately(id, markDone)
 		return nil
 	}
 	if m.disco {
@@ -851,58 +875,80 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleBlinkMsg handles the blinking animation timer
+// handleBlinkMsg advances every blink animation that is currently running.
+//
+// The detail-view field blink and the table row blink share one blinkMsg
+// tick, so both must be advanced on every tick and a new tick scheduled
+// while either is still going. Letting the detail blink consume a tick and
+// return early stranded an in-flight row blink with blinkID set and nothing
+// scheduled to clear it, which silently swallowed every action keypress from
+// then on. See docs/debugging.md.
 func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
-	// Handle detail view blinking
-	if m.showTaskDetail && m.detailBlinkField != -1 {
-		m.detailBlinkOn = !m.detailBlinkOn
-		m.detailBlinkCount++
+	detailBlinking := m.advanceDetailBlink()
+	rowBlinking := m.advanceRowBlink()
+	if detailBlinking || rowBlinking {
+		return m, blinkCmd()
+	}
+	return m, nil
+}
 
-		if m.detailBlinkCount >= blinkCycles {
-			m.detailBlinkField = -1
-			m.detailBlinkOn = false
-			m.detailBlinkCount = 0
-		} else {
-			return m, blinkCmd()
-		}
-		return m, nil
+// advanceDetailBlink toggles the detail-view field highlight for this tick
+// and reports whether the animation needs further ticks.
+func (m *Model) advanceDetailBlink() bool {
+	if !m.showTaskDetail || m.detailBlinkField == -1 {
+		return false
 	}
 
+	m.detailBlinkOn = !m.detailBlinkOn
+	m.detailBlinkCount++
+	if m.detailBlinkCount < blinkCycles {
+		return true
+	}
+
+	m.detailBlinkField = -1
+	m.detailBlinkOn = false
+	m.detailBlinkCount = 0
+	return false
+}
+
+// advanceRowBlink toggles the table row highlight for this tick and reports
+// whether the animation needs further ticks. On the final tick it runs the
+// deferred "done" the blink was covering for and reloads the task list.
+func (m *Model) advanceRowBlink() bool {
 	if m.blinkID == 0 {
-		return m, nil
+		return false
 	}
 
 	m.blinkOn = !m.blinkOn
 	m.blinkCount++
 	m.updateBlinkRow()
-
-	if m.blinkCount >= blinkCycles {
-		id := m.blinkID
-		mark := m.blinkMarkDone
-		m.blinkID = 0
-		m.blinkOn = false
-		m.blinkCount = 0
-		m.blinkMarkDone = false
-
-		if mark {
-			for _, tsk := range m.tasks {
-				if tsk.ID == id {
-					m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
-					break
-				}
-			}
-			ctx, cancel := m.taskOperationContext()
-			err := m.taskwarriorClient().DoneContext(ctx, id)
-			cancel()
-			if err != nil {
-				m.showError(err)
-			}
-		}
-		m.reloadAndReport()
-		return m, nil
+	if m.blinkCount < blinkCycles {
+		return true
 	}
 
-	return m, blinkCmd()
+	id := m.blinkID
+	mark := m.blinkMarkDone
+	m.blinkID = 0
+	m.blinkOn = false
+	m.blinkCount = 0
+	m.blinkMarkDone = false
+
+	if mark {
+		for _, tsk := range m.tasks {
+			if tsk.ID == id {
+				m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
+				break
+			}
+		}
+		ctx, cancel := m.taskOperationContext()
+		err := m.taskwarriorClient().DoneContext(ctx, id)
+		cancel()
+		if err != nil {
+			m.showError(err)
+		}
+	}
+	m.reloadAndReport()
+	return false
 }
 
 // anyInputActive reports whether the user is currently entering text or
