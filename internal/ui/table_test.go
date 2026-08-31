@@ -1529,6 +1529,134 @@ func TestOpenURLHotkey(t *testing.T) {
 	}
 }
 
+// TestFindTaskURLWithQueryString covers the "o" hotkey's URL extraction for
+// URLs containing a "?" query string, in the three places a URL can appear:
+// mid-sentence in the description, as the entire description, and only in an
+// annotation. Regression test for a report that the "o" key silently did
+// nothing for URLs with a query string; extensive manual testing (mocked
+// export, real taskwarrior, and the compiled binary) could not reproduce a
+// failure, so this locks in the currently-correct behavior.
+func TestFindTaskURLWithQueryString(t *testing.T) {
+	const want = "https://github.com/bjarneo/ku?ref=terminaltrove"
+
+	tests := []struct {
+		name string
+		task task.Task
+		want string
+	}{
+		{
+			name: "query string mid-sentence",
+			task: task.Task{Description: "see " + want + " for details"},
+			want: want,
+		},
+		{
+			name: "query string is the entire description",
+			task: task.Task{Description: want},
+			want: want,
+		},
+		{
+			name: "query string with multiple params joined by &",
+			task: task.Task{Description: "see " + want + "&x=1 for details"},
+			want: want + "&x=1",
+		},
+		{
+			name: "url only in an annotation",
+			task: task.Task{
+				Description: "no url here",
+				Annotations: []task.Annotation{{Description: want}},
+			},
+			want: want,
+		},
+		{
+			name: "no url present",
+			task: task.Task{Description: "just a description with a ? in it, no url"},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := findTaskURL(&tt.task); got != tt.want {
+				t.Fatalf("findTaskURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOpenURLHotkeyWithQueryString is the end-to-end counterpart of
+// TestFindTaskURLWithQueryString: it drives the "o" hotkey through Update()
+// exactly like TestOpenURLHotkey, but with a URL containing a "?" query
+// string (the shape reported as broken).
+func TestOpenURLHotkeyWithQueryString(t *testing.T) {
+	tmp := t.TempDir()
+	taskPath := filepath.Join(tmp, "task")
+	openFile := filepath.Join(tmp, "open.txt")
+	browserPath := filepath.Join(tmp, "browser")
+
+	const url = "https://github.com/bjarneo/ku?ref=terminaltrove"
+	taskScript := "#!/bin/sh\n" +
+		"if echo \"$@\" | grep -q export; then\n" +
+		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"see " + url + "\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0}'\n" +
+		"  exit 0\n" +
+		"fi\n"
+	if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	browserScript := "#!/bin/sh\n" +
+		"echo $1 > " + openFile + "\n"
+	if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", tmp+":"+origPath)
+	t.Cleanup(func() { _ = os.Setenv("PATH", origPath) })
+
+	_ = os.Setenv("TASKDATA", tmp)
+	_ = os.Setenv("TASKRC", "/dev/null")
+	t.Cleanup(func() {
+		_ = os.Unsetenv("TASKDATA")
+		_ = os.Unsetenv("TASKRC")
+	})
+
+	m, err := New(nil, browserPath)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		t.Fatalf("open URL unexpectedly returned no command")
+	}
+	m = *mv.(*Model)
+
+	msg := cmd()
+	done, ok := msg.(openURLDoneMsg)
+	if !ok {
+		t.Fatalf("open URL command returned %T, want openURLDoneMsg", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("open URL command failed: %v", done.err)
+	}
+	mv, cmd = (&m).Update(done)
+	if cmd == nil {
+		t.Fatalf("successful open URL did not start blink")
+	}
+	m = *mv.(*Model)
+
+	if !waitForFile(openFile, 2*time.Second) {
+		t.Fatalf("browser file was not written")
+	}
+	data, err := os.ReadFile(openFile)
+	if err != nil {
+		t.Fatalf("read open: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != url {
+		t.Fatalf("browser not called with url: %q", data)
+	}
+}
+
 func TestDueDateHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
