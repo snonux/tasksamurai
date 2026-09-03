@@ -412,6 +412,7 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		pattern := m.searchInput.Value()
+		invalidMsg := ""
 		if pattern != "" {
 			// Check cache first
 			if cached, ok := cachedSearchRegex(pattern); ok {
@@ -423,7 +424,7 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					m.searchRegex = re
 				} else {
 					m.searchRegex = nil
-					m.statusMsg = fmt.Sprintf("Invalid regex: %v", err)
+					invalidMsg = fmt.Sprintf("Invalid regex: %v", err)
 				}
 			}
 		} else {
@@ -431,20 +432,12 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.searching = false
 		m.searchInput.Blur()
-		if !m.reloadAndReport() {
+		m.updateTableHeight()
+		if invalidMsg != "" {
+			m.statusMsg = invalidMsg
 			return m, nil
 		}
-		m.updateTableHeight()
-
-		if len(m.searchMatches) > 0 {
-			match := m.searchMatches[m.searchIndex]
-			prevRow := m.tbl.Cursor()
-			prevCol := m.tbl.ColumnCursor()
-			m.tbl.SetCursor(match.row)
-			m.tbl.SetColumnCursor(match.col)
-			m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-		}
-		return m, nil
+		return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
 
 	case "esc":
 		m.searching = false

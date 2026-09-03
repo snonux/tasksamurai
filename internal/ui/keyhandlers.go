@@ -295,15 +295,15 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		// During an in-flight Taskwarrior Cmd, skip the sync export reload so
-		// q can still quit without overlapping the live shell/mutate pipeline.
-		if !m.taskFlightBlocks() {
-			m.reloadAndReport()
-			return m, nil
+		// q with an active search clears search (like Esc), even while a
+		// Taskwarrior flight is busy — cancel the flight first so we do not
+		// quit the app on the first q.
+		if m.taskFlightBlocks() {
+			m.recreateTaskContext()
+			m.taskOpGen++
+			m.endTaskFlight()
 		}
-		m.cancelTaskOperations()
-		m.invalidateTaskFlights()
-		return m, tea.Quit
+		return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
 	}
 	m.cancelTaskOperations()
 	m.invalidateTaskFlights()
@@ -342,8 +342,7 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		m.reloadAndReport()
-		return m, nil
+		return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
 	}
 	return m, nil
 }

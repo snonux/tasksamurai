@@ -293,8 +293,18 @@ func TestAutoRefreshSkipsDuringFlightAndBlink(t *testing.T) {
 	}
 
 	m.endTaskFlight()
-	mv, _ = (&m).Update(autoRefreshMsg{gen: 1})
+	mv, cmd := (&m).Update(autoRefreshMsg{gen: 1})
 	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("auto-refresh should schedule work when idle")
+	}
+	if m.taskFlight != taskFlightReloading {
+		t.Fatalf("flight = %s, want reloading after auto-refresh tick", m.taskFlight)
+	}
+	if fake.exports != baseline {
+		t.Fatal("auto-refresh exported synchronously in Update")
+	}
+	drainCmds(t, &m, cmd)
 	if fake.exports != baseline+1 {
 		t.Fatalf("auto-refresh exports = %d, want %d", fake.exports, baseline+1)
 	}
@@ -431,7 +441,7 @@ func TestTaskFlightStateEndsCleanly(t *testing.T) {
 	}
 }
 
-func TestQuitWithSearchDuringFlightSkipsReload(t *testing.T) {
+func TestQuitWithSearchDuringFlightClearsSearchNotApp(t *testing.T) {
 	fake := &countingExportTaskwarrior{
 		fakeTaskwarrior: fakeTaskwarrior{
 			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
@@ -448,12 +458,16 @@ func TestQuitWithSearchDuringFlightSkipsReload(t *testing.T) {
 	}
 	_, cmd := m.handleQuitKey()
 	if cmd == nil {
-		t.Fatal("want tea.Quit while busy with search applied")
+		t.Fatal("want reload cmd when clearing search during flight")
 	}
-	if fake.exports != baseline {
-		t.Fatalf("quit reloaded during flight: exports %d -> %d", baseline, fake.exports)
+	if m.searchRegex != nil {
+		t.Fatal("q should clear search")
 	}
-	if m.taskFlightActive() {
-		t.Fatal("quit should clear flight")
+	if m.taskFlight != taskFlightReloading {
+		t.Fatalf("flight = %s, want reloading after search clear", m.taskFlight)
+	}
+	drainCmds(t, &m, cmd)
+	if fake.exports < baseline+1 {
+		t.Fatalf("expected reload export after clearing search")
 	}
 }

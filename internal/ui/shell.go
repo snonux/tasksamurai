@@ -210,25 +210,16 @@ func (m *Model) handleShellDone(msg shellDoneMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.endTaskFlight()
-	if !m.reloadAndReport() {
-		return m, nil
+	meta := reloadMeta{
+		reason:      reloadReasonShell,
+		selectedID:  msg.selectedID,
+		shellResult: msg.result,
+		shellErr:    msg.err,
 	}
-	if msg.selectedID > 0 {
-		_ = m.selectTaskByID(msg.selectedID)
+	if cmd := m.scheduleTaskReload("Reloading…", meta, true); cmd != nil {
+		return m, cmd
 	}
-
-	output := shellOutput(msg.result, msg.err)
-	if strings.TrimSpace(output) == "" {
-		if msg.err != nil {
-			m.showError(msg.err)
-		} else {
-			m.statusMsg = fmt.Sprintf("task %s completed", strings.Join(msg.result.Args, " "))
-		}
-		return m, nil
-	}
-
-	m.showShellOutput(shellTitle(msg.result, msg.err), output)
-	return m, nil
+	return m.finishShellReload(meta)
 }
 
 func (m *Model) handleShellCompletion(msg shellCompletionMsg) (tea.Model, tea.Cmd) {

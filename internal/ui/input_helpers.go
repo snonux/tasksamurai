@@ -39,6 +39,13 @@ func (m *Model) handleBusyFlightKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.shellOutputVisible {
 			return m.handleShellOutputMode(msg)
 		}
+		if m.searchRegex != nil && m.taskFlight == taskFlightReloading {
+			// Let Esc clear search by cancelling the in-flight export first.
+			m.recreateTaskContext()
+			m.taskOpGen++
+			m.endTaskFlight()
+			return m.handleEscapeKey()
+		}
 		return m, nil
 	}
 

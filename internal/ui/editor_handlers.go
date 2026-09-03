@@ -16,13 +16,12 @@ func (m *Model) handleEditDone(msg editDoneMsg) (tea.Model, tea.Cmd) {
 	if m.showUltra {
 		m.ultraFocusedID = m.editID
 	}
-	if !m.reloadAndReport() {
-		m.editID = 0
-		return m, nil
-	}
-	cmd := m.startBlink(m.editID, false)
+	editID := m.editID
 	m.editID = 0
-	return m, cmd
+	return m, m.scheduleTaskReload("Reloading…", reloadMeta{
+		reason: reloadReasonEdit,
+		editID: editID,
+	}, true)
 }
 
 // handleDescEditDone handles the completion of description editing

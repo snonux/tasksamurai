@@ -631,10 +631,7 @@ func (m *Model) handleFilter() (tea.Model, tea.Cmd) {
 
 func (m *Model) handleToggleAgentFilter() (tea.Model, tea.Cmd) {
 	m.filters = toggleAgentFilter(m.filters)
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-	return m, nil
+	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
 }
 
 func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
@@ -822,8 +819,7 @@ func toggleAgentFilter(filters []string) []string {
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
-	m.reloadAndReport()
-	return m, nil
+	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
 }
 
 func (m *Model) handleSearch() (tea.Model, tea.Cmd) {

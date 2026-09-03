@@ -172,6 +172,41 @@ func ctrlRKey() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
 }
 
+// drainCmds runs cmd (and any follow-up cmds returned by Update) so tests can
+// resolve async Taskwarrior reload/shell flights that Phase A schedules.
+// Auto-refresh Tick cmds are not followed, to avoid an infinite reschedule loop.
+func drainCmds(t *testing.T, m *Model, cmd tea.Cmd) {
+	t.Helper()
+	queue := make([]tea.Cmd, 0, 8)
+	if cmd != nil {
+		queue = append(queue, cmd)
+	}
+	for i := 0; i < 32 && len(queue) > 0; i++ {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		msg := c()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, batch...)
+			continue
+		}
+		if _, ok := msg.(autoRefreshMsg); ok {
+			// Do not feed ticks back into Update; that would reschedule forever.
+			continue
+		}
+		mv, next := m.Update(msg)
+		*m = *mv.(*Model)
+		if next != nil {
+			queue = append(queue, next)
+		}
+	}
+	if len(queue) > 0 {
+		t.Fatalf("drainCmds: command chain did not finish")
+	}
+}
+
 func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
 	fake := &fakeTaskwarrior{
 		tasks: []task.Task{
@@ -2427,11 +2462,12 @@ func TestAgentFilterHotkeyCanBeRebound(t *testing.T) {
 		t.Fatalf("3 unexpectedly changed filters: %#v", m.filters)
 	}
 
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: '7', Text: "7"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: '7', Text: "7"})
 	m = *mv.(*Model)
 	if !reflect.DeepEqual(m.filters, []string{"project:home", "+agent"}) {
 		t.Fatalf("7 did not toggle agent filter: %#v", m.filters)
 	}
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(logFile)
 	if err != nil {
@@ -2480,11 +2516,12 @@ func TestAgentFilterHotkeyNamedKeysAreCanonicalized(t *testing.T) {
 		t.Fatalf("canonical hotkey label: got %q want %q", got, "tab")
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
 	m = *mv.(*Model)
 	if !reflect.DeepEqual(m.filters, []string{"+agent"}) {
 		t.Fatalf("tab did not toggle agent filter: %#v", m.filters)
 	}
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(logFile)
 	if err != nil {
@@ -3415,10 +3452,8 @@ func TestUltraFocusedIDLifecycleAcrossNormalEditEntryAndReload(t *testing.T) {
 	m.editID = 1
 
 	mv, cmd = (&m).Update(editDoneMsg{})
-	if cmd != nil {
-		t.Fatalf("editDone unexpectedly returned a command")
-	}
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if m.ultraFocusedID != 0 {
 		t.Fatalf("normal edit completion left ultraFocusedID=%d, want 0", m.ultraFocusedID)
 	}
@@ -4380,8 +4415,7 @@ func TestShellPromptExecutesCommandAndShowsOutput(t *testing.T) {
 		t.Fatalf("enter did not return shell command")
 	}
 	m = *mv.(*Model)
-	mv, _ = (&m).Update(cmd())
-	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(runFile)
 	if err != nil {
@@ -4510,16 +4544,18 @@ func TestSearchExitHotkeys(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if m.searchRegex == nil {
 		t.Fatalf("search regex not set")
 	}
 
 	// escape search results with ESC
 	mp = &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	mv, cmd = mp.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if m.searchRegex != nil {
 		t.Fatalf("esc did not clear search")
 	}
@@ -4534,15 +4570,17 @@ func TestSearchExitHotkeys(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp = &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if m.searchRegex == nil {
 		t.Fatalf("search regex not set for q")
 	}
 
 	mp = &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	mv, cmd = mp.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if m.searchRegex != nil {
 		t.Fatalf("q did not clear search")
 	}
@@ -4560,8 +4598,9 @@ func TestUltraResizeSyncRefreshesNormalSearchSelection(t *testing.T) {
 
 	step := func(msg tea.Msg) {
 		t.Helper()
-		mv, _ := (&m).Update(msg)
+		mv, cmd := (&m).Update(msg)
 		m = *mv.(*Model)
+		drainCmds(t, &m, cmd)
 	}
 
 	step(tea.WindowSizeMsg{Width: 120, Height: 24})

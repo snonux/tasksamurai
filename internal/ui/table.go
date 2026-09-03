@@ -644,22 +644,9 @@ func (m *Model) reload() error {
 }
 
 func (m *Model) fetchTasks() (reloadData, error) {
-	// Always show only pending tasks by default.
-	filters := append([]string(nil), m.filters...)
-	filters = append(filters, "status:pending")
 	ctx, cancel := m.taskOperationContext()
 	defer cancel()
-
-	tasks, err := m.taskwarriorClient().Export(ctx, filters...)
-	if err != nil {
-		return reloadData{}, err
-	}
-
-	m.taskwarriorClient().SortTasks(tasks)
-	return reloadData{
-		tasks:          tasks,
-		ultraFilterIDs: m.ultraFilteredTaskIDs(),
-	}, nil
+	return exportReloadData(ctx, m.taskwarriorClient(), m.captureReloadSnapshot())
 }
 
 func (m *Model) processTasks(data *reloadData) {
@@ -761,6 +748,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDescEditDone(msg)
 	case shellDoneMsg:
 		return m.handleShellDone(msg)
+	case taskReloadDoneMsg:
+		return m.handleTaskReloadDone(msg)
 	case shellEditLaunchMsg:
 		if msg.err != nil {
 			m.showError(fmt.Errorf("preparing editor: %w", msg.err))
@@ -988,8 +977,12 @@ func (m *Model) handleAutoRefresh(msg autoRefreshMsg) (tea.Model, tea.Cmd) {
 	// Skip while editing, blinking, or any Taskwarrior flight is active.
 	// Do not use shellActive: it is cleared before shellRunCmd returns, so
 	// it is false while the shell task is still running — taskFlight covers that.
+	// The next auto-refresh tick is armed from handleTaskReloadDone (reloadReasonAuto)
+	// so this handler does not Batch a Tick together with the export Cmd.
 	if !m.anyInputActive() && m.blinkID == 0 && !m.taskFlightActive() {
-		m.reloadAndReport()
+		if cmd := m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonAuto}, false); cmd != nil {
+			return m, cmd
+		}
 	}
 	return m, autoRefreshCmd(interval, m.autoRefreshGen)
 }
