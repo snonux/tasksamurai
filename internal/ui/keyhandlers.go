@@ -295,13 +295,17 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		// q with an active search clears search (like Esc), even while a
-		// Taskwarrior flight is busy — cancel the flight first so we do not
-		// quit the app on the first q.
-		if m.taskFlightBlocks() {
+		// q with an active search clears search (like Esc). Cancel an in-flight
+		// reload so highlights refresh, but leave mutating/shell flights alone
+		// so partial delete/undo can still roll back and DoneMsg can apply.
+		if m.taskFlight == taskFlightReloading {
 			m.recreateTaskContext()
 			m.taskOpGen++
 			m.endTaskFlight()
+			return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
+		}
+		if m.taskFlightBlocks() {
+			return m, nil
 		}
 		return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
 	}

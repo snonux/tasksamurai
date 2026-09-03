@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -429,5 +430,109 @@ func TestPriorStatusForUndo(t *testing.T) {
 	}
 	if got := priorStatusForUndo("done"); got != "completed" {
 		t.Fatalf("done prior = %q", got)
+	}
+}
+
+func TestQuitWithSearchLeavesMutatingFlightIntact(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	m.searchRegex = mustCompileSearch("a")
+	liveGen := 0
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("delete should return cmd")
+	}
+	if m.taskFlight != taskFlightMutating {
+		t.Fatalf("flight = %s, want mutating", m.taskFlight)
+	}
+	liveGen = m.taskOpGen
+
+	mv, qcmd := (&m).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	m = *mv.(*Model)
+	if qcmd != nil {
+		t.Fatal("q should not start reload during mutating flight")
+	}
+	if m.searchRegex != nil {
+		t.Fatal("q should still clear search")
+	}
+	if m.taskFlight != taskFlightMutating || m.taskOpGen != liveGen {
+		t.Fatalf("mutating flight mutated: flight=%s gen=%d want %d", m.taskFlight, m.taskOpGen, liveGen)
+	}
+
+	msg := cmd().(deleteSeriesDoneMsg)
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if m.taskFlightActive() {
+		t.Fatalf("flight still active: %s", m.taskFlight)
+	}
+	if len(m.undoStack) != 1 {
+		t.Fatalf("undo stack = %d, want 1 after delete DoneMsg", len(m.undoStack))
+	}
+}
+
+func mustCompileSearch(pat string) *regexp.Regexp {
+	return regexp.MustCompile(pat)
+}
+
+func TestDeleteReloadFailureStillPushesUndo(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	fake.failExport = errors.New("export boom")
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	msg := cmd().(deleteSeriesDoneMsg)
+	if msg.err == nil {
+		t.Fatal("expected reload error")
+	}
+	if len(msg.restores) == 0 {
+		t.Fatal("reload failure after delete should still carry restores")
+	}
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if len(m.undoStack) != 1 {
+		t.Fatalf("stack = %d, want push after delete+reload failure", len(m.undoStack))
+	}
+}
+
+func TestUndoReloadFailurePopsStack(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	fake.failExport = errors.New("export boom")
+	m.pushUndoAction("delete", []undoRestore{{uuid: "u1", status: "pending"}})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+	msg := cmd().(undoActionDoneMsg)
+	if !msg.applied {
+		t.Fatal("expected applied after restores succeeded")
+	}
+	if msg.err == nil {
+		t.Fatal("expected reload error")
+	}
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if len(m.undoStack) != 0 {
+		t.Fatalf("stack = %d, want pop after undo+reload failure", len(m.undoStack))
 	}
 }

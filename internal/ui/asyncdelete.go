@@ -28,6 +28,7 @@ type undoActionDoneMsg struct {
 	blinkID int
 	data    reloadData
 	err     error
+	applied bool // true after restores succeeded, even if reload failed
 }
 
 // deleteSeriesCmd deletes tsk (and its recurring series when needed), reloads
@@ -83,7 +84,12 @@ func undoActionCmd(quitCtx context.Context, tw task.Taskwarrior, action undoActi
 		}
 		data, err := exportReloadData(opCtx, tw, snap)
 		if err != nil {
-			return undoActionDoneMsg{gen: gen, action: action, err: fmt.Errorf("reloading tasks: %w", err)}
+			return undoActionDoneMsg{
+				gen:     gen,
+				action:  action,
+				applied: true,
+				err:     fmt.Errorf("reloading tasks: %w", err),
+			}
 		}
 		blinkID := resolveUndoBlinkID(opCtx, tw, action, data.tasks, snap.filters)
 		return undoActionDoneMsg{
@@ -91,6 +97,7 @@ func undoActionCmd(quitCtx context.Context, tw task.Taskwarrior, action undoActi
 			action:  action,
 			blinkID: blinkID,
 			data:    data,
+			applied: true,
 		}
 	}
 }
@@ -165,12 +172,12 @@ func (m *Model) handleUndoActionDone(msg undoActionDoneMsg) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 	m.endTaskFlight()
+	if msg.applied && len(m.undoStack) > 0 {
+		m.undoStack = m.undoStack[:len(m.undoStack)-1]
+	}
 	if msg.err != nil {
 		m.showError(msg.err)
 		return m, nil
-	}
-	if len(m.undoStack) > 0 {
-		m.undoStack = m.undoStack[:len(m.undoStack)-1]
 	}
 	data := msg.data
 	m.processTasks(&data)

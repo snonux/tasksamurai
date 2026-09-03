@@ -459,17 +459,16 @@ func TestQuitWithSearchDuringFlightClearsSearchNotApp(t *testing.T) {
 		t.Fatal("arm shell")
 	}
 	_, cmd := m.handleQuitKey()
-	if cmd == nil {
-		t.Fatal("want reload cmd when clearing search during flight")
+	if cmd != nil {
+		t.Fatal("q must not start reload while a non-reload flight is live")
 	}
 	if m.searchRegex != nil {
 		t.Fatal("q should clear search")
 	}
-	if m.taskFlight != taskFlightReloading {
-		t.Fatalf("flight = %s, want reloading after search clear", m.taskFlight)
+	if m.taskFlight != taskFlightShell {
+		t.Fatalf("flight = %s, want shell left intact", m.taskFlight)
 	}
-	drainCmds(t, &m, cmd)
-	if fake.exports < baseline+1 {
-		t.Fatalf("expected reload export after clearing search")
+	if fake.exports != baseline {
+		t.Fatalf("unexpected export during search-clear: %d -> %d", baseline, fake.exports)
 	}
 }
