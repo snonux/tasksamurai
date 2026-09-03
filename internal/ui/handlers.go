@@ -433,11 +433,11 @@ func (m *Model) handleSearchMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.searching = false
 		m.searchInput.Blur()
 		m.updateTableHeight()
+		cmd := m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
 		if invalidMsg != "" {
 			m.statusMsg = invalidMsg
-			return m, nil
 		}
-		return m, m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonSearch}, true)
+		return m, cmd
 
 	case "esc":
 		m.searching = false

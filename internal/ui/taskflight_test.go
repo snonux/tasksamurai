@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -274,6 +275,7 @@ func TestAutoRefreshSkipsDuringFlightAndBlink(t *testing.T) {
 	baseline := fake.exports
 	m.autoRefresh = true
 	m.autoRefreshGen = 1
+	m.autoRefreshInterval = time.Nanosecond
 
 	m.blinkID = 9
 	mv, _ := (&m).Update(autoRefreshMsg{gen: 1})
