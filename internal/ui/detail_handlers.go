@@ -114,20 +114,11 @@ func (m *Model) handleDetailDeleteTask() (tea.Model, tea.Cmd) {
 	}
 	tsk := *t
 	m.closeDetailView()
-	count, recurring, err := m.deleteTaskWithUndo(tsk)
-	if err != nil {
-		m.showError(err)
+	if strings.TrimSpace(tsk.UUID) == "" {
+		m.showError(fmt.Errorf("task %d has no UUID", tsk.ID))
 		return m, nil
 	}
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-	if recurring {
-		m.statusMsg = fmt.Sprintf("Deleted %d recurring tasks", count)
-	} else {
-		m.statusMsg = "Deleted task"
-	}
-	return m, nil
+	return m, m.scheduleDeleteSeries(tsk)
 }
 
 // handleDetailUndo restores the most recently completed task from the undo

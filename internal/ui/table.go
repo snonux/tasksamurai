@@ -750,6 +750,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleShellDone(msg)
 	case taskReloadDoneMsg:
 		return m.handleTaskReloadDone(msg)
+	case deleteSeriesDoneMsg:
+		return m.handleDeleteSeriesDone(msg)
+	case undoActionDoneMsg:
+		return m.handleUndoActionDone(msg)
 	case shellEditLaunchMsg:
 		if msg.err != nil {
 			m.showError(fmt.Errorf("preparing editor: %w", msg.err))

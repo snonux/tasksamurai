@@ -1150,7 +1150,13 @@ func TestUndoHotkey(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("undo should return async cmd")
+	}
+	msg := cmd()
+	mv, _ = (&m).Update(msg)
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
@@ -1202,9 +1208,20 @@ func TestDeleteHotkeyUndo(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	if cmd == nil {
+		t.Fatal("delete should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("undo should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
@@ -1261,9 +1278,20 @@ func TestDeleteRecurringHotkeyUndo(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	if cmd == nil {
+		t.Fatal("delete should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
+
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("undo should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
@@ -1304,11 +1332,13 @@ func TestDeleteRecurringRollsBackCompletedDeletesAfterContextDeadline(t *testing
 	}
 	setupEnv(t, taskPath)
 
-	parentCtx, cancelParent := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancelParent()
-	m := Model{taskContext: parentCtx, cancelTaskContext: cancelParent, taskwarrior: task.NewTaskwarrior()}
+	quitCtx, cancelQuit := context.WithCancel(context.Background())
+	defer cancelQuit()
+	opCtx, cancelOp := context.WithTimeout(quitCtx, 100*time.Millisecond)
+	defer cancelOp()
 
-	count, recurring, err := m.deleteTaskWithUndo(task.Task{
+	tw := task.NewTaskwarrior()
+	restores, recurring, err := deleteSeries(opCtx, quitCtx, tw, task.Task{
 		ID:          1,
 		UUID:        "child",
 		Parent:      "parent",
@@ -1318,16 +1348,13 @@ func TestDeleteRecurringRollsBackCompletedDeletesAfterContextDeadline(t *testing
 		RType:       "periodic",
 	})
 	if err == nil {
-		t.Fatal("deleteTaskWithUndo returned nil error; want context deadline error")
+		t.Fatal("deleteSeries returned nil error; want context deadline error")
 	}
 	if !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 		t.Fatalf("error = %q, want context deadline exceeded", err)
 	}
-	if count != 0 || !recurring {
-		t.Fatalf("delete result = (%d, %v), want (0, true)", count, recurring)
-	}
-	if len(m.undoStack) != 0 {
-		t.Fatalf("undo stack length = %d, want 0", len(m.undoStack))
+	if restores != nil || !recurring {
+		t.Fatalf("delete result = (%v, %v), want (nil, true)", restores, recurring)
 	}
 
 	data, err := os.ReadFile(logFile)
@@ -1370,8 +1397,8 @@ func TestDeleteRecurringReportsRollbackFailure(t *testing.T) {
 	}
 	setupEnv(t, taskPath)
 
-	m := Model{taskwarrior: task.NewTaskwarrior()}
-	count, recurring, err := m.deleteTaskWithUndo(task.Task{
+	tw := task.NewTaskwarrior()
+	restores, recurring, err := deleteSeries(context.Background(), context.Background(), tw, task.Task{
 		ID:          1,
 		UUID:        "child",
 		Parent:      "parent",
@@ -1381,7 +1408,7 @@ func TestDeleteRecurringReportsRollbackFailure(t *testing.T) {
 		RType:       "periodic",
 	})
 	if err == nil {
-		t.Fatal("deleteTaskWithUndo returned nil error; want rollback failure")
+		t.Fatal("deleteSeries returned nil error; want rollback failure")
 	}
 	if !strings.Contains(err.Error(), "rollback failed") {
 		t.Fatalf("error = %q, want rollback failure detail", err)
@@ -1389,11 +1416,8 @@ func TestDeleteRecurringReportsRollbackFailure(t *testing.T) {
 	if !strings.Contains(err.Error(), "restoring task child to pending") {
 		t.Fatalf("error = %q, want failed restore context", err)
 	}
-	if count != 0 || !recurring {
-		t.Fatalf("delete result = (%d, %v), want (0, true)", count, recurring)
-	}
-	if len(m.undoStack) != 0 {
-		t.Fatalf("undo stack length = %d, want 0", len(m.undoStack))
+	if restores != nil || !recurring {
+		t.Fatalf("delete result = (%v, %v), want (nil, true)", restores, recurring)
 	}
 }
 
@@ -1431,7 +1455,12 @@ func TestDeleteHotkeyInUltraMode(t *testing.T) {
 
 	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	m = *mv.(*Model)
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	if cmd == nil {
+		t.Fatal("ultra delete should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
 	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
@@ -1480,11 +1509,16 @@ func TestDeleteHotkeyInDetailMode(t *testing.T) {
 	if !m.showTaskDetail {
 		t.Fatalf("enter did not open detail mode")
 	}
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
 	if m.showTaskDetail {
 		t.Fatalf("delete did not close detail mode")
 	}
+	if cmd == nil {
+		t.Fatal("detail delete should return async cmd")
+	}
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
 
 	data, err := os.ReadFile(logFile)
 	if err != nil {

@@ -211,6 +211,21 @@ Specify:
   `rollbackUndoRestores` today uses `context.Background()` — switch to a
   timeout tied to quit policy so rollback is not immortal.
 
+**Phase D consistency (implemented):**
+
+- Delete and undo each run as **one** `taskFlightMutating` Cmd (mutate + export).
+- **Delete partial failure:** roll back already-deleted UUIDs via
+  `rollbackUndoRestores(quitCtx, …)` with `WithTimeout(quitCtx,
+  taskOperationTimeout)` — cancellable on quit, not `context.Background()`.
+  Undo stack is unchanged on mutate failure; pushed only in `*DoneMsg` after
+  successful deletes (also when reload fails after a successful delete, so `U`
+  can still restore).
+- **Undo partial failure:** roll already-restored UUIDs back to pre-undo status
+  (`deleted` for delete undos, `completed` for done undos). Stack is popped
+  only on successful `undoActionDoneMsg` (snapshot taken at schedule time;
+  entry stays on the stack while in flight).
+- Cmds take value snapshots only; Update checks gen + `taskFlightMutating`.
+
 ### 7. Filter apply (Phase B detail)
 
 Snapshot previous filters → schedule reload Cmd with new filters → on success

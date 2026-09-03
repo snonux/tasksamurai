@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -79,22 +77,11 @@ func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
 	if tsk == nil {
 		return m, nil
 	}
-
-	count, recurring, err := m.deleteTaskWithUndo(*tsk)
-	if err != nil {
-		m.showError(err)
+	if strings.TrimSpace(tsk.UUID) == "" {
+		m.showError(fmt.Errorf("task %d has no UUID", tsk.ID))
 		return m, nil
 	}
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-
-	if recurring {
-		m.statusMsg = fmt.Sprintf("Deleted %d recurring tasks", count)
-	} else {
-		m.statusMsg = "Deleted task"
-	}
-	return m, nil
+	return m, m.scheduleDeleteSeries(*tsk)
 }
 
 // handleOpenURL implements the "o" key. URLs take precedence over file
@@ -272,75 +259,7 @@ func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
 	if len(m.undoStack) == 0 {
 		return m, nil
 	}
-
-	action := m.undoStack[len(m.undoStack)-1]
-	ctx, cancel := m.taskOperationContext()
-	for _, restore := range action.restores {
-		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restore.uuid, restore.status); err != nil {
-			cancel()
-			m.showError(err)
-			return m, nil
-		}
-	}
-	cancel()
-	m.undoStack = m.undoStack[:len(m.undoStack)-1]
-
-	// Reload the task list to get the updated task with its new ID
-	if err := m.reload(); err != nil {
-		m.showError(err)
-		return m, nil
-	}
-
-	// Find the task ID for blinking
-	var id int
-	var found bool
-	for _, restore := range action.restores {
-		for _, tsk := range m.tasks {
-			if tsk.UUID == restore.uuid {
-				id = tsk.ID
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
-	}
-
-	// If task not found or has ID 0, try to get it directly from Taskwarrior
-	if !found || id == 0 {
-		// Use task export with UUID filter to get the specific task
-		for _, restore := range action.restores {
-			filters := []string{restore.uuid}
-			if m.filters != nil {
-				filters = append(filters, m.filters...)
-			}
-			filters = append(filters, "status:"+restore.status)
-
-			ctx, cancel := m.taskOperationContext()
-			tasks, err := m.taskwarriorClient().Export(ctx, filters...)
-			cancel()
-			if err == nil && len(tasks) > 0 {
-				id = tasks[0].ID
-				// Also update our local task list
-				for i, tsk := range m.tasks {
-					if tsk.UUID == restore.uuid {
-						m.tasks[i].ID = id
-						break
-					}
-				}
-				break
-			}
-		}
-	}
-
-	// If we still don't have a valid ID, don't try to blink
-	if id == 0 {
-		m.statusMsg = undoStatus(action)
-		return m, nil
-	}
-
-	return m, m.startBlink(id, false)
+	return m, m.scheduleUndoAction()
 }
 
 func (m *Model) getTaskForDelete() *task.Task {
@@ -348,50 +267,6 @@ func (m *Model) getTaskForDelete() *task.Task {
 		return m.currentDetailTask()
 	}
 	return m.getTaskAtCursor()
-}
-
-func (m *Model) deleteTaskWithUndo(tsk task.Task) (int, bool, error) {
-	if strings.TrimSpace(tsk.UUID) == "" {
-		return 0, false, fmt.Errorf("task %d has no UUID", tsk.ID)
-	}
-
-	recurring := isRecurringTask(tsk)
-	tasks := []task.Task{tsk}
-	ctx, cancel := m.taskOperationContext()
-	defer cancel()
-	if recurring {
-		series, err := m.taskwarriorClient().RecurringSeries(ctx, recurringRootUUID(tsk))
-		if err != nil {
-			return 0, true, fmt.Errorf("loading recurring series: %w", err)
-		}
-		tasks = mergeTasksByUUID(series, tsk)
-	}
-
-	tasks = deleteOrder(tasks, recurringRootUUID(tsk))
-	restores := make([]undoRestore, 0, len(tasks))
-	for _, candidate := range tasks {
-		if strings.TrimSpace(candidate.UUID) == "" {
-			continue
-		}
-		restores = append(restores, undoRestore{uuid: candidate.UUID, status: undoStatusForTask(candidate)})
-	}
-	if len(restores) == 0 {
-		return 0, recurring, fmt.Errorf("no task UUIDs to delete")
-	}
-
-	completed := make([]undoRestore, 0, len(restores))
-	for _, restore := range restores {
-		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restore.uuid, "deleted"); err != nil {
-			if rollbackErr := m.rollbackUndoRestores(completed); rollbackErr != nil {
-				return 0, recurring, fmt.Errorf("deleting task %s: %w; rollback failed: %w", restore.uuid, err, rollbackErr)
-			}
-			return 0, recurring, fmt.Errorf("deleting task %s: %w", restore.uuid, err)
-		}
-		completed = append(completed, restore)
-	}
-
-	m.pushUndoAction("delete", restores)
-	return len(restores), recurring, nil
 }
 
 func (m *Model) pushUndoAction(label string, restores []undoRestore) {
@@ -452,19 +327,6 @@ func undoStatusForTask(tsk task.Task) string {
 		return "pending"
 	}
 	return tsk.Status
-}
-
-func (m *Model) rollbackUndoRestores(restores []undoRestore) error {
-	ctx, cancel := context.WithTimeout(context.Background(), taskOperationTimeout)
-	defer cancel()
-
-	var errs []error
-	for i := len(restores) - 1; i >= 0; i-- {
-		if err := m.taskwarriorClient().SetStatusUUIDContext(ctx, restores[i].uuid, restores[i].status); err != nil {
-			errs = append(errs, fmt.Errorf("restoring task %s to %s: %w", restores[i].uuid, restores[i].status, err))
-		}
-	}
-	return errors.Join(errs...)
 }
 
 func undoStatus(action undoAction) string {
