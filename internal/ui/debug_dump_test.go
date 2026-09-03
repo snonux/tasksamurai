@@ -55,7 +55,7 @@ func TestDumpStateWritesModeFlagsAndTaskSummary(t *testing.T) {
 	}
 	content := string(data)
 
-	for _, want := range []string{"tagsEditing=true", "tasks=1", "UI State Dump"} {
+	for _, want := range []string{"tagsEditing=true", "tasks=1", "UI State Dump", "taskFlight=idle", "taskOpGen="} {
 		if !strings.Contains(content, want) {
 			t.Errorf("dump missing %q; got:\n%s", want, content)
 		}

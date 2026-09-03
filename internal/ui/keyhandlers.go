@@ -295,10 +295,18 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.searchRegex = nil
 		m.searchMatches = nil
 		m.searchIndex = 0
-		m.reloadAndReport()
-		return m, nil
+		// During an in-flight Taskwarrior Cmd, skip the sync export reload so
+		// q can still quit without overlapping the live shell/mutate pipeline.
+		if !m.taskFlightBlocks() {
+			m.reloadAndReport()
+			return m, nil
+		}
+		m.cancelTaskOperations()
+		m.invalidateTaskFlights()
+		return m, tea.Quit
 	}
 	m.cancelTaskOperations()
+	m.invalidateTaskFlights()
 	return m, tea.Quit
 }
 

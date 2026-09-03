@@ -18,13 +18,23 @@ import (
 
 const shellCommandTimeout = 2 * time.Minute
 
-func shellRunCmd(parent context.Context, tw task.Taskwarrior, line string, selectedID int) tea.Cmd {
+func shellRunCmd(parent context.Context, tw task.Taskwarrior, line string, selectedID int, gen int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, shellCommandTimeout)
 		defer cancel()
 
 		result, err := tw.RunShellLine(ctx, line)
-		return shellDoneMsg{result: result, err: err, selectedID: selectedID}
+		return shellDoneMsg{result: result, err: err, selectedID: selectedID, gen: gen}
+	}
+}
+
+// shellCompletionLoadCmd loads Taskwarrior completion sources without closing
+// over *Model. Callers must snapshot the Taskwarrior client and gen first.
+func shellCompletionLoadCmd(parent context.Context, tw task.Taskwarrior, gen int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, 2*time.Second)
+		defer cancel()
+		return shellCompletionMsg{sources: tw.LoadCompletionSources(ctx), gen: gen}
 	}
 }
 
@@ -152,6 +162,15 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.shellActive = false
 			m.shellInput.Blur()
 			m.updateTableHeight()
+			m.cancelCompletingFlight()
+			return m, nil
+		}
+
+		if m.rejectIfBusy() {
+			return m, nil
+		}
+		if !m.beginTaskFlight(taskFlightShell, "Running task…") {
+			m.statusMsg = "Busy: could not start shell command"
 			return m, nil
 		}
 
@@ -160,11 +179,13 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shellActive = false
 		m.shellInput.Blur()
 		m.updateTableHeight()
-		return m, shellRunCmd(m.shellCommandContext(), m.taskwarriorClient(), line, selectedID)
+		gen := m.taskOpGen
+		return m, shellRunCmd(m.shellCommandContext(), m.taskwarriorClient(), line, selectedID, gen)
 	case "esc":
 		m.shellActive = false
 		m.shellInput.Blur()
 		m.updateTableHeight()
+		m.cancelCompletingFlight()
 		return m, nil
 	case "ctrl+o":
 		// Pop the current prompt text out into $EDITOR. The TUI suspends while
@@ -185,6 +206,10 @@ func (m *Model) handleShellMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleShellDone(msg shellDoneMsg) (tea.Model, tea.Cmd) {
+	if !m.matchesTaskOpGen(msg.gen) || m.taskFlight != taskFlightShell {
+		return m, nil
+	}
+	m.endTaskFlight()
 	if !m.reloadAndReport() {
 		return m, nil
 	}
@@ -207,6 +232,10 @@ func (m *Model) handleShellDone(msg shellDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleShellCompletion(msg shellCompletionMsg) (tea.Model, tea.Cmd) {
+	if !m.matchesTaskOpGen(msg.gen) || m.taskFlight != taskFlightCompleting {
+		return m, nil
+	}
+	m.endTaskFlight()
 	m.shellCompletion = msg.sources
 	m.shellCompletionLoad = false
 	if m.shellActive {
@@ -318,12 +347,17 @@ func (m *Model) loadShellCompletionsCmd() tea.Cmd {
 	if m.shellCompletionLoad || len(m.shellCompletion.Commands) > 0 {
 		return nil
 	}
-	m.shellCompletionLoad = true
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		return shellCompletionMsg{sources: m.taskwarriorClient().LoadCompletionSources(ctx)}
+	if m.taskFlightBlocks() {
+		return nil
 	}
+	if !m.beginTaskFlight(taskFlightCompleting, "") {
+		return nil
+	}
+	m.shellCompletionLoad = true
+	gen := m.taskOpGen
+	tw := m.taskwarriorClient()
+	parent := m.shellCommandContext()
+	return shellCompletionLoadCmd(parent, tw, gen)
 }
 
 func (m *Model) shellLineSuggestions() []string {

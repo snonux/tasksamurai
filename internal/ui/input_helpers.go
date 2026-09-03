@@ -28,6 +28,40 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleBusyFlightKey restricts keys while a blocking Taskwarrior flight
+// (shell/mutate/reload) is in progress. Navigation and quit remain available;
+// other keys get a Busy status so sync Update-path task calls cannot overlap.
+func (m *Model) handleBusyFlightKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "Q":
+		return m.handleQuitKey()
+	case "esc":
+		if m.shellOutputVisible {
+			return m.handleShellOutputMode(msg)
+		}
+		return m, nil
+	}
+
+	if m.shellOutputVisible {
+		return m.handleShellOutputMode(msg)
+	}
+	if m.showUltra {
+		return m.handleUltraBlinkingState(msg)
+	}
+
+	prevRow := m.tbl.Cursor()
+	prevCol := m.tbl.ColumnCursor()
+	var cmd tea.Cmd
+	m.tbl, cmd = m.tbl.Update(msg)
+	if prevRow != m.tbl.Cursor() || prevCol != m.tbl.ColumnCursor() {
+		m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
+		return m, cmd
+	}
+	// Non-navigation key while busy.
+	_ = m.rejectIfBusy()
+	return m, nil
+}
+
 func (m *Model) handleUltraBlinkingState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":

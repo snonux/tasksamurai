@@ -1166,6 +1166,7 @@ func (m *Model) handleUltraExitKey(quit bool) (tea.Model, tea.Cmd) {
 	if m.ultraStartup {
 		if quit {
 			m.cancelTaskOperations()
+			m.invalidateTaskFlights()
 			return m, tea.Quit
 		}
 		return m, nil

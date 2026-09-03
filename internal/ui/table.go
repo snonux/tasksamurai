@@ -240,6 +240,7 @@ type Model struct {
 	helpState        // help-screen viewport state
 	shellState       // Taskwarrior command prompt and output panel
 	editState        // inline field editing (see editState)
+	taskFlightState  // single-flight Taskwarrior gate (see taskFlightState)
 
 	cellExpanded bool
 
@@ -300,10 +301,12 @@ type shellDoneMsg struct {
 	result     task.RunResult
 	err        error
 	selectedID int
+	gen        int
 }
 
 type shellCompletionMsg struct {
 	sources task.CompletionSources
+	gen     int
 }
 
 type openURLDoneMsg struct {
@@ -784,6 +787,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.blinkID != 0 {
 			return m.handleBlinkingState(msg)
 		}
+		// While a blocking Taskwarrior flight is running, only allow navigation
+		// and quit so sync mutate/reload paths cannot overlap the in-flight Cmd.
+		if m.taskFlightBlocks() {
+			return m.handleBusyFlightKey(msg)
+		}
 		if m.shellOutputVisible {
 			return m.handleShellOutputMode(msg)
 		}
@@ -977,7 +985,10 @@ func (m *Model) handleAutoRefresh(msg autoRefreshMsg) (tea.Model, tea.Cmd) {
 	if interval <= 0 {
 		interval = autoRefreshDefaultInterval
 	}
-	if !m.anyInputActive() {
+	// Skip while editing, blinking, or any Taskwarrior flight is active.
+	// Do not use shellActive: it is cleared before shellRunCmd returns, so
+	// it is false while the shell task is still running — taskFlight covers that.
+	if !m.anyInputActive() && m.blinkID == 0 && !m.taskFlightActive() {
 		m.reloadAndReport()
 	}
 	return m, autoRefreshCmd(interval, m.autoRefreshGen)

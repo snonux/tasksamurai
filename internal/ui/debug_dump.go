@@ -28,6 +28,7 @@ func (m *Model) dumpState() (tea.Model, tea.Cmd) {
 
 	m.writeStateHeader(f)
 	m.writeModeFlags(f)
+	m.writeTaskFlight(f)
 	m.writeTaskSummary(f)
 	m.writeWindowInfo(f)
 
@@ -59,6 +60,14 @@ func (m *Model) writeModeFlags(w io.Writer) {
 		m.prioritySelecting, m.filterEditing, m.addingTask, m.searching)
 	fmt.Fprintf(w, "cellExpanded=%v disco=%v compactView=%v\n", m.cellExpanded, m.disco, m.compactView)
 	fmt.Fprintf(w, "autoRefresh=%v autoRefreshInterval=%s autoRefreshGen=%d\n\n", m.autoRefresh, m.autoRefreshInterval, m.autoRefreshGen)
+}
+
+// writeTaskFlight dumps the single-flight Taskwarrior gate. A stuck non-idle
+// flight with no Cmd completing looks like a blink wedge (keys rejected as
+// Busy, or auto-refresh skipped) without an obvious mode flag.
+func (m *Model) writeTaskFlight(w io.Writer) {
+	fmt.Fprintln(w, "-- Task flight (single-flight Taskwarrior gate) --")
+	fmt.Fprintf(w, "taskFlight=%s taskFlightLabel=%q taskOpGen=%d\n\n", m.taskFlight.String(), m.taskFlightLabel, m.taskOpGen)
 }
 
 func (m *Model) writeTaskSummary(w io.Writer) {
