@@ -91,7 +91,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 			Title: "Task Management",
 			Items: []uihelp.Item{
 				{Key: "Enter, e, E", Desc: "edit selected task"},
-				{Key: "o", Desc: "open URL from description"},
+				{Key: "o", Desc: "open URL or @file from description or annotations"},
 				{Key: "s", Desc: "start/stop task"},
 				{Key: "d", Desc: "mark task done"},
 				{Key: "D", Desc: "delete task/recurring series"},

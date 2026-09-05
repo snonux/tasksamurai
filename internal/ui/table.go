@@ -1174,7 +1174,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "J", Desc: "edit project"},
 				{Key: "T", Desc: "convert first tag to project"},
 				{Key: "a, A", Desc: "add/replace annotations"},
-				{Key: "o", Desc: "open URL from description"},
+				{Key: "o", Desc: "open URL or @file from description or annotations"},
 			},
 		},
 		{

@@ -1726,6 +1726,144 @@ func TestOpenURLHotkeyWithQueryString(t *testing.T) {
 	}
 }
 
+// TestOpenHotkeyMatrix covers the "o" hotkey across normal, detail, and ultra
+// views for URLs and @file references living in either the description or an
+// annotation. URL cases run the returned command; @file cases only assert a
+// non-nil tea.ExecProcess cmd (running it would suspend the TUI).
+func TestOpenHotkeyMatrix(t *testing.T) {
+	const exampleURL = "https://example.com/matrix"
+
+	type kind int
+	const (
+		kindURL kind = iota
+		kindFile
+	)
+
+	type view int
+	const (
+		viewNormal view = iota
+		viewDetail
+		viewUltra
+	)
+
+	type loc int
+	const (
+		locDescription loc = iota
+		locAnnotation
+	)
+
+	for _, tc := range []struct {
+		name string
+		view view
+		kind kind
+		loc  loc
+	}{
+		{"normal url description", viewNormal, kindURL, locDescription},
+		{"normal url annotation", viewNormal, kindURL, locAnnotation},
+		{"normal file description", viewNormal, kindFile, locDescription},
+		{"normal file annotation", viewNormal, kindFile, locAnnotation},
+		{"detail url description", viewDetail, kindURL, locDescription},
+		{"detail url annotation", viewDetail, kindURL, locAnnotation},
+		{"detail file description", viewDetail, kindFile, locDescription},
+		{"detail file annotation", viewDetail, kindFile, locAnnotation},
+		{"ultra url description", viewUltra, kindURL, locDescription},
+		{"ultra url annotation", viewUltra, kindURL, locAnnotation},
+		{"ultra file description", viewUltra, kindFile, locDescription},
+		{"ultra file annotation", viewUltra, kindFile, locAnnotation},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			taskPath := filepath.Join(tmp, "task")
+			browserPath := filepath.Join(tmp, "browser")
+			openLog := filepath.Join(tmp, "open.txt")
+			notePath := filepath.Join(tmp, "note.md")
+			if err := os.WriteFile(notePath, []byte("notes"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			desc := "plain task"
+			annJSON := "[]"
+			switch {
+			case tc.kind == kindURL && tc.loc == locDescription:
+				desc = "see " + exampleURL
+			case tc.kind == kindURL && tc.loc == locAnnotation:
+				annJSON = `[{"entry":"","description":"see ` + exampleURL + `"}]`
+			case tc.kind == kindFile && tc.loc == locDescription:
+				desc = "edit @" + notePath
+			case tc.kind == kindFile && tc.loc == locAnnotation:
+				annJSON = `[{"entry":"","description":"@` + notePath + `"}]`
+			}
+
+			taskJSON := fmt.Sprintf(
+				`{"id":1,"uuid":"1","description":%q,"status":"pending","entry":"","priority":"","urgency":0,"annotations":%s}`,
+				desc, annJSON,
+			)
+			taskScript := "#!/bin/sh\n" +
+				"if echo \"$@\" | grep -q export; then\n" +
+				"  cat <<'EOF'\n" + taskJSON + "\nEOF\n" +
+				"  exit 0\n" +
+				"fi\n"
+			if err := os.WriteFile(taskPath, []byte(taskScript), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			browserScript := "#!/bin/sh\n" +
+				"echo \"$1\" > " + openLog + "\n"
+			if err := os.WriteFile(browserPath, []byte(browserScript), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			setupEnv(t, taskPath)
+
+			m, err := New(nil, browserPath)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			if len(m.tasks) == 0 {
+				t.Fatal("expected at least one loaded task")
+			}
+
+			switch tc.view {
+			case viewDetail:
+				m.showTaskDetail = true
+				m.setCurrentTaskDetail(&m.tasks[0])
+			case viewUltra:
+				m.showUltra = true
+				m.ultraCursor = 0
+				m.tbl.SetCursor(0)
+			}
+
+			mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+			if cmd == nil {
+				t.Fatalf("o returned no command")
+			}
+			m = *mv.(*Model)
+
+			if tc.kind == kindFile {
+				// tea.ExecProcess — do not invoke in tests.
+				return
+			}
+
+			msg := cmd()
+			done, ok := msg.(openURLDoneMsg)
+			if !ok {
+				t.Fatalf("open command returned %T, want openURLDoneMsg", msg)
+			}
+			if done.err != nil {
+				t.Fatalf("open URL failed: %v", done.err)
+			}
+			if !waitForFile(openLog, 2*time.Second) {
+				t.Fatal("browser log was not written")
+			}
+			data, err := os.ReadFile(openLog)
+			if err != nil {
+				t.Fatalf("read open log: %v", err)
+			}
+			if strings.TrimSpace(string(data)) != exampleURL {
+				t.Fatalf("browser got %q, want %q", data, exampleURL)
+			}
+		})
+	}
+}
+
 func TestDueDateHotkey(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
@@ -3116,7 +3254,7 @@ func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	if !strings.Contains(view, "exit ultra mode") {
 		t.Fatalf("ultra help content missing ultra exit binding: %q", view)
 	}
-	if !strings.Contains(view, "open URL from description") {
+	if !strings.Contains(view, "open URL or @file from description or annotations") {
 		t.Fatalf("ultra help content missing open-url binding: %q", view)
 	}
 	if strings.Contains(view, "edit current field") {
