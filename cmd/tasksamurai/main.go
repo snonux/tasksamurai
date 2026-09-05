@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
 	"runtime"
 
+	"github.com/snonux/tasksamurai/internal"
 	"github.com/snonux/tasksamurai/internal/debug"
 	"github.com/snonux/tasksamurai/internal/task"
 	"github.com/snonux/tasksamurai/internal/ui"
@@ -21,6 +21,7 @@ func main() {
 		browserCmdDefault = "open"
 	}
 
+	version := flag.Bool("version", false, "print version and exit")
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
 	browserCmd := flag.String("browser-cmd", browserCmdDefault, "command used to open URLs")
@@ -33,6 +34,11 @@ func main() {
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
+
+	if *version {
+		fmt.Println(internal.Version)
+		return
+	}
 
 	if err := task.SetDebugLog(*debugLog); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to enable debug log:", err)

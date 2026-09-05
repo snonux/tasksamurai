@@ -80,6 +80,7 @@ tasksamurai -- -excludetag +includetag
 
 ### Flags
 
+- `--version`: print the Task Samurai version and exit
 - `--browser-cmd <command>`: command used to open URLs (default: firefox on Linux, open on macOS)
 - `--youtube-browser-cmd <command>`: command used to open `youtube.com` / `youtu.be` links with the `o` key (default: `chromium`, so YouTube videos play in a browser better suited for them than the general `--browser-cmd` default). Set it to `""` to route YouTube links through `--browser-cmd` like any other URL.
 - `--agent-hotkey <key>`: hotkey used to toggle the `+agent` / `-agent` filter (default: `3`)
