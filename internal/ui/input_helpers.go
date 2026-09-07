@@ -142,6 +142,17 @@ func (m *Model) getSelectedTaskID() (int, error) {
 	return t.ID, nil
 }
 
+// getSelectedTask extracts the task for the row under the cursor, mirroring
+// getSelectedTaskID but returning the whole Task so callers can also derive
+// the CLI address (taskAddress) for mutations.
+func (m *Model) getSelectedTask() (*task.Task, error) {
+	t := m.getTaskAtCursor()
+	if t == nil {
+		return nil, fmt.Errorf("no row selected")
+	}
+	return t, nil
+}
+
 // getTaskAtCursor returns the task at the current cursor position
 func (m *Model) getTaskAtCursor() *task.Task {
 	cursor := m.tbl.Cursor()

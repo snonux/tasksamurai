@@ -86,12 +86,13 @@ type undoAction struct {
 // blinkState holds row-level blink animation state for the task table.
 // A blink cycles the selected row's highlight on/off after a modification.
 type blinkState struct {
-	blinkID       int  // task ID currently being blinked (0 = none)
-	blinkRow      int  // row index in the table (-1 if not found)
-	blinkOn       bool // whether the highlight is currently inverted
-	blinkCount    int  // number of blink cycles completed so far
-	blinkMarkDone bool // whether to mark the task done after blinking
-	blinkEnabled  bool // when false, skip animation and complete immediately
+	blinkID       int    // task ID currently being blinked (0 = none)
+	blinkAddr     string // CLI address of the blinked task (UUID preferred)
+	blinkRow      int    // row index in the table (-1 if not found)
+	blinkOn       bool   // whether the highlight is currently inverted
+	blinkCount    int    // number of blink cycles completed so far
+	blinkMarkDone bool   // whether to mark the task done after blinking
+	blinkEnabled  bool   // when false, skip animation and complete immediately
 }
 
 // autoRefreshState drives the periodic background reload of the task list.
@@ -182,31 +183,42 @@ type shellState struct {
 // Each editing mode (annotate, desc, tags, …) is mutually exclusive;
 // clearEditingModes resets them all before activating a new one.
 type editState struct {
-	annotating         bool
+	annotating bool
+	// annotateID keys blink targeting and detail-view highlighting; the
+	// parallel annotateAddr is what mutations send to the task CLI (UUID
+	// preferred, legacy numeric ID otherwise) so addressing survives
+	// Taskwarrior's working-set renumbering. The same pairing applies to
+	// every other field-editing mode below.
 	annotateID         int
+	annotateAddr       string
 	annotateInput      textinput.Model
 	replaceAnnotations bool
 
 	descEditing bool
 	descID      int
+	descAddr    string
 	descInput   textinput.Model
 
 	tagsEditing bool
 	tagsID      int
+	tagsAddr    string
 	tagsInput   textinput.Model
 
 	dueEditing bool
 	dueID      int
+	dueAddr    string
 	dueDate    time.Time
 
 	recurEditing bool
 	recurID      int
+	recurAddr    string
 	recurSeries  bool
 	recurRoot    string
 	recurInput   textinput.Model
 
 	projEditing bool
 	projID      int
+	projAddr    string
 	projInput   textinput.Model
 
 	filterEditing bool
@@ -217,6 +229,7 @@ type editState struct {
 
 	prioritySelecting bool
 	priorityID        int
+	priorityAddr      string
 	priorityIndex     int
 
 	editID int // task ID being edited in an external editor
@@ -395,9 +408,11 @@ func prepareDescriptionTempFile(description string, newTempFile func() (descript
 }
 
 // editCmd returns a command that edits the task and sends an
-// editDoneMsg once the process is complete.
-func (m *Model) editCmd(id int) tea.Cmd {
-	c := m.taskwarriorClient().EditCmd(id)
+// editDoneMsg once the process is complete. addr is the task's CLI address
+// (taskAddress) — the UUID, so the editor opens the intended task even if
+// Taskwarrior renumbered IDs since the in-memory list was loaded.
+func (m *Model) editCmd(addr string) tea.Cmd {
+	c := m.taskwarriorClient().EditCmd(addr)
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
 }
 
@@ -518,13 +533,14 @@ func (m *Model) finishBlinkImmediately(id int, markDone bool) {
 			}
 		}
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().DoneContext(ctx, id)
+		err := m.taskwarriorClient().DoneContext(ctx, m.blinkDoneAddress(id))
 		cancel()
 		if err != nil {
 			m.showError(err)
 		}
 	}
 	m.blinkID = 0
+	m.blinkAddr = ""
 	m.blinkRow = -1
 	m.blinkOn = false
 	m.blinkCount = 0
@@ -532,8 +548,23 @@ func (m *Model) finishBlinkImmediately(id int, markDone bool) {
 	m.reloadAndReport()
 }
 
+// blinkDoneAddress returns the address the deferred done command should
+// target: the address captured when the blink started, falling back to the
+// raw numeric ID (or an invalid marker) only when no address was captured.
+func (m *Model) blinkDoneAddress(id int) string {
+	if m.blinkAddr != "" {
+		return m.blinkAddr
+	}
+	return strconv.Itoa(id)
+}
+
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 	m.blinkID = id
+	// Capture the CLI address now: Taskwarrior renumbers pending IDs whenever
+	// the working set changes, so by the time the blink ends (or a reload in
+	// between re-rendered the list) the numeric ID may no longer match the
+	// CLI's numbering. The deferred done must hit the task the user saw.
+	m.blinkAddr = m.taskAddressByID(id)
 	m.blinkMarkDone = markDone
 
 	if !m.blinkEnabled {
@@ -929,7 +960,9 @@ func (m *Model) advanceRowBlink() bool {
 
 	id := m.blinkID
 	mark := m.blinkMarkDone
+	addr := m.blinkDoneAddress(id)
 	m.blinkID = 0
+	m.blinkAddr = ""
 	m.blinkOn = false
 	m.blinkCount = 0
 	m.blinkMarkDone = false
@@ -942,7 +975,7 @@ func (m *Model) advanceRowBlink() bool {
 			}
 		}
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().DoneContext(ctx, id)
+		err := m.taskwarriorClient().DoneContext(ctx, addr)
 		cancel()
 		if err != nil {
 			m.showError(err)

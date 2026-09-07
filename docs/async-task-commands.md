@@ -213,13 +213,27 @@ Specify:
 
 **Phase D consistency (implemented):**
 
-- Delete and undo each run as **one** `taskFlightMutating` Cmd (mutate + export).
+- Delete runs as **one** `taskFlightMutating` Cmd (mutate only — no export):
+  the view is patched locally in Update via `applyLocalDelete`, which drops
+  the deleted UUIDs from the in-memory list and re-renders. Safe because every
+  reloaded view is `status:pending` while a delete only moves tasks to
+  `status:deleted`; the next full reload (space, auto-refresh, filter change)
+  still reconciles outside changes. Undo runs as one Cmd (mutate + export):
+  a restore can re-add tasks whose full data is no longer in memory.
+- **Because a delete renumbers the pending working set** (Taskwarrior
+  renumbers IDs on every CLI run), every mutation sent to the task CLI is
+  addressed by UUID (`taskAddress`) — the numeric ID is only a legacy
+  fallback. This covers the delete flow itself, deferred done-at-blink-end
+  (`blinkAddr` captured when the blink starts), start/stop, edit, and every
+  inline field edit. Displayed numeric IDs in the table/detail view may lag
+  the CLI's numbering until the next full reload; pasting a displayed ID into
+  a `task` shell command can therefore resolve differently than before the
+  delete, while every in-app action stays UUID-correct.
 - **Delete partial failure:** roll back already-deleted UUIDs via
   `rollbackUndoRestores(quitCtx, …)` with `WithTimeout(quitCtx,
   taskOperationTimeout)` — cancellable on quit, not `context.Background()`.
   Undo stack is unchanged on mutate failure; pushed only in `*DoneMsg` after
-  successful deletes (also when reload fails after a successful delete, so `U`
-  can still restore).
+  successful deletes.
 - **Undo partial failure:** roll already-restored UUIDs back to pre-undo status
   (`deleted` for delete undos, `completed` for done undos). Stack is popped
   only on successful `undoActionDoneMsg` (snapshot taken at schedule time;

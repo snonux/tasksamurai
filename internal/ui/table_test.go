@@ -33,7 +33,7 @@ type fakeTaskwarrior struct {
 var _ task.Taskwarrior = (*fakeTaskwarrior)(nil)
 
 type fakeRecurrenceChange struct {
-	id  int
+	id  string
 	rec string
 }
 
@@ -74,7 +74,7 @@ func (f *fakeTaskwarrior) DueTasks(tasks []task.Task, now time.Time) int {
 	return task.DueTasks(tasks, now)
 }
 
-func (f *fakeTaskwarrior) EditCmd(int) *exec.Cmd {
+func (f *fakeTaskwarrior) EditCmd(string) *exec.Cmd {
 	f.unexpected("EditCmd")
 	return nil
 }
@@ -89,38 +89,38 @@ func (f *fakeTaskwarrior) LoadCompletionSources(context.Context) task.Completion
 	return task.CompletionSources{}
 }
 
-func (f *fakeTaskwarrior) AnnotateContext(context.Context, int, string) error {
+func (f *fakeTaskwarrior) AnnotateContext(context.Context, string, string) error {
 	f.unexpected("AnnotateContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) ReplaceAnnotations(context.Context, int, string) error {
+func (f *fakeTaskwarrior) ReplaceAnnotations(context.Context, string, string) error {
 	f.unexpected("ReplaceAnnotations")
 	return nil
 }
 
-func (f *fakeTaskwarrior) SetDescriptionContext(context.Context, int, string) error {
+func (f *fakeTaskwarrior) SetDescriptionContext(context.Context, string, string) error {
 	f.unexpected("SetDescriptionContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) AddTagsContext(context.Context, int, []string) error {
+func (f *fakeTaskwarrior) AddTagsContext(context.Context, string, []string) error {
 	f.unexpected("AddTagsContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) RemoveTagsContext(context.Context, int, []string) error {
+func (f *fakeTaskwarrior) RemoveTagsContext(context.Context, string, []string) error {
 	f.unexpected("RemoveTagsContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) SetDueDateContext(context.Context, int, string) error {
+func (f *fakeTaskwarrior) SetDueDateContext(context.Context, string, string) error {
 	f.unexpected("SetDueDateContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) SetRecurrenceContext(_ context.Context, id int, rec string) error {
-	f.recurrences = append(f.recurrences, fakeRecurrenceChange{id: id, rec: rec})
+func (f *fakeTaskwarrior) SetRecurrenceContext(_ context.Context, addr string, rec string) error {
+	f.recurrences = append(f.recurrences, fakeRecurrenceChange{id: addr, rec: rec})
 	return f.setRecurrenceErr
 }
 
@@ -129,27 +129,27 @@ func (f *fakeTaskwarrior) SetRecurringSeriesRecurrenceContext(_ context.Context,
 	return f.setSeriesRecurrenceErr
 }
 
-func (f *fakeTaskwarrior) SetProjectContext(context.Context, int, string) error {
+func (f *fakeTaskwarrior) SetProjectContext(context.Context, string, string) error {
 	f.unexpected("SetProjectContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) SetPriorityContext(context.Context, int, string) error {
+func (f *fakeTaskwarrior) SetPriorityContext(context.Context, string, string) error {
 	f.unexpected("SetPriorityContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) StartContext(context.Context, int) error {
+func (f *fakeTaskwarrior) StartContext(context.Context, string) error {
 	f.unexpected("StartContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) StopContext(context.Context, int) error {
+func (f *fakeTaskwarrior) StopContext(context.Context, string) error {
 	f.unexpected("StopContext")
 	return nil
 }
 
-func (f *fakeTaskwarrior) DoneContext(context.Context, int) error {
+func (f *fakeTaskwarrior) DoneContext(context.Context, string) error {
 	f.unexpected("DoneContext")
 	return nil
 }
@@ -473,7 +473,7 @@ func TestFakeTaskwarriorFailsFastOnUnexpectedCalls(t *testing.T) {
 		}
 	}()
 
-	_ = fake.StartContext(context.Background(), 1)
+	_ = fake.StartContext(context.Background(), "task-uuid")
 }
 
 func TestAnnotateHotkey(t *testing.T) {
@@ -486,7 +486,7 @@ func TestAnnotateHotkey(t *testing.T) {
 		"  echo '{\"id\":1,\"uuid\":\"x\",\"description\":\"d\",\"status\":\"pending\",\"entry\":\"\",\"priority\":\"\",\"urgency\":0,\"annotations\":[]}'\n" +
 		"  exit 0\n" +
 		"fi\n" +
-		"if [ \"$1\" = \"1\" ] && [ \"$2\" = \"annotate\" ]; then\n" +
+		"if [ \"$1\" = \"x\" ] && [ \"$2\" = \"annotate\" ]; then\n" +
 		"  echo \"$3\" > " + annoFile + "\n" +
 		"  exit 0\n" +
 		"fi\n"
@@ -777,7 +777,7 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 		"  exit 0\n" +
 		"fi\n" +
 		"echo \"$@\" >> " + logFile + "\n" +
-		"if [ \"$1\" = \"1\" ] && [ \"$2\" = \"annotate\" ]; then\n" +
+		"if [ \"$1\" = \"x\" ] && [ \"$2\" = \"annotate\" ]; then\n" +
 		"  echo \"$3\" > " + annoFile + "\n" +
 		"  exit 0\n" +
 		"fi\n"
@@ -889,7 +889,7 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read log: %v", err)
 	}
-	if !strings.Contains(string(logData), "1\nmodify\ndescription:updated description") {
+	if !strings.Contains(string(logData), "x\nmodify\ndescription:updated description") {
 		t.Fatalf("description update did not reach task command: %s", logData)
 	}
 }
@@ -1105,7 +1105,7 @@ func TestDoneHotkey(t *testing.T) {
 		t.Fatalf("read done: %v", err)
 	}
 
-	if strings.TrimSpace(string(data)) != "1 done" {
+	if strings.TrimSpace(string(data)) != "x done" {
 		t.Fatalf("done not called: %q", data)
 	}
 }
@@ -1168,7 +1168,7 @@ func TestUndoHotkey(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("expected at least two commands, got %d", len(lines))
 	}
-	if lines[0] != "1 done" {
+	if lines[0] != "x done" {
 		t.Fatalf("done not called: %q", lines[0])
 	}
 	if lines[1] != "x modify status:pending" {
@@ -1912,7 +1912,7 @@ func TestDueDateHotkey(t *testing.T) {
 		t.Fatalf("read due: %v", err)
 	}
 
-	want := "1 modify due:" + time.Now().AddDate(0, 0, 3).Format("2006-01-02")
+	want := "x modify due:" + time.Now().AddDate(0, 0, 3).Format("2006-01-02")
 	if strings.TrimSpace(string(data)) != want {
 		t.Fatalf("due not set: %q", data)
 	}
@@ -2021,7 +2021,7 @@ func TestRecurrenceHotkey(t *testing.T) {
 		t.Fatalf("read recur: %v", err)
 	}
 
-	if strings.TrimSpace(string(data)) != "1 modify recur:daily" {
+	if strings.TrimSpace(string(data)) != "x modify recur:daily" {
 		t.Fatalf("recur not set: %q", data)
 	}
 }
@@ -2222,7 +2222,7 @@ func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
 	m.showTaskDetail = true
 	m.setCurrentTaskDetail(&m.tasks[0])
 	current := m.currentDetailTask()
-	m.activateRecurEdit(current.ID, current.Recur)
+	m.activateRecurEdit(current.ID, taskAddress(*current), current.Recur)
 	m.recurInput.SetValue("daily")
 
 	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -2256,7 +2256,7 @@ func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) 
 	m.setCurrentTaskDetail(&m.tasks[0])
 	m.detailBlinkField = -1
 	current := m.currentDetailTask()
-	m.activateRecurEdit(current.ID, current.Recur)
+	m.activateRecurEdit(current.ID, taskAddress(*current), current.Recur)
 	m.recurInput.SetValue("")
 
 	mv, cmd := (&m).handleRecurrenceMode(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -2400,7 +2400,7 @@ func TestPriorityHotkey(t *testing.T) {
 		t.Fatalf("read pri: %v", err)
 	}
 
-	if strings.TrimSpace(string(data)) != "1 modify priority:H" {
+	if strings.TrimSpace(string(data)) != "x modify priority:H" {
 		t.Fatalf("priority not set: %q", data)
 	}
 }

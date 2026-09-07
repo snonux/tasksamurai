@@ -11,13 +11,15 @@ import (
 	"github.com/snonux/tasksamurai/internal/task"
 )
 
-// deleteSeriesDoneMsg is delivered when an async delete (+ reload) finishes.
+// deleteSeriesDoneMsg is delivered when an async delete finishes. It carries
+// no reloaded export: deletes only flip the touched tasks to status:deleted,
+// and every view is already filtered to status:pending, so Update patches the
+// list locally (applyLocalDelete) instead of re-exporting the whole database.
 type deleteSeriesDoneMsg struct {
 	gen       int
 	count     int
 	recurring bool
 	restores  []undoRestore
-	data      reloadData
 	err       error
 }
 
@@ -31,13 +33,16 @@ type undoActionDoneMsg struct {
 	applied bool // true after restores succeeded, even if reload failed
 }
 
-// deleteSeriesCmd deletes tsk (and its recurring series when needed), reloads
-// pending tasks, and returns a DoneMsg. It must not close over *Model.
+// deleteSeriesCmd deletes tsk (and its recurring series when needed) and
+// returns a DoneMsg without any export: the reload that used to follow the
+// mutate dominated delete latency, and removing the deleted UUIDs from the
+// in-memory list (applyLocalDelete in Update) yields the same table. It must
+// not close over *Model.
 //
 // Consistency: on partial multi-UUID failure, already-deleted UUIDs are rolled
 // back via quitCtx (quit-cancellable timeout — never context.Background()).
 // The undo stack is untouched here; Update pushes only after a successful msg.
-func deleteSeriesCmd(quitCtx context.Context, tw task.Taskwarrior, tsk task.Task, snap reloadSnapshot, gen int) tea.Cmd {
+func deleteSeriesCmd(quitCtx context.Context, tw task.Taskwarrior, tsk task.Task, gen int) tea.Cmd {
 	return func() tea.Msg {
 		opCtx, cancel := context.WithTimeout(quitCtx, taskOperationTimeout)
 		defer cancel()
@@ -46,24 +51,11 @@ func deleteSeriesCmd(quitCtx context.Context, tw task.Taskwarrior, tsk task.Task
 		if err != nil {
 			return deleteSeriesDoneMsg{gen: gen, recurring: recurring, err: err}
 		}
-		data, reloadErr := exportReloadData(opCtx, tw, snap)
-		if reloadErr != nil {
-			// Mutate succeeded; surface reload failure without inventing undo —
-			// Update still pushes undo so U can restore.
-			return deleteSeriesDoneMsg{
-				gen:       gen,
-				count:     len(restores),
-				recurring: recurring,
-				restores:  restores,
-				err:       fmt.Errorf("reloading tasks: %w", reloadErr),
-			}
-		}
 		return deleteSeriesDoneMsg{
 			gen:       gen,
 			count:     len(restores),
 			recurring: recurring,
 			restores:  restores,
-			data:      data,
 		}
 	}
 }
@@ -102,7 +94,7 @@ func undoActionCmd(quitCtx context.Context, tw task.Taskwarrior, action undoActi
 	}
 }
 
-// scheduleDeleteSeries arms a mutating flight and returns a delete+reload Cmd.
+// scheduleDeleteSeries arms a mutating flight and returns a delete-only Cmd.
 func (m *Model) scheduleDeleteSeries(tsk task.Task) tea.Cmd {
 	if m.taskFlightBlocks() {
 		_ = m.rejectIfBusy()
@@ -115,8 +107,7 @@ func (m *Model) scheduleDeleteSeries(tsk task.Task) tea.Cmd {
 	m.initTaskContext()
 	gen := m.taskOpGen
 	tw := m.taskwarriorClient()
-	snap := m.captureReloadSnapshot()
-	return deleteSeriesCmd(m.taskContext, tw, tsk, snap, gen)
+	return deleteSeriesCmd(m.taskContext, tw, tsk, gen)
 }
 
 // scheduleUndoAction arms a mutating flight for the top undo entry without
@@ -147,24 +138,48 @@ func (m *Model) handleDeleteSeriesDone(msg deleteSeriesDoneMsg) (tea.Model, tea.
 	}
 	m.endTaskFlight()
 	if msg.err != nil {
-		// Reload failure after a successful delete still gets an undo entry so
-		// the user can restore; mutate failure leaves the stack unchanged.
-		if len(msg.restores) > 0 {
-			m.pushUndoAction("delete", msg.restores)
-		}
+		// Mutate failure leaves the undo stack unchanged.
 		m.showError(msg.err)
 		return m, nil
 	}
 	m.pushUndoAction("delete", msg.restores)
-	data := msg.data
-	m.processTasks(&data)
-	m.renderTasks(data)
+	m.applyLocalDelete(msg.restores)
 	if msg.recurring {
 		m.statusMsg = fmt.Sprintf("Deleted %d recurring tasks", msg.count)
 	} else {
 		m.statusMsg = "Deleted task"
 	}
 	return m, nil
+}
+
+// applyLocalDelete drops every deleted UUID from the in-memory task list and
+// re-renders the table from it, without a Taskwarrior export. The reloaded
+// view is always status:pending (exportReloadData appends that filter), and a
+// delete only moves tasks to status:deleted, so dropping the deleted UUIDs
+// locally produces the same table a full export would — instantly. Everything
+// changed outside this window (other hosts, other processes) is still picked
+// up by the next full reload (space, auto-refresh, filter changes), which
+// keeps the local patch safe.
+func (m *Model) applyLocalDelete(restores []undoRestore) {
+	deleted := make(map[string]struct{}, len(restores))
+	for _, r := range restores {
+		deleted[strings.TrimSpace(r.uuid)] = struct{}{}
+	}
+	remaining := make([]task.Task, 0, len(m.tasks))
+	for _, tsk := range m.tasks {
+		if _, gone := deleted[strings.TrimSpace(tsk.UUID)]; gone {
+			continue
+		}
+		remaining = append(remaining, tsk)
+	}
+	// Ultra membership is captured against the pre-removal list: when an
+	// ultra search regex is active, processTasks recomputes the indexes from
+	// it; otherwise rebuildUltraFiltered maps the captured IDs back to
+	// indexes and silently drops removed ones.
+	ids := m.ultraFilteredTaskIDs()
+	data := reloadData{tasks: remaining, ultraFilterIDs: ids}
+	m.processTasks(&data)
+	m.renderTasks(data)
 }
 
 func (m *Model) handleUndoActionDone(msg undoActionDoneMsg) (tea.Model, tea.Cmd) {

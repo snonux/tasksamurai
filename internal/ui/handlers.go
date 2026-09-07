@@ -42,14 +42,14 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.replaceAnnotations {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
-			if err := m.taskwarriorClient().ReplaceAnnotations(ctx, m.annotateID, value); err != nil {
+			if err := m.taskwarriorClient().ReplaceAnnotations(ctx, m.annotateAddr, value); err != nil {
 				return err
 			}
 			m.replaceAnnotations = false
 		} else {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
-			if err := m.taskwarriorClient().AnnotateContext(ctx, m.annotateID, value); err != nil {
+			if err := m.taskwarriorClient().AnnotateContext(ctx, m.annotateAddr, value); err != nil {
 				return err
 			}
 		}
@@ -80,7 +80,7 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		if err := m.taskwarriorClient().SetDescriptionContext(ctx, m.descID, value); err != nil {
+		if err := m.taskwarriorClient().SetDescriptionContext(ctx, m.descAddr, value); err != nil {
 			return err
 		}
 		if err := m.reload(); err != nil {
@@ -128,12 +128,12 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			ctx, cancel := m.taskOperationContext()
 			defer cancel()
 			if len(adds) > 0 {
-				if err := m.taskwarriorClient().AddTagsContext(ctx, m.tagsID, adds); err != nil {
+				if err := m.taskwarriorClient().AddTagsContext(ctx, m.tagsAddr, adds); err != nil {
 					return err
 				}
 			}
 			if len(removes) > 0 {
-				if err := m.taskwarriorClient().RemoveTagsContext(ctx, m.tagsID, removes); err != nil {
+				if err := m.taskwarriorClient().RemoveTagsContext(ctx, m.tagsAddr, removes); err != nil {
 					return err
 				}
 			}
@@ -164,7 +164,7 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().SetDueDateContext(ctx, m.dueID, m.dueDate.Format("2006-01-02"))
+		err := m.taskwarriorClient().SetDueDateContext(ctx, m.dueAddr, m.dueDate.Format("2006-01-02"))
 		cancel()
 		if err != nil {
 			return m, m.showErrorTimed(err)
@@ -214,7 +214,7 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return err
 			}
 		} else {
-			if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurID, value); err != nil {
+			if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurAddr, value); err != nil {
 				return err
 			}
 		}
@@ -253,7 +253,7 @@ func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	onEnter := func(value string) error {
 		ctx, cancel := m.taskOperationContext()
 		defer cancel()
-		return m.taskwarriorClient().SetProjectContext(ctx, m.projID, value)
+		return m.taskwarriorClient().SetProjectContext(ctx, m.projAddr, value)
 	}
 
 	onExit := func() {
@@ -281,7 +281,7 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.showErrorTimed(err)
 		}
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().SetPriorityContext(ctx, m.priorityID, priority)
+		err := m.taskwarriorClient().SetPriorityContext(ctx, m.priorityAddr, priority)
 		cancel()
 		if err != nil {
 			return m, m.showErrorTimed(err)

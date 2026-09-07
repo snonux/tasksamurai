@@ -452,7 +452,7 @@ func TestActivateDueEditFallsBackToNowOnInvalidDate(t *testing.T) {
 	m := Model{windowHeight: 20}
 	before := time.Now().Add(-time.Second)
 
-	m.activateDueEdit(7, "not-a-date")
+	m.activateDueEdit(7, "uuid-7", "not-a-date")
 
 	if !m.dueEditing {
 		t.Fatalf("due editing was not enabled")

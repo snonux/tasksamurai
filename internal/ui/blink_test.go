@@ -14,11 +14,11 @@ import (
 // animation is skipped.
 type doneRecordingTaskwarrior struct {
 	fakeTaskwarrior
-	doneIDs []int
+	doneAddrs []string
 }
 
-func (f *doneRecordingTaskwarrior) DoneContext(_ context.Context, id int) error {
-	f.doneIDs = append(f.doneIDs, id)
+func (f *doneRecordingTaskwarrior) DoneContext(_ context.Context, addr string) error {
+	f.doneAddrs = append(f.doneAddrs, addr)
 	return nil
 }
 
@@ -78,6 +78,8 @@ func TestInvisibleTaskBlinkKeepsHotkeysResponsive(t *testing.T) {
 
 // Skipping the animation must not skip the work the animation was covering
 // for: the deferred completion still has to run.
+// Task 99 is not in the fake's list, so no address is captured and the
+// deferred completion falls back to the raw numeric ID.
 func TestStartBlinkOnInvisibleTaskStillMarksDone(t *testing.T) {
 	fake := &doneRecordingTaskwarrior{fakeTaskwarrior: fakeTaskwarrior{tasks: blinkTasks()}}
 	m := newBlinkTestModel(t, fake)
@@ -86,8 +88,8 @@ func TestStartBlinkOnInvisibleTaskStillMarksDone(t *testing.T) {
 		t.Fatalf("startBlink for a task with no row returned a command; want nil")
 	}
 
-	if len(fake.doneIDs) != 1 || fake.doneIDs[0] != 99 {
-		t.Fatalf("DoneContext calls = %v, want [99]", fake.doneIDs)
+	if len(fake.doneAddrs) != 1 || fake.doneAddrs[0] != "99" {
+		t.Fatalf("DoneContext calls = %v, want [99]", fake.doneAddrs)
 	}
 	if m.blinkID != 0 {
 		t.Fatalf("blinkID = %d after completing an invisible task, want 0", m.blinkID)

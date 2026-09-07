@@ -297,17 +297,16 @@ func TestMutationHelpersHonorContextCancellation(t *testing.T) {
 		{"AddContext", func(ctx context.Context) error { return AddContext(ctx, "new task", []string{"tag"}) }},
 		{"AddArgsContext", func(ctx context.Context) error { return AddArgsContext(ctx, []string{"new task", "+tag"}) }},
 		{"AddLineContext", func(ctx context.Context) error { return AddLineContext(ctx, `"new task" +tag`) }},
-		{"SetStatusContext", func(ctx context.Context) error { return SetStatusContext(ctx, 1, "pending") }},
 		{"SetStatusUUIDContext", func(ctx context.Context) error { return SetStatusUUIDContext(ctx, "task-uuid", "pending") }},
-		{"StartContext", func(ctx context.Context) error { return StartContext(ctx, 1) }},
-		{"StopContext", func(ctx context.Context) error { return StopContext(ctx, 1) }},
-		{"DoneContext", func(ctx context.Context) error { return DoneContext(ctx, 1) }},
-		{"DeleteContext", func(ctx context.Context) error { return DeleteContext(ctx, 1) }},
-		{"SetPriorityContext", func(ctx context.Context) error { return SetPriorityContext(ctx, 1, "H") }},
-		{"SetRecurrenceContext", func(ctx context.Context) error { return SetRecurrenceContext(ctx, 1, "daily") }},
-		{"SetDueDateContext", func(ctx context.Context) error { return SetDueDateContext(ctx, 1, "tomorrow") }},
-		{"SetDescriptionContext", func(ctx context.Context) error { return SetDescriptionContext(ctx, 1, "new description") }},
-		{"SetProjectContext", func(ctx context.Context) error { return SetProjectContext(ctx, 1, "home") }},
+		{"StartContext", func(ctx context.Context) error { return StartContext(ctx, "task-uuid") }},
+		{"StopContext", func(ctx context.Context) error { return StopContext(ctx, "task-uuid") }},
+		{"DoneContext", func(ctx context.Context) error { return DoneContext(ctx, "task-uuid") }},
+		{"DeleteContext", func(ctx context.Context) error { return DeleteContext(ctx, "task-uuid") }},
+		{"SetPriorityContext", func(ctx context.Context) error { return SetPriorityContext(ctx, "task-uuid", "H") }},
+		{"SetRecurrenceContext", func(ctx context.Context) error { return SetRecurrenceContext(ctx, "task-uuid", "daily") }},
+		{"SetDueDateContext", func(ctx context.Context) error { return SetDueDateContext(ctx, "task-uuid", "tomorrow") }},
+		{"SetDescriptionContext", func(ctx context.Context) error { return SetDescriptionContext(ctx, "task-uuid", "new description") }},
+		{"SetProjectContext", func(ctx context.Context) error { return SetProjectContext(ctx, "task-uuid", "home") }},
 	}
 
 	for _, tt := range tests {
@@ -350,7 +349,7 @@ func TestSetTagsHonorsContextDuringMutations(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := SetTags(ctx, 1, []string{"new"})
+	err := SetTags(ctx, "task-uuid", []string{"new"})
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("SetTags error = %v, want context deadline exceeded", err)
@@ -382,7 +381,7 @@ func TestSetTagsHonorsContextDuringRemovals(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := SetTags(ctx, 1, nil)
+	err := SetTags(ctx, "task-uuid", nil)
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("SetTags error = %v, want context deadline exceeded", err)
@@ -459,7 +458,7 @@ exit 1
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", tmp+":"+origPath)
 
-	err := SetTags(context.Background(), 1, []string{"new"})
+	err := SetTags(context.Background(), "task-uuid", []string{"new"})
 	if err == nil {
 		t.Fatal("expected SetTags error")
 	}
@@ -506,7 +505,7 @@ func TestReplaceAnnotationsHonorsContextDuringMutations(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := ReplaceAnnotations(ctx, 1, "new note")
+	err := ReplaceAnnotations(ctx, "task-uuid", "new note")
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
@@ -538,7 +537,7 @@ func TestReplaceAnnotationsHonorsContextDuringAnnotate(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	err := ReplaceAnnotations(ctx, 1, "new note")
+	err := ReplaceAnnotations(ctx, "task-uuid", "new note")
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
@@ -575,7 +574,7 @@ fi
 	defer cancel()
 
 	start := time.Now()
-	err := ReplaceAnnotations(ctx, 1, "replacement note")
+	err := ReplaceAnnotations(ctx, "task-uuid", "replacement note")
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
@@ -615,7 +614,7 @@ fi
 	defer cancel()
 
 	start := time.Now()
-	err := ReplaceAnnotations(ctx, 1, "replacement note")
+	err := ReplaceAnnotations(ctx, "task-uuid", "replacement note")
 	elapsed := time.Since(start)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("ReplaceAnnotations error = %v, want context deadline exceeded", err)
@@ -651,7 +650,7 @@ fi
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", tmp+":"+origPath)
 
-	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	err := ReplaceAnnotations(context.Background(), "task-uuid", "replacement note")
 	if err == nil {
 		t.Fatal("expected ReplaceAnnotations error")
 	}
@@ -684,7 +683,7 @@ fi
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", tmp+":"+origPath)
 
-	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	err := ReplaceAnnotations(context.Background(), "task-uuid", "replacement note")
 	if err == nil {
 		t.Fatal("expected ReplaceAnnotations error")
 	}
@@ -721,7 +720,7 @@ fi
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", tmp+":"+origPath)
 
-	err := ReplaceAnnotations(context.Background(), 1, "replacement note")
+	err := ReplaceAnnotations(context.Background(), "task-uuid", "replacement note")
 	if err == nil {
 		t.Fatal("expected ReplaceAnnotations error")
 	}
@@ -939,16 +938,27 @@ func TestModifyHelpers(t *testing.T) {
 		t.Fatalf("add task: %v", err)
 	}
 
-	if err := SetPriority(1, "H"); err != nil {
+	// Resolve the freshly added task's UUID: mutations address tasks by UUID
+	// (stable across working-set renumbering), not by numeric ID.
+	exported, err := Export(context.Background())
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(exported) != 1 || exported[0].UUID == "" {
+		t.Fatalf("expected one exported task with a UUID, got %#v", exported)
+	}
+	uuid := exported[0].UUID
+
+	if err := SetPriorityContext(context.Background(), uuid, "H"); err != nil {
 		t.Fatalf("set priority: %v", err)
 	}
-	if err := AddTags(1, []string{"foo"}); err != nil {
+	if err := AddTagsContext(context.Background(), uuid, []string{"foo"}); err != nil {
 		t.Fatalf("add tags: %v", err)
 	}
-	if err := SetDescription(1, "hello there"); err != nil {
+	if err := SetDescriptionContext(context.Background(), uuid, "hello there"); err != nil {
 		t.Fatalf("set description: %v", err)
 	}
-	if err := Annotate(1, "note"); err != nil {
+	if err := AnnotateContext(context.Background(), uuid, "note"); err != nil {
 		t.Fatalf("annotate: %v", err)
 	}
 

@@ -13,23 +13,23 @@ type Taskwarrior interface {
 	TotalTasks(tasks []Task) int
 	InProgressTasks(tasks []Task) int
 	DueTasks(tasks []Task, now time.Time) int
-	EditCmd(id int) *exec.Cmd
+	EditCmd(addr string) *exec.Cmd
 	RunShellLine(ctx context.Context, line string) (RunResult, error)
 	LoadCompletionSources(ctx context.Context) CompletionSources
 	AddLineContext(ctx context.Context, line string) error
-	AnnotateContext(ctx context.Context, id int, text string) error
-	ReplaceAnnotations(ctx context.Context, id int, text string) error
-	SetDescriptionContext(ctx context.Context, id int, desc string) error
-	AddTagsContext(ctx context.Context, id int, tags []string) error
-	RemoveTagsContext(ctx context.Context, id int, tags []string) error
-	SetDueDateContext(ctx context.Context, id int, due string) error
-	SetRecurrenceContext(ctx context.Context, id int, rec string) error
+	AnnotateContext(ctx context.Context, addr string, text string) error
+	ReplaceAnnotations(ctx context.Context, addr string, text string) error
+	SetDescriptionContext(ctx context.Context, addr string, desc string) error
+	AddTagsContext(ctx context.Context, addr string, tags []string) error
+	RemoveTagsContext(ctx context.Context, addr string, tags []string) error
+	SetDueDateContext(ctx context.Context, addr string, due string) error
+	SetRecurrenceContext(ctx context.Context, addr string, rec string) error
 	SetRecurringSeriesRecurrenceContext(ctx context.Context, rootUUID, rec string) error
-	SetProjectContext(ctx context.Context, id int, project string) error
-	SetPriorityContext(ctx context.Context, id int, priority string) error
-	StartContext(ctx context.Context, id int) error
-	StopContext(ctx context.Context, id int) error
-	DoneContext(ctx context.Context, id int) error
+	SetProjectContext(ctx context.Context, addr string, project string) error
+	SetPriorityContext(ctx context.Context, addr string, priority string) error
+	StartContext(ctx context.Context, addr string) error
+	StopContext(ctx context.Context, addr string) error
+	DoneContext(ctx context.Context, addr string) error
 	SetStatusUUIDContext(ctx context.Context, uuid, status string) error
 	RecurringSeries(ctx context.Context, rootUUID string) ([]Task, error)
 }
@@ -70,8 +70,8 @@ func (Client) DueTasks(tasks []Task, now time.Time) int {
 }
 
 // EditCmd returns an editor command for a task.
-func (Client) EditCmd(id int) *exec.Cmd {
-	return EditCmd(id)
+func (Client) EditCmd(addr string) *exec.Cmd {
+	return EditCmd(addr)
 }
 
 // RunShellLine runs a user-entered Taskwarrior shell command.
@@ -90,38 +90,38 @@ func (Client) AddLineContext(ctx context.Context, line string) error {
 }
 
 // AnnotateContext adds an annotation to a task.
-func (Client) AnnotateContext(ctx context.Context, id int, text string) error {
-	return AnnotateContext(ctx, id, text)
+func (Client) AnnotateContext(ctx context.Context, addr string, text string) error {
+	return AnnotateContext(ctx, addr, text)
 }
 
 // ReplaceAnnotations replaces all annotations on a task.
-func (Client) ReplaceAnnotations(ctx context.Context, id int, text string) error {
-	return ReplaceAnnotations(ctx, id, text)
+func (Client) ReplaceAnnotations(ctx context.Context, addr string, text string) error {
+	return ReplaceAnnotations(ctx, addr, text)
 }
 
 // SetDescriptionContext changes a task description.
-func (Client) SetDescriptionContext(ctx context.Context, id int, desc string) error {
-	return SetDescriptionContext(ctx, id, desc)
+func (Client) SetDescriptionContext(ctx context.Context, addr string, desc string) error {
+	return SetDescriptionContext(ctx, addr, desc)
 }
 
 // AddTagsContext adds tags to a task.
-func (Client) AddTagsContext(ctx context.Context, id int, tags []string) error {
-	return AddTagsContext(ctx, id, tags)
+func (Client) AddTagsContext(ctx context.Context, addr string, tags []string) error {
+	return AddTagsContext(ctx, addr, tags)
 }
 
 // RemoveTagsContext removes tags from a task.
-func (Client) RemoveTagsContext(ctx context.Context, id int, tags []string) error {
-	return RemoveTagsContext(ctx, id, tags)
+func (Client) RemoveTagsContext(ctx context.Context, addr string, tags []string) error {
+	return RemoveTagsContext(ctx, addr, tags)
 }
 
 // SetDueDateContext changes a task due date.
-func (Client) SetDueDateContext(ctx context.Context, id int, due string) error {
-	return SetDueDateContext(ctx, id, due)
+func (Client) SetDueDateContext(ctx context.Context, addr string, due string) error {
+	return SetDueDateContext(ctx, addr, due)
 }
 
 // SetRecurrenceContext changes a task recurrence value.
-func (Client) SetRecurrenceContext(ctx context.Context, id int, rec string) error {
-	return SetRecurrenceContext(ctx, id, rec)
+func (Client) SetRecurrenceContext(ctx context.Context, addr string, rec string) error {
+	return SetRecurrenceContext(ctx, addr, rec)
 }
 
 // SetRecurringSeriesRecurrenceContext changes a recurring series recurrence value.
@@ -130,28 +130,28 @@ func (Client) SetRecurringSeriesRecurrenceContext(ctx context.Context, rootUUID,
 }
 
 // SetProjectContext changes a task project.
-func (Client) SetProjectContext(ctx context.Context, id int, project string) error {
-	return SetProjectContext(ctx, id, project)
+func (Client) SetProjectContext(ctx context.Context, addr string, project string) error {
+	return SetProjectContext(ctx, addr, project)
 }
 
 // SetPriorityContext changes a task priority.
-func (Client) SetPriorityContext(ctx context.Context, id int, priority string) error {
-	return SetPriorityContext(ctx, id, priority)
+func (Client) SetPriorityContext(ctx context.Context, addr string, priority string) error {
+	return SetPriorityContext(ctx, addr, priority)
 }
 
 // StartContext starts a task.
-func (Client) StartContext(ctx context.Context, id int) error {
-	return StartContext(ctx, id)
+func (Client) StartContext(ctx context.Context, addr string) error {
+	return StartContext(ctx, addr)
 }
 
 // StopContext stops a task.
-func (Client) StopContext(ctx context.Context, id int) error {
-	return StopContext(ctx, id)
+func (Client) StopContext(ctx context.Context, addr string) error {
+	return StopContext(ctx, addr)
 }
 
 // DoneContext completes a task.
-func (Client) DoneContext(ctx context.Context, id int) error {
-	return DoneContext(ctx, id)
+func (Client) DoneContext(ctx context.Context, addr string) error {
+	return DoneContext(ctx, addr)
 }
 
 // SetStatusUUIDContext changes a task status by UUID.

@@ -17,32 +17,27 @@ import (
 )
 
 func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
 	m.editID = id
-	return m, m.editCmd(id)
+	return m, m.editCmd(taskAddress(*tsk))
 }
 
 func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
+	addr := taskAddress(*tsk)
 
 	// Check if task is started
-	started := false
-	for _, tsk := range m.tasks {
-		if tsk.ID == id {
-			started = tsk.Start != ""
-			break
-		}
-	}
-
-	if started {
+	if tsk.Start != "" {
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().StopContext(ctx, id)
+		err := m.taskwarriorClient().StopContext(ctx, addr)
 		cancel()
 		if err != nil {
 			m.showError(err)
@@ -50,7 +45,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 		}
 	} else {
 		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().StartContext(ctx, id)
+		err := m.taskwarriorClient().StartContext(ctx, addr)
 		cancel()
 		if err != nil {
 			m.showError(err)
@@ -337,13 +332,15 @@ func undoStatus(action undoAction) string {
 }
 
 func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
 
 	m.clearEditingModes()
 	m.dueID = id
+	m.dueAddr = taskAddress(*tsk)
 	m.dueEditing = true
 	m.dueDate = time.Now()
 	m.updateTableHeight()
@@ -351,14 +348,15 @@ func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
 
 	// In Taskwarrior, passing an empty value to due: removes the due date
 	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetDueDateContext(ctx, id, "")
+	err = m.taskwarriorClient().SetDueDateContext(ctx, taskAddress(*tsk), "")
 	cancel()
 	if err != nil {
 		m.showError(err)
@@ -372,16 +370,17 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
 
 	days := rand.Intn(31) + 7
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 
 	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetDueDateContext(ctx, id, due)
+	err = m.taskwarriorClient().SetDueDateContext(ctx, taskAddress(*tsk), due)
 	cancel()
 	if err != nil {
 		m.showError(err)
@@ -395,38 +394,30 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
-
-	task := m.getTaskAtCursor()
-	if task == nil {
-		return m, nil
-	}
+	id := tsk.ID
 
 	m.clearEditingModes()
 	m.recurID = id
+	m.recurAddr = taskAddress(*tsk)
 	m.recurSeries = false
 	m.recurRoot = ""
 	m.recurEditing = true
-	m.recurInput.SetValue(task.Recur)
+	m.recurInput.SetValue(tsk.Recur)
 	m.recurInput.Focus()
 	m.updateTableHeight()
 	return m, nil
 }
 
 func (m *Model) handleSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
-
-	task := m.getTaskAtCursor()
-	if task == nil {
-		return m, nil
-	}
-	return m.activateRecurringSeriesRecurrenceEdit(id, *task)
+	return m.activateRecurringSeriesRecurrenceEdit(tsk.ID, *tsk)
 }
 
 func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (tea.Model, tea.Cmd) {
@@ -443,6 +434,7 @@ func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (te
 
 	m.clearEditingModes()
 	m.recurID = id
+	m.recurAddr = taskAddress(tsk)
 	m.recurSeries = true
 	m.recurRoot = rootUUID
 	m.recurEditing = true
@@ -453,13 +445,14 @@ func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (te
 }
 
 func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
 
 	m.clearEditingModes()
-	m.priorityID = id
+	m.priorityID = tsk.ID
+	m.priorityAddr = taskAddress(*tsk)
 	m.prioritySelecting = true
 	m.priorityIndex = 0
 	m.updateTableHeight()
@@ -467,13 +460,14 @@ func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
 
 	m.clearEditingModes()
-	m.annotateID = id
+	m.annotateID = tsk.ID
+	m.annotateAddr = taskAddress(*tsk)
 	m.annotating = true
 	m.replaceAnnotations = replace
 	m.annotateInput.SetValue("")
@@ -506,13 +500,14 @@ func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
 
 	m.clearEditingModes()
-	m.tagsID = id
+	m.tagsID = tsk.ID
+	m.tagsAddr = taskAddress(*tsk)
 	m.tagsEditing = true
 	m.tagsInput.SetValue("")
 	m.tagsInput.Focus()
@@ -521,13 +516,14 @@ func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
 
 	m.clearEditingModes()
-	m.projID = id
+	m.projID = tsk.ID
+	m.projAddr = taskAddress(*tsk)
 	m.projEditing = true
 
 	// Get current project value
@@ -543,24 +539,22 @@ func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	id := tsk.ID
 
-	// Get the task at cursor
-	currentTask := m.getTaskAtCursor()
-	if currentTask == nil || len(currentTask.Tags) == 0 {
+	// Get the first tag
+	if len(tsk.Tags) == 0 {
 		// No tags to convert
 		return m, nil
 	}
-
-	// Get the first tag
-	firstTag := currentTask.Tags[0]
+	firstTag := tsk.Tags[0]
 
 	// Set the tag as project
 	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetProjectContext(ctx, id, firstTag)
+	err = m.taskwarriorClient().SetProjectContext(ctx, taskAddress(*tsk), firstTag)
 	if err != nil {
 		cancel()
 		m.showError(err)
@@ -568,7 +562,7 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 	}
 
 	// Remove the tag from the task
-	if err := m.taskwarriorClient().RemoveTagsContext(ctx, id, []string{firstTag}); err != nil {
+	if err := m.taskwarriorClient().RemoveTagsContext(ctx, taskAddress(*tsk), []string{firstTag}); err != nil {
 		cancel()
 		m.showError(err)
 		return m, nil
@@ -799,22 +793,27 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		}
 		return get(tsk)
 	}
+	// addr is what mutations for this task will send to the task CLI.
+	addr := ""
+	if tsk != nil {
+		addr = taskAddress(*tsk)
+	}
 
 	switch m.displayToLogical(m.tbl.ColumnCursor()) {
 	case colPri: // Priority
-		m.activatePriorityEdit(id, taskStr(func(t *task.Task) string { return t.Priority }))
+		m.activatePriorityEdit(id, addr, taskStr(func(t *task.Task) string { return t.Priority }))
 	case colDue: // Due date
-		m.activateDueEdit(id, taskStr(func(t *task.Task) string { return t.Due }))
+		m.activateDueEdit(id, addr, taskStr(func(t *task.Task) string { return t.Due }))
 	case colRecur: // Recurrence
-		m.activateRecurEdit(id, taskStr(func(t *task.Task) string { return t.Recur }))
+		m.activateRecurEdit(id, addr, taskStr(func(t *task.Task) string { return t.Recur }))
 	case colProject: // Project
-		m.activateProjectEdit(id, taskStr(func(t *task.Task) string { return t.Project }))
+		m.activateProjectEdit(id, addr, taskStr(func(t *task.Task) string { return t.Project }))
 	case colTags: // Tags
-		m.activateTagsEdit(id)
+		m.activateTagsEdit(id, addr)
 	case colAnnotations: // Annotations
-		return m.activateAnnotationsEdit(id, tsk)
+		return m.activateAnnotationsEdit(id, addr, tsk)
 	case colDescription: // Description
-		return m.activateDescriptionEdit(id, tsk)
+		return m.activateDescriptionEdit(id, addr, tsk)
 	default:
 		// Other columns: toggle expanded-cell panel.
 		m.cellExpanded = !m.cellExpanded

@@ -64,7 +64,7 @@ func TestDeleteSeriesCmdDoesNotCloseOverModel(t *testing.T) {
 	}
 	cmd := deleteSeriesCmd(context.Background(), fake, task.Task{
 		ID: 1, UUID: "u1", Description: "a", Status: "pending",
-	}, reloadSnapshot{}, 4)
+	}, 4)
 	msg := cmd()
 	got, ok := msg.(deleteSeriesDoneMsg)
 	if !ok {
@@ -79,22 +79,25 @@ func TestDeleteSeriesCmdDoesNotCloseOverModel(t *testing.T) {
 	if len(got.restores) != 1 || got.restores[0].uuid != "u1" {
 		t.Fatalf("restores = %#v", got.restores)
 	}
-	if fake.exportCalls < 1 {
-		t.Fatal("expected reload export in Cmd")
+	if fake.exportCalls != 0 {
+		t.Fatalf("delete Cmd must not export (saw %d exports): the view is patched locally instead", fake.exportCalls)
 	}
 }
 
 func TestDeleteHotkeySchedulesMutatingFlight(t *testing.T) {
 	fake := &statusRecordingTaskwarrior{
 		fakeTaskwarrior: fakeTaskwarrior{
-			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
+			tasks: []task.Task{
+				{ID: 1, UUID: "u1", Description: "a", Status: "pending"},
+				{ID: 2, UUID: "u2", Description: "b", Status: "pending"},
+			},
 		},
 	}
 	m, err := NewWithTaskwarrior(nil, "firefox", fake)
 	if err != nil {
 		t.Fatalf("NewWithTaskwarrior: %v", err)
 	}
-	baseline := len(fake.statuses)
+	baselineExports := fake.exportCalls
 
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
@@ -104,7 +107,7 @@ func TestDeleteHotkeySchedulesMutatingFlight(t *testing.T) {
 	if m.taskFlight != taskFlightMutating {
 		t.Fatalf("flight = %s, want mutating", m.taskFlight)
 	}
-	if len(fake.statuses) != baseline {
+	if len(fake.statuses) != 0 {
 		t.Fatal("delete ran synchronously in Update")
 	}
 	if !strings.Contains(m.statusMsg, "Deleting") {
@@ -129,6 +132,19 @@ func TestDeleteHotkeySchedulesMutatingFlight(t *testing.T) {
 	}
 	if m.statusMsg != "Deleted task" {
 		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+	if fake.exportCalls != baselineExports {
+		t.Fatalf("export calls = %d, want %d: delete must not re-export", fake.exportCalls, baselineExports)
+	}
+	if len(m.tasks) != 1 || m.tasks[0].UUID != "u2" {
+		t.Fatalf("tasks = %#v, want only u2 after local delete", m.tasks)
+	}
+	if m.total != 1 {
+		t.Fatalf("total = %d, want 1 after local delete", m.total)
+	}
+	rows := m.tbl.Rows()
+	if len(rows) != 1 {
+		t.Fatalf("table rows = %d, want 1 after local delete", len(rows))
 	}
 }
 
@@ -182,7 +198,6 @@ func TestStaleDeleteDoneIgnored(t *testing.T) {
 	mv, _ := (&m).Update(deleteSeriesDoneMsg{
 		gen:      liveGen,
 		restores: []undoRestore{{uuid: "stale", status: "pending"}},
-		data:     reloadData{tasks: []task.Task{{ID: 99, UUID: "stale", Description: "stale", Status: "pending"}}},
 	})
 	m = *mv.(*Model)
 	if m.taskFlight != taskFlightMutating {
@@ -482,7 +497,145 @@ func mustCompileSearch(pat string) *regexp.Regexp {
 	return regexp.MustCompile(pat)
 }
 
-func TestDeleteReloadFailureStillPushesUndo(t *testing.T) {
+func TestDeleteDoneAppliesLocalRemovalWithoutExport(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			// The fake's Export always returns this same list, so a stale
+			// "reload after delete" would resurrect u1 here; the local path
+			// must not, and must not call Export again either.
+			tasks: []task.Task{
+				{ID: 1, UUID: "u1", Description: "a", Status: "pending"},
+				{ID: 2, UUID: "u2", Description: "b", Status: "pending"},
+			},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	baselineExports := fake.exportCalls
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	msg := cmd().(deleteSeriesDoneMsg)
+	if msg.err != nil {
+		t.Fatalf("delete err: %v", msg.err)
+	}
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if fake.exportCalls != baselineExports {
+		t.Fatalf("export calls = %d, want %d", fake.exportCalls, baselineExports)
+	}
+	for _, tsk := range m.tasks {
+		if tsk.UUID == "u1" {
+			t.Fatalf("deleted task still in list: %#v", m.tasks)
+		}
+	}
+	if len(m.tasks) != 1 || m.tasks[0].UUID != "u2" {
+		t.Fatalf("tasks = %#v, want only u2", m.tasks)
+	}
+	if len(m.tbl.Rows()) != 1 {
+		t.Fatalf("table rows = %d, want 1", len(m.tbl.Rows()))
+	}
+}
+
+func TestDeleteRecurringSeriesRemovesAllLocally(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			tasks: []task.Task{
+				{ID: 1, UUID: "child-1", Parent: "root", Description: "d1", Status: "pending", Recur: "daily"},
+				{ID: 2, UUID: "child-2", Parent: "root", Description: "d2", Status: "pending", Recur: "daily"},
+				{ID: 3, UUID: "other", Description: "keep", Status: "pending"},
+			},
+		},
+		series: []task.Task{
+			{ID: 0, UUID: "root", Description: "series", Status: "recurring", Recur: "daily", RType: "periodic"},
+			{ID: 1, UUID: "child-1", Parent: "root", Description: "d1", Status: "pending", Recur: "daily"},
+			{ID: 2, UUID: "child-2", Parent: "root", Description: "d2", Status: "pending", Recur: "daily"},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	baselineExports := fake.exportCalls
+
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	msg := cmd().(deleteSeriesDoneMsg)
+	if msg.err != nil {
+		t.Fatalf("delete err: %v", msg.err)
+	}
+	if !msg.recurring || msg.count != 3 {
+		t.Fatalf("msg = %#v, want recurring count 3 (children + recurring root)", msg)
+	}
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if fake.exportCalls != baselineExports {
+		t.Fatalf("export calls = %d, want %d", fake.exportCalls, baselineExports)
+	}
+	if len(m.tasks) != 1 || m.tasks[0].UUID != "other" {
+		t.Fatalf("tasks = %#v, want only other", m.tasks)
+	}
+	if m.statusMsg != "Deleted 3 recurring tasks" {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+	if len(m.undoStack) != 1 {
+		t.Fatalf("undo stack = %d, want 1", len(m.undoStack))
+	}
+}
+
+// deleteAndDoneRecordingTaskwarrior allows the delete flow's status flip and
+// records done commands by address.
+type deleteAndDoneRecordingTaskwarrior struct {
+	doneRecordingTaskwarrior
+}
+
+func (f *deleteAndDoneRecordingTaskwarrior) SetStatusUUIDContext(_ context.Context, _, _ string) error {
+	return nil
+}
+
+// Taskwarrior renumbers pending IDs whenever the working set changes, so
+// after a local delete the remaining in-memory IDs are stale. Every later
+// mutation must therefore address its task by UUID (taskAddress), which stays
+// valid.
+func TestDeleteKeepsLaterMutationsAddressedByUUID(t *testing.T) {
+	fake := &deleteAndDoneRecordingTaskwarrior{doneRecordingTaskwarrior: doneRecordingTaskwarrior{fakeTaskwarrior: fakeTaskwarrior{
+		tasks: []task.Task{
+			{ID: 1, UUID: "u1", Description: "a", Status: "pending"},
+			{ID: 2, UUID: "u2", Description: "b", Status: "pending"},
+		},
+	}}}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+
+	// Delete u1 via the hotkey flow.
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	msg := cmd().(deleteSeriesDoneMsg)
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	if len(m.tasks) != 1 || m.tasks[0].UUID != "u2" {
+		t.Fatalf("tasks = %#v, want only u2", m.tasks)
+	}
+
+	// Complete the task after the deleted one. The in-memory list still
+	// labels it ID 2, while Taskwarrior's working set has renumbered it to 1:
+	// the done command must carry the UUID, not any numeric ID.
+	m.blinkEnabled = false
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	m = *mv.(*Model)
+	if len(fake.doneAddrs) != 1 {
+		t.Fatalf("DoneContext calls = %d, want 1", len(fake.doneAddrs))
+	}
+	if fake.doneAddrs[0] != "u2" {
+		t.Fatalf("done address = %q, want UUID u2", fake.doneAddrs[0])
+	}
+}
+
+func TestDeleteLastRemainingTaskLeavesEmptyTable(t *testing.T) {
 	fake := &statusRecordingTaskwarrior{
 		fakeTaskwarrior: fakeTaskwarrior{
 			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
@@ -492,20 +645,53 @@ func TestDeleteReloadFailureStillPushesUndo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithTaskwarrior: %v", err)
 	}
-	fake.failExport = errors.New("export boom")
+
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
 	msg := cmd().(deleteSeriesDoneMsg)
-	if msg.err == nil {
-		t.Fatal("expected reload error")
-	}
-	if len(msg.restores) == 0 {
-		t.Fatal("reload failure after delete should still carry restores")
-	}
 	mv, _ = (&m).Update(msg)
 	m = *mv.(*Model)
+
+	if len(m.tasks) != 0 {
+		t.Fatalf("tasks = %#v, want none", m.tasks)
+	}
+	if len(m.tbl.Rows()) != 0 {
+		t.Fatalf("table rows = %d, want none", len(m.tbl.Rows()))
+	}
+	if m.total != 0 || m.inProgress != 0 || m.due != 0 {
+		t.Fatalf("stats = total %d inProgress %d due %d, want zeros", m.total, m.inProgress, m.due)
+	}
 	if len(m.undoStack) != 1 {
-		t.Fatalf("stack = %d, want push after delete+reload failure", len(m.undoStack))
+		t.Fatalf("undo stack = %d, want 1", len(m.undoStack))
+	}
+}
+
+func TestDeleteDropsTaskFromUltraFilter(t *testing.T) {
+	fake := &statusRecordingTaskwarrior{
+		fakeTaskwarrior: fakeTaskwarrior{
+			tasks: []task.Task{
+				{ID: 1, UUID: "u1", Description: "alpha", Status: "pending"},
+				{ID: 2, UUID: "u2", Description: "beta", Status: "pending"},
+			},
+		},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	m.ultraApplySearch("alpha")
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	msg := cmd().(deleteSeriesDoneMsg)
+	mv, _ = (&m).Update(msg)
+	m = *mv.(*Model)
+	for _, idx := range m.ultraFiltered {
+		if idx >= len(m.tasks) {
+			t.Fatalf("ultraFiltered index %d out of range after delete (len=%d)", idx, len(m.tasks))
+		}
+	}
+	if got := len(m.ultraTaskList()); got != 0 {
+		t.Fatalf("ultra task list = %d entries, want 0 after deleting the only match", got)
 	}
 }
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,29 @@ import (
 // It is kept as a package-level constant so internal helpers don't need
 // to qualify every parse/format call with the package name.
 const taskDateFormat = task.DateFormat
+
+// taskAddress returns the address under which tsk is addressed in Taskwarrior
+// CLI invocations: its UUID when present, else its legacy numeric ID. UUIDs
+// are the preferred form because Taskwarrior renumbers pending IDs whenever
+// the working set changes (every CLI run), while UUIDs never change -- so an
+// address captured from the in-memory list stays valid even after the local
+// list diverges from the CLI's numbering (e.g. after applyLocalDelete).
+func taskAddress(tsk task.Task) string {
+	if u := strings.TrimSpace(tsk.UUID); u != "" {
+		return u
+	}
+	return strconv.Itoa(tsk.ID)
+}
+
+// taskAddressByID resolves the CLI address for the in-memory task with the
+// given ID, or "" when no task with that ID is loaded.
+func (m *Model) taskAddressByID(id int) string {
+	idx := m.taskIndexByID(id)
+	if idx < 0 {
+		return ""
+	}
+	return taskAddress(m.tasks[idx])
+}
 
 const statusClearDelay = 2 * time.Second
 

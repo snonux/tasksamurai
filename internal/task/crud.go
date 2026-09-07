@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/shlex"
@@ -62,17 +63,6 @@ func AddLineContext(ctx context.Context, line string) error {
 	return AddArgsContext(ctx, fields)
 }
 
-// SetStatus changes the status of the task with the given id.
-func SetStatus(id int, status string) error {
-	return SetStatusContext(context.Background(), id, status)
-}
-
-// SetStatusContext changes the status of the task with the given id using ctx
-// for the underlying Taskwarrior command.
-func SetStatusContext(ctx context.Context, id int, status string) error {
-	return modifyTaskContext(ctx, id, "status:"+status)
-}
-
 // SetStatusUUID changes the status of the task with the given UUID.
 func SetStatusUUID(uuid, status string) error {
 	return SetStatusUUIDContext(context.Background(), uuid, status)
@@ -84,73 +74,43 @@ func SetStatusUUIDContext(ctx context.Context, uuid, status string) error {
 	return runContext(ctx, uuid, "modify", "status:"+status)
 }
 
-// Start begins the task with the given id.
-func Start(id int) error {
-	return StartContext(context.Background(), id)
-}
-
-// StartContext begins the task with the given id using ctx for the underlying
-// Taskwarrior command.
-func StartContext(ctx context.Context, id int) error {
-	return simpleTaskCommandContext(ctx, id, "start")
-}
-
-// Stop stops the task with the given id.
-func Stop(id int) error {
-	return StopContext(context.Background(), id)
-}
-
-// StopContext stops the task with the given id using ctx for the underlying
-// Taskwarrior command.
-func StopContext(ctx context.Context, id int) error {
-	return simpleTaskCommandContext(ctx, id, "stop")
-}
-
-// Done marks the task with the given id as completed.
-func Done(id int) error {
-	return DoneContext(context.Background(), id)
-}
-
-// DoneContext marks the task with the given id as completed using ctx for the
+// StartContext begins the task with the given address using ctx for the
 // underlying Taskwarrior command.
-func DoneContext(ctx context.Context, id int) error {
-	return simpleTaskCommandContext(ctx, id, "done")
+func StartContext(ctx context.Context, addr string) error {
+	return simpleTaskCommandContext(ctx, addr, "start")
 }
 
-// Delete removes the task with the given id.
-func Delete(id int) error {
-	return DeleteContext(context.Background(), id)
-}
-
-// DeleteContext removes the task with the given id using ctx for the
+// StopContext stops the task with the given address using ctx for the
 // underlying Taskwarrior command.
-func DeleteContext(ctx context.Context, id int) error {
-	return simpleTaskCommandContext(ctx, id, "delete")
+func StopContext(ctx context.Context, addr string) error {
+	return simpleTaskCommandContext(ctx, addr, "stop")
 }
 
-// SetPriority changes the priority of the task with the given id.
-func SetPriority(id int, priority string) error {
-	return SetPriorityContext(context.Background(), id, priority)
+// DoneContext marks the task with the given address as completed using ctx
+// for the underlying Taskwarrior command.
+func DoneContext(ctx context.Context, addr string) error {
+	return simpleTaskCommandContext(ctx, addr, "done")
 }
 
-// SetPriorityContext changes the priority of the task with the given id using
-// ctx for the underlying Taskwarrior command.
-func SetPriorityContext(ctx context.Context, id int, priority string) error {
-	return modifyTaskContext(ctx, id, "priority:"+priority)
-}
-
-// AddTags adds tags to the task with the given id.
-func AddTags(id int, tags []string) error {
-	return AddTagsContext(context.Background(), id, tags)
-}
-
-// AddTagsContext adds tags to the task with the given id using ctx for the
+// DeleteContext removes the task with the given address using ctx for the
 // underlying Taskwarrior command.
-func AddTagsContext(ctx context.Context, id int, tags []string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+func DeleteContext(ctx context.Context, addr string) error {
+	return simpleTaskCommandContext(ctx, addr, "delete")
+}
+
+// SetPriorityContext changes the priority of the task with the given address
+// using ctx for the underlying Taskwarrior command.
+func SetPriorityContext(ctx context.Context, addr, priority string) error {
+	return modifyTaskContext(ctx, addr, "priority:"+priority)
+}
+
+// AddTagsContext adds tags to the task with the given address using ctx for
+// the underlying Taskwarrior command.
+func AddTagsContext(ctx context.Context, addr string, tags []string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	args := []string{strconv.Itoa(id), "modify"}
+	args := []string{addr, "modify"}
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '+' {
 			t = "+" + t
@@ -160,18 +120,13 @@ func AddTagsContext(ctx context.Context, id int, tags []string) error {
 	return runContext(ctx, args...)
 }
 
-// RemoveTags removes tags from the task with the given id.
-func RemoveTags(id int, tags []string) error {
-	return RemoveTagsContext(context.Background(), id, tags)
-}
-
-// RemoveTagsContext removes tags from the task with the given id using ctx for
-// the underlying Taskwarrior command.
-func RemoveTagsContext(ctx context.Context, id int, tags []string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// RemoveTagsContext removes tags from the task with the given address using
+// ctx for the underlying Taskwarrior command.
+func RemoveTagsContext(ctx context.Context, addr string, tags []string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	args := []string{strconv.Itoa(id), "modify"}
+	args := []string{addr, "modify"}
 	for _, t := range tags {
 		if len(t) > 0 && t[0] != '-' {
 			t = "-" + t
@@ -181,18 +136,18 @@ func RemoveTagsContext(ctx context.Context, id int, tags []string) error {
 	return runContext(ctx, args...)
 }
 
-// SetTags sets the tags of the task with the given id to exactly the provided set.
-// Tags not present will be removed and new tags added as needed.
-func SetTags(ctx context.Context, id int, tags []string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// SetTags sets the tags of the task with the given address to exactly the
+// provided set. Tags not present will be removed and new tags added as needed.
+func SetTags(ctx context.Context, addr string, tags []string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	tasks, err := Export(ctx, strconv.Itoa(id))
+	tasks, err := Export(ctx, addr)
 	if err != nil {
 		return err
 	}
 	if len(tasks) == 0 {
-		return fmt.Errorf("task %d not found", id)
+		return fmt.Errorf("task %s not found", addr)
 	}
 	current := make(map[string]struct{})
 	for _, t := range tasks[0].Tags {
@@ -217,7 +172,7 @@ func SetTags(ctx context.Context, id int, tags []string) error {
 
 	args := tagModifyArgs(adds, removes)
 	if len(args) > 0 {
-		if err := modifyTaskContext(ctx, id, args...); err != nil {
+		if err := modifyTaskContext(ctx, addr, args...); err != nil {
 			return err
 		}
 	}
@@ -244,15 +199,10 @@ func tagModifyArgs(adds, removes []string) []string {
 	return args
 }
 
-// SetRecurrence sets the recurrence for the task with the given id.
-func SetRecurrence(id int, rec string) error {
-	return SetRecurrenceContext(context.Background(), id, rec)
-}
-
-// SetRecurrenceContext sets the recurrence for the task with the given id
-// using ctx for the underlying Taskwarrior command.
-func SetRecurrenceContext(ctx context.Context, id int, rec string) error {
-	return modifyTaskContext(ctx, id, "recur:"+rec)
+// SetRecurrenceContext sets the recurrence for the task with the given
+// address using ctx for the underlying Taskwarrior command.
+func SetRecurrenceContext(ctx context.Context, addr, rec string) error {
+	return modifyTaskContext(ctx, addr, "recur:"+rec)
 }
 
 // SetRecurringSeriesRecurrenceContext sets the recurrence for every known task
@@ -321,68 +271,42 @@ func setRecurrenceUUIDContext(ctx context.Context, uuid, rec string) error {
 	return runContext(ctx, "rc.recurrence.confirmation=no", uuid, "modify", "recur:"+rec)
 }
 
-// SetDueDate sets the due date for the task with the given id.
-func SetDueDate(id int, due string) error {
-	return SetDueDateContext(context.Background(), id, due)
-}
-
-// SetDueDateContext sets the due date for the task with the given id using ctx
-// for the underlying Taskwarrior command.
-func SetDueDateContext(ctx context.Context, id int, due string) error {
-	return modifyTaskContext(ctx, id, "due:"+due)
-}
-
-// SetDescription changes the description of the task with the given id.
-func SetDescription(id int, desc string) error {
-	return SetDescriptionContext(context.Background(), id, desc)
-}
-
-// SetDescriptionContext changes the description of the task with the given id
+// SetDueDateContext sets the due date for the task with the given address
 // using ctx for the underlying Taskwarrior command.
-func SetDescriptionContext(ctx context.Context, id int, desc string) error {
-	return modifyTaskContext(ctx, id, "description:"+desc)
+func SetDueDateContext(ctx context.Context, addr, due string) error {
+	return modifyTaskContext(ctx, addr, "due:"+due)
 }
 
-// SetProject changes the project of the task with the given id.
-func SetProject(id int, project string) error {
-	return SetProjectContext(context.Background(), id, project)
+// SetDescriptionContext changes the description of the task with the given
+// address using ctx for the underlying Taskwarrior command.
+func SetDescriptionContext(ctx context.Context, addr, desc string) error {
+	return modifyTaskContext(ctx, addr, "description:"+desc)
 }
 
-// SetProjectContext changes the project of the task with the given id using
+// SetProjectContext changes the project of the task with the given address
+// using ctx for the underlying Taskwarrior command.
+func SetProjectContext(ctx context.Context, addr, project string) error {
+	return modifyTaskContext(ctx, addr, "project:"+project)
+}
+
+// AnnotateContext adds an annotation to the task with the given address using
 // ctx for the underlying Taskwarrior command.
-func SetProjectContext(ctx context.Context, id int, project string) error {
-	return modifyTaskContext(ctx, id, "project:"+project)
-}
-
-// Annotate adds an annotation to the task with the given id.
-func Annotate(id int, text string) error {
-	return AnnotateContext(context.Background(), id, text)
-}
-
-// AnnotateContext adds an annotation to the task with the given id using ctx
-// for the underlying Taskwarrior command.
-func AnnotateContext(ctx context.Context, id int, text string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+func AnnotateContext(ctx context.Context, addr, text string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	return runContext(ctx, strconv.Itoa(id), "annotate", text)
+	return runContext(ctx, addr, "annotate", text)
 }
 
-// Denotate removes an annotation from the task with the given id.
-// Denotate removes an annotation from the task with the given id. The
-// annotation text is matched exactly when provided. If text is empty, the
-// oldest annotation is removed.
-func Denotate(id int, text string) error {
-	return DenotateContext(context.Background(), id, text)
-}
-
-// DenotateContext removes an annotation from the task with the given id using
-// ctx for the underlying Taskwarrior command.
-func DenotateContext(ctx context.Context, id int, text string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// DenotateContext removes an annotation from the task with the given address
+// using ctx for the underlying Taskwarrior command. The annotation text is
+// matched exactly when provided. If text is empty, the oldest annotation is
+// removed.
+func DenotateContext(ctx context.Context, addr, text string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	args := []string{strconv.Itoa(id), "denotate"}
+	args := []string{addr, "denotate"}
 	if text != "" {
 		args = append(args, text)
 	}
@@ -390,39 +314,39 @@ func DenotateContext(ctx context.Context, id int, text string) error {
 }
 
 // ReplaceAnnotations removes all existing annotations from the task with the
-// given id and sets a single annotation with the provided text. If text is
-// empty, all annotations are simply removed.
-func ReplaceAnnotations(ctx context.Context, id int, text string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// given address and sets a single annotation with the provided text. If text
+// is empty, all annotations are simply removed.
+func ReplaceAnnotations(ctx context.Context, addr, text string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	tasks, err := Export(ctx, strconv.Itoa(id))
+	tasks, err := Export(ctx, addr)
 	if err != nil {
 		return err
 	}
 	if len(tasks) == 0 {
-		return fmt.Errorf("task %d not found", id)
+		return fmt.Errorf("task %s not found", addr)
 	}
 	anns := tasks[0].Annotations
 	for i := len(anns) - 1; i >= 0; i-- {
-		if err := DenotateContext(ctx, id, anns[i].Description); err != nil {
-			return replaceAnnotationsError(id, anns, err)
+		if err := DenotateContext(ctx, addr, anns[i].Description); err != nil {
+			return replaceAnnotationsError(addr, anns, err)
 		}
 	}
 	if text == "" {
 		return nil
 	}
-	if err := AnnotateContext(ctx, id, text); err != nil {
-		return replaceAnnotationsError(id, anns, err)
+	if err := AnnotateContext(ctx, addr, text); err != nil {
+		return replaceAnnotationsError(addr, anns, err)
 	}
 	return nil
 }
 
-func replaceAnnotationsError(id int, anns []Annotation, err error) error {
+func replaceAnnotationsError(addr string, anns []Annotation, err error) error {
 	rollbackCtx, cancel := rollbackContext()
 	defer cancel()
 
-	if rollbackErr := restoreAnnotations(rollbackCtx, id, anns); rollbackErr != nil {
+	if rollbackErr := restoreAnnotations(rollbackCtx, addr, anns); rollbackErr != nil {
 		return fmt.Errorf("replace annotations failed: %w; rollback failed: %w", err, rollbackErr)
 	}
 	return err
@@ -432,74 +356,88 @@ func rollbackContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
-func restoreAnnotations(ctx context.Context, id int, anns []Annotation) error {
-	tasks, err := Export(ctx, strconv.Itoa(id))
+func restoreAnnotations(ctx context.Context, addr string, anns []Annotation) error {
+	tasks, err := Export(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("snapshot current annotations: %w", err)
 	}
 	if len(tasks) == 0 {
-		return fmt.Errorf("task %d not found", id)
+		return fmt.Errorf("task %s not found", addr)
 	}
 	current := tasks[0].Annotations
 	for i := len(current) - 1; i >= 0; i-- {
-		if err := DenotateContext(ctx, id, current[i].Description); err != nil {
+		if err := DenotateContext(ctx, addr, current[i].Description); err != nil {
 			return fmt.Errorf("remove current annotation %q: %w", current[i].Description, err)
 		}
 	}
 	for _, ann := range anns {
-		if err := AnnotateContext(ctx, id, ann.Description); err != nil {
+		if err := AnnotateContext(ctx, addr, ann.Description); err != nil {
 			return fmt.Errorf("restore annotation %q: %w", ann.Description, err)
 		}
 	}
 	return nil
 }
 
-// Edit opens the task in an editor for manual modification.
-// EditCmd returns an exec.Cmd that edits the task with the given id.
+// EditCmd returns an exec.Cmd that edits the task with the given address.
 // The caller is responsible for running the command, typically via
 // tea.ExecProcess so that the terminal state is properly managed.
-func EditCmd(id int) *exec.Cmd {
-	if id <= 0 {
+func EditCmd(addr string) *exec.Cmd {
+	if !validTaskAddr(addr) {
 		// Return a command that will fail with an appropriate error
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("echo 'invalid task ID: %d' >&2; exit 1", id))
+		cmd := exec.Command("sh", "-c", "echo 'invalid task address' >&2; exit 1")
 		return cmd
 	}
-	cmd := exec.Command("task", strconv.Itoa(id), "edit")
+	cmd := exec.Command("task", addr, "edit")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd
 }
 
-// Edit opens the task in an editor for manual modification.
-// This is a convenience wrapper around EditCmd.
-func Edit(id int) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// validTaskAddr validates a CLI task address: a non-empty UUID string, or a
+// numeric ID greater than zero (the old int-based API rejected id <= 0;
+// pure-digit addresses like "0" or "-1" stay invalid for parity).
+func validTaskAddr(addr string) bool {
+	trimmed := strings.TrimSpace(addr)
+	if trimmed == "" {
+		return false
 	}
-	return EditCmd(id).Run()
+	if id, err := strconv.Atoi(trimmed); err == nil {
+		return id > 0
+	}
+	return true
+}
+
+func invalidAddrError(addr string) error {
+	return fmt.Errorf("invalid task address: %q", addr)
 }
 
 // modifyTask runs a modify command with validation
-func modifyTask(id int, args ...string) error {
-	return modifyTaskContext(context.Background(), id, args...)
+func modifyTask(addr string, args ...string) error {
+	return modifyTaskContext(context.Background(), addr, args...)
 }
 
-func modifyTaskContext(ctx context.Context, id int, args ...string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// modifyTaskContext runs "task <addr> modify ...". addr is the task's UUID
+// (preferred) or its legacy numeric ID: Taskwarrior renumbers pending IDs
+// whenever the working set changes, so mutations must not depend on an
+// in-memory ID staying valid; UUIDs are stable.
+func modifyTaskContext(ctx context.Context, addr string, args ...string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	return runContext(ctx, append([]string{strconv.Itoa(id), "modify"}, args...)...)
+	return runContext(ctx, append([]string{addr, "modify"}, args...)...)
 }
 
 // simpleTaskCommand runs a simple command on a task with validation
-func simpleTaskCommand(id int, command string) error {
-	return simpleTaskCommandContext(context.Background(), id, command)
+func simpleTaskCommand(addr string, command string) error {
+	return simpleTaskCommandContext(context.Background(), addr, command)
 }
 
-func simpleTaskCommandContext(ctx context.Context, id int, command string) error {
-	if id <= 0 {
-		return fmt.Errorf("invalid task ID: %d", id)
+// simpleTaskCommandContext runs "task <addr> <command>". See
+// modifyTaskContext for what addr may contain.
+func simpleTaskCommandContext(ctx context.Context, addr string, command string) error {
+	if !validTaskAddr(addr) {
+		return invalidAddrError(addr)
 	}
-	return runContext(ctx, strconv.Itoa(id), command)
+	return runContext(ctx, addr, command)
 }

@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -8,36 +9,49 @@ import (
 func TestModifyTask(t *testing.T) {
 	tests := []struct {
 		name    string
-		id      int
+		addr    string
 		args    []string
 		wantErr bool
 		errMsg  string
 	}{
 		{
-			name:    "valid ID",
-			id:      1,
+			name:    "valid UUID address",
+			addr:    "7977b12b-a6cd-4cd5-875d-c91aa610ac96",
 			args:    []string{"status:pending"},
 			wantErr: false,
 		},
 		{
-			name:    "zero ID",
-			id:      0,
+			name:    "valid numeric address",
+			addr:    "1",
 			args:    []string{"status:pending"},
-			wantErr: true,
-			errMsg:  "invalid task ID: 0",
+			wantErr: false,
 		},
 		{
-			name:    "negative ID",
-			id:      -1,
+			name:    "empty address",
+			addr:    "",
 			args:    []string{"status:pending"},
 			wantErr: true,
-			errMsg:  "invalid task ID: -1",
+			errMsg:  "invalid task address",
+		},
+		{
+			name:    "whitespace address",
+			addr:    "   ",
+			args:    []string{"status:pending"},
+			wantErr: true,
+			errMsg:  "invalid task address",
+		},
+		{
+			name:    "zero numeric address",
+			addr:    "0",
+			args:    []string{"status:pending"},
+			wantErr: true,
+			errMsg:  "invalid task address",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := modifyTask(tt.id, tt.args...)
+			err := modifyTask(tt.addr, tt.args...)
 
 			// We can't test actual taskwarrior commands without it installed
 			// So we just test the validation
@@ -55,36 +69,49 @@ func TestModifyTask(t *testing.T) {
 func TestSimpleTaskCommand(t *testing.T) {
 	tests := []struct {
 		name    string
-		id      int
+		addr    string
 		command string
 		wantErr bool
 		errMsg  string
 	}{
 		{
-			name:    "valid ID",
-			id:      1,
+			name:    "valid UUID address",
+			addr:    "7977b12b-a6cd-4cd5-875d-c91aa610ac96",
 			command: "done",
 			wantErr: false,
 		},
 		{
-			name:    "zero ID",
-			id:      0,
+			name:    "valid numeric address",
+			addr:    "1",
 			command: "done",
-			wantErr: true,
-			errMsg:  "invalid task ID: 0",
+			wantErr: false,
 		},
 		{
-			name:    "negative ID",
-			id:      -5,
+			name:    "empty address",
+			addr:    "",
 			command: "done",
 			wantErr: true,
-			errMsg:  "invalid task ID: -5",
+			errMsg:  "invalid task address",
+		},
+		{
+			name:    "whitespace address",
+			addr:    "   ",
+			command: "done",
+			wantErr: true,
+			errMsg:  "invalid task address",
+		},
+		{
+			name:    "zero numeric address",
+			addr:    "0",
+			command: "done",
+			wantErr: true,
+			errMsg:  "invalid task address",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := simpleTaskCommand(tt.id, tt.command)
+			err := simpleTaskCommand(tt.addr, tt.command)
 
 			// We can't test actual taskwarrior commands without it installed
 			// So we just test the validation
@@ -100,33 +127,36 @@ func TestSimpleTaskCommand(t *testing.T) {
 }
 
 func TestTaskOperationsValidation(t *testing.T) {
-	// Test that all task operations validate IDs
-	invalidID := -1
+	// Test that all task operations validate the address
+	invalidAddr := ""
 
 	operations := []struct {
 		name string
 		fn   func() error
 	}{
-		{"SetStatus", func() error { return SetStatus(invalidID, "pending") }},
-		{"Start", func() error { return Start(invalidID) }},
-		{"Stop", func() error { return Stop(invalidID) }},
-		{"Done", func() error { return Done(invalidID) }},
-		{"Delete", func() error { return Delete(invalidID) }},
-		{"SetPriority", func() error { return SetPriority(invalidID, "H") }},
-		{"SetRecurrence", func() error { return SetRecurrence(invalidID, "daily") }},
-		{"SetDueDate", func() error { return SetDueDate(invalidID, "tomorrow") }},
-		{"SetDescription", func() error { return SetDescription(invalidID, "test") }},
-		{"Annotate", func() error { return Annotate(invalidID, "note") }},
-		{"Denotate", func() error { return Denotate(invalidID, "note") }},
+		{"Start", func() error { return StartContext(context.Background(), invalidAddr) }},
+		{"Stop", func() error { return StopContext(context.Background(), invalidAddr) }},
+		{"Done", func() error { return DoneContext(context.Background(), invalidAddr) }},
+		{"Delete", func() error { return DeleteContext(context.Background(), invalidAddr) }},
+		{"SetPriority", func() error { return SetPriorityContext(context.Background(), invalidAddr, "H") }},
+		{"SetRecurrence", func() error { return SetRecurrenceContext(context.Background(), invalidAddr, "daily") }},
+		{"SetDueDate", func() error { return SetDueDateContext(context.Background(), invalidAddr, "tomorrow") }},
+		{"SetDescription", func() error { return SetDescriptionContext(context.Background(), invalidAddr, "test") }},
+		{"Annotate", func() error { return AnnotateContext(context.Background(), invalidAddr, "note") }},
+		{"Denotate", func() error { return DenotateContext(context.Background(), invalidAddr, "note") }},
+		{"AddTags", func() error { return AddTagsContext(context.Background(), invalidAddr, []string{"x"}) }},
+		{"RemoveTags", func() error { return RemoveTagsContext(context.Background(), invalidAddr, []string{"x"}) }},
+		{"SetTags", func() error { return SetTags(context.Background(), invalidAddr, []string{"x"}) }},
+		{"ReplaceAnnotations", func() error { return ReplaceAnnotations(context.Background(), invalidAddr, "note") }},
 	}
 
 	for _, op := range operations {
 		t.Run(op.name, func(t *testing.T) {
 			err := op.fn()
 			if err == nil {
-				t.Errorf("%s() with invalid ID = nil, want error", op.name)
-			} else if !strings.Contains(err.Error(), "invalid task ID") {
-				t.Errorf("%s() error = %v, want error containing 'invalid task ID'", op.name, err)
+				t.Errorf("%s() with invalid address = nil, want error", op.name)
+			} else if !strings.Contains(err.Error(), "invalid task address") {
+				t.Errorf("%s() error = %v, want error containing 'invalid task address'", op.name, err)
 			}
 		})
 	}
