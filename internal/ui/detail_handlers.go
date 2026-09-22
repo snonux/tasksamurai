@@ -41,6 +41,12 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Scroll keys page the detail viewport; field navigation below keeps
+	// its highlight semantics.
+	if m.handleDetailScrollKey(msg) {
+		return m, nil
+	}
+
 	// Normal task detail view mode
 	switch msg.String() {
 	case "q":
@@ -147,6 +153,7 @@ func (m *Model) handleDetailSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) 
 func (m *Model) closeDetailView() {
 	m.showTaskDetail = false
 	m.clearCurrentTaskDetail()
+	m.resetDetailViewport()
 	m.detailSearching = false
 	m.detailSearchRegex = nil
 	m.detailSearchInput.SetValue("")

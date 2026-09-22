@@ -740,6 +740,7 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 	if t := m.taskByID(id); t != nil {
 		m.showTaskDetail = true
 		m.setCurrentTaskDetail(t)
+		m.initDetailViewport()
 		m.detailSearching = false
 		m.detailSearchRegex = nil
 		m.detailFieldIndex = 0

@@ -311,10 +311,6 @@ func (m *Model) renderDetailFooter(lines []string) []string {
 			lines = append(lines, ist.Render("Press / to search"))
 		}
 	}
-	if m.detailSearching {
-		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("248")).PaddingTop(1).
-			Render("Search: "+m.detailSearchInput.View()))
-	}
 	return lines
 }
 
@@ -435,6 +431,7 @@ func (m *Model) refreshCurrentTaskDetail() {
 	// Task no longer exists, clear detail view
 	m.showTaskDetail = false
 	m.clearCurrentTaskDetail()
+	m.resetDetailViewport()
 }
 
 // detailDescriptionFieldIndex returns the navigable field index for the

@@ -137,6 +137,16 @@ type detailViewState struct {
 	detailBlinkCount            int  // number of blink cycles completed so far
 }
 
+// detailScrollState holds the scrollable viewport for the task detail
+// overlay so content taller than the screen stays reachable (pgup/pgdn,
+// ctrl+u/ctrl+d; mouse-wheel msgs are also routed through Update, though
+// mouse mode is not enabled app-wide). The viewport content is the rendered
+// detail screen; field-highlight navigation (detailFieldIndex) is layered
+// on top.
+type detailScrollState struct {
+	detailViewport viewport.Model
+}
+
 // ultraState holds the state for the ultra mode task list and its search UI.
 type ultraState struct {
 	showUltra        bool
@@ -243,17 +253,18 @@ type Model struct {
 	tbl       atable.Model
 	tblStyles atable.Styles
 
-	blinkState       // row blink animation (see blinkState)
-	autoRefreshState // periodic background reload (see autoRefreshState)
-	searchState      // task-table and help-screen search (see searchState)
-	detailViewState  // task detail overlay (see detailViewState)
-	ultraState       // ultra mode task list and search state (see ultraState)
-	detailEditState  // detail-overlay external description editor state
-	ultraModeState   // ultra-mode lifecycle flags
-	helpState        // help-screen viewport state
-	shellState       // Taskwarrior command prompt and output panel
-	editState        // inline field editing (see editState)
-	taskFlightState  // single-flight Taskwarrior gate (see taskFlightState)
+	blinkState        // row blink animation (see blinkState)
+	autoRefreshState  // periodic background reload (see autoRefreshState)
+	searchState       // task-table and help-screen search (see searchState)
+	detailViewState   // task detail overlay (see detailViewState)
+	detailScrollState // detail-overlay scroll viewport (see detailScrollState)
+	ultraState        // ultra mode task list and search state (see ultraState)
+	detailEditState   // detail-overlay external description editor state
+	ultraModeState    // ultra-mode lifecycle flags
+	helpState         // help-screen viewport state
+	shellState        // Taskwarrior command prompt and output panel
+	editState         // inline field editing (see editState)
+	taskFlightState   // single-flight Taskwarrior gate (see taskFlightState)
 
 	cellExpanded bool
 
@@ -803,7 +814,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if we're in detail view
 		if m.showTaskDetail {
 			// If we're editing in detail view, let editing modes handle it
-			if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing {
+			if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.projEditing {
 				if handled, model, cmd := m.handleEditingModes(msg); handled {
 					return model, cmd
 				}
@@ -839,6 +850,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Default case - pass through to appropriate component
+	if m.showTaskDetail {
+		// Update detail viewport for mouse wheel and other events
+		var cmd tea.Cmd
+		m.detailViewport, cmd = m.detailViewport.Update(msg)
+		return m, cmd
+	}
 	if m.showHelp {
 		// Update help viewport for mouse wheel and other events
 		var cmd tea.Cmd
@@ -864,6 +881,16 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		}
 		m.ultraEnsureVisible()
 		m.syncUltraTableSelection()
+	}
+
+	// Update detail viewport on resize so the scrollable detail overlay
+	// always fills the current window.
+	if m.showTaskDetail && m.detailViewport.Width() > 0 {
+		width, height := m.detailViewSize()
+		if width > 0 && height > 0 {
+			m.detailViewport.SetWidth(width)
+			m.detailViewport.SetHeight(height)
+		}
 	}
 
 	// Update help viewport if active
@@ -1065,10 +1092,6 @@ func (m *Model) appendInlineInputOverlay(view string) string {
 		view = lipgloss.JoinVertical(lipgloss.Left, view, overlay)
 	}
 	return view
-}
-
-func (m *Model) renderDetailScreen() string {
-	return m.renderTaskDetail()
 }
 
 func (m *Model) renderUltraScreen() string {
