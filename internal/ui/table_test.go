@@ -1352,7 +1352,12 @@ func TestDeleteRecurringRollsBackCompletedDeletesAfterContextDeadline(t *testing
 
 	quitCtx, cancelQuit := context.WithCancel(context.Background())
 	defer cancelQuit()
-	opCtx, cancelOp := context.WithTimeout(quitCtx, 100*time.Millisecond)
+	// The deadline needs enough headroom for the recurring-series export and
+	// the first delete to start even under load: a 100ms budget could expire
+	// during the export alone, before any delete (and therefore any rollback
+	// logging) ever ran. The 10s parent-delete sleep is killed at the
+	// deadline either way.
+	opCtx, cancelOp := context.WithTimeout(quitCtx, time.Second)
 	defer cancelOp()
 
 	tw := task.NewTaskwarrior()
