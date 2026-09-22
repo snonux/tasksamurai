@@ -84,9 +84,11 @@ func TestStartBlinkOnInvisibleTaskStillMarksDone(t *testing.T) {
 	fake := &doneRecordingTaskwarrior{fakeTaskwarrior: fakeTaskwarrior{tasks: blinkTasks()}}
 	m := newBlinkTestModel(t, fake)
 
-	if cmd := m.startBlink(99, true); cmd != nil {
-		t.Fatalf("startBlink for a task with no row returned a command; want nil")
+	cmd := m.startBlink(99, true)
+	if cmd == nil {
+		t.Fatalf("startBlink for a task with no row returned no command; want the async done pipeline")
 	}
+	drainCmds(t, &m, cmd)
 
 	if len(fake.doneAddrs) != 1 || fake.doneAddrs[0] != "99" {
 		t.Fatalf("DoneContext calls = %v, want [99]", fake.doneAddrs)

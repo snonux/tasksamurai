@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
 // handleEditDone handles completion of external editor
@@ -45,18 +48,17 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	newDesc := strings.TrimSpace(string(content))
 	t := m.currentDetailTask()
 	if t != nil {
-		ctx, cancel := m.taskOperationContext()
-		err = m.taskwarriorClient().SetDescriptionContext(ctx, taskAddress(*t), newDesc)
-		cancel()
-		if err != nil {
-			return m, m.showStatusTimed(fmt.Sprintf("Error updating description: %v", err))
+		addr := taskAddress(*t)
+		if m.taskFlightBlocks() {
+			return m, m.showStatusTimed("Busy: description not saved")
 		}
-
-		// Reload and start blinking
-		if !m.reloadAndReport() {
-			return m, nil
-		}
-		return m, m.startDetailBlink(m.detailDescriptionFieldIndex())
+		// Save as an async gated Cmd (mutate + reload); the detail-view blink
+		// starts from the DoneMsg after the reloaded data is applied.
+		return m, m.scheduleMutateReload("Saving description…",
+			mutateMeta{detailBlink: true, detailField: m.detailDescriptionFieldIndex()},
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetDescriptionContext(ctx, addr, newDesc)
+			})
 	}
 
 	return m, nil

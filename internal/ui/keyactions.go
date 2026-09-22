@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -33,30 +34,25 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 	}
 	id := tsk.ID
 	addr := taskAddress(*tsk)
+	started := tsk.Start != ""
 
-	// Check if task is started
-	if tsk.Start != "" {
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().StopContext(ctx, addr)
-		cancel()
-		if err != nil {
-			m.showError(err)
-			return m, nil
-		}
-	} else {
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().StartContext(ctx, addr)
-		cancel()
-		if err != nil {
-			m.showError(err)
-			return m, nil
-		}
-	}
-
-	if !m.reloadAndReport() {
+	if m.taskFlightBlocks() {
+		_ = m.rejectIfBusy()
 		return m, nil
 	}
-	return m, m.startBlink(id, false)
+	var op mutateOp
+	label := "Starting…"
+	if started {
+		op = func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.StopContext(ctx, addr)
+		}
+		label = "Stopping…"
+	} else {
+		op = func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.StartContext(ctx, addr)
+		}
+	}
+	return m, m.scheduleMutateReload(label, mutateMeta{blinkID: id}, op)
 }
 
 func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
@@ -353,20 +349,17 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	id := tsk.ID
+	addr := taskAddress(*tsk)
 
+	if m.taskFlightBlocks() {
+		_ = m.rejectIfBusy()
+		return m, nil
+	}
 	// In Taskwarrior, passing an empty value to due: removes the due date
-	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetDueDateContext(ctx, taskAddress(*tsk), "")
-	cancel()
-	if err != nil {
-		m.showError(err)
-		return m, nil
-	}
-
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-	return m, m.startBlink(id, false)
+	return m, m.scheduleMutateReload("Removing due…", mutateMeta{blinkID: id},
+		func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.SetDueDateContext(ctx, addr, "")
+		})
 }
 
 func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
@@ -375,22 +368,19 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	id := tsk.ID
+	addr := taskAddress(*tsk)
 
 	days := rand.Intn(31) + 7
 	due := time.Now().AddDate(0, 0, days).Format("2006-01-02")
 
-	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetDueDateContext(ctx, taskAddress(*tsk), due)
-	cancel()
-	if err != nil {
-		m.showError(err)
+	if m.taskFlightBlocks() {
+		_ = m.rejectIfBusy()
 		return m, nil
 	}
-
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-	return m, m.startBlink(id, false)
+	return m, m.scheduleMutateReload("Setting due…", mutateMeta{blinkID: id},
+		func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.SetDueDateContext(ctx, addr, due)
+		})
 }
 
 func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
@@ -551,28 +541,21 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	firstTag := tsk.Tags[0]
+	addr := taskAddress(*tsk)
 
-	// Set the tag as project
-	ctx, cancel := m.taskOperationContext()
-	err = m.taskwarriorClient().SetProjectContext(ctx, taskAddress(*tsk), firstTag)
-	if err != nil {
-		cancel()
-		m.showError(err)
+	if m.taskFlightBlocks() {
+		_ = m.rejectIfBusy()
 		return m, nil
 	}
-
-	// Remove the tag from the task
-	if err := m.taskwarriorClient().RemoveTagsContext(ctx, taskAddress(*tsk), []string{firstTag}); err != nil {
-		cancel()
-		m.showError(err)
-		return m, nil
-	}
-	cancel()
-
-	if !m.reloadAndReport() {
-		return m, nil
-	}
-	return m, m.startBlink(id, false)
+	// Set the tag as project, then remove the tag: both mutations run
+	// sequentially inside one gated Cmd.
+	return m, m.scheduleMutateReload("Converting tag…", mutateMeta{blinkID: id},
+		func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.SetProjectContext(ctx, addr, firstTag)
+		},
+		func(ctx context.Context, tw task.Taskwarrior) error {
+			return tw.RemoveTagsContext(ctx, addr, []string{firstTag})
+		})
 }
 
 func (m *Model) handleRandomTheme() (tea.Model, tea.Cmd) {

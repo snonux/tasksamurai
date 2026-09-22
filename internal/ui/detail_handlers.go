@@ -96,7 +96,7 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // handleDetailMarkDone marks the task currently displayed in the detail view
 // as done. The detail view is closed first so the underlying table is visible
 // for the blink animation and so the (now-completed) task isn't shown as
-// pending after the reload triggered by startBlink.
+// pending after the async done mutate+reload completes.
 func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
 	t := m.currentDetailTask()
 	if t == nil {

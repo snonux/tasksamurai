@@ -625,8 +625,12 @@ func TestDeleteKeepsLaterMutationsAddressedByUUID(t *testing.T) {
 	// labels it ID 2, while Taskwarrior's working set has renumbered it to 1:
 	// the done command must carry the UUID, not any numeric ID.
 	m.blinkEnabled = false
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	mv, doneCmd := (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = *mv.(*Model)
+	if doneCmd == nil {
+		t.Fatalf("done with blink disabled returned no command")
+	}
+	drainCmds(t, &m, doneCmd)
 	if len(fake.doneAddrs) != 1 {
 		t.Fatalf("DoneContext calls = %d, want 1", len(fake.doneAddrs))
 	}

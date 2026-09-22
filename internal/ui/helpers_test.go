@@ -413,8 +413,8 @@ func TestHandleTextInputKeepsStateOnEnterError(t *testing.T) {
 	m := Model{windowHeight: 20}
 	called := false
 
-	mv, cmd := (&m).handleTextInput(tea.KeyPressMsg{Code: tea.KeyEnter}, &input, func(string) error {
-		return fmt.Errorf("boom")
+	mv, cmd := (&m).handleTextInput(tea.KeyPressMsg{Code: tea.KeyEnter}, &input, func(string) (tea.Cmd, error) {
+		return nil, fmt.Errorf("boom")
 	}, func() {
 		called = true
 	})

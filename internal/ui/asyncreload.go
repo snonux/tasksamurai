@@ -18,6 +18,7 @@ const (
 	reloadReasonEdit
 	reloadReasonSearch
 	reloadReasonAuto
+	reloadReasonFilter
 )
 
 // reloadSnapshot is a value copy of everything taskReloadCmd needs so the
@@ -35,6 +36,10 @@ type reloadMeta struct {
 	editID      int
 	shellResult task.RunResult
 	shellErr    error
+	// restoreFilters/prevFilters restore the previous filter when the export
+	// rejects a newly applied filter expression (see handleFilterMode).
+	restoreFilters bool
+	prevFilters    []string
 }
 
 type taskReloadDoneMsg struct {
@@ -97,6 +102,13 @@ func (m *Model) handleTaskReloadDone(msg taskReloadDoneMsg) (tea.Model, tea.Cmd)
 	}
 	m.endTaskFlight()
 	if msg.err != nil {
+		if msg.meta.restoreFilters {
+			// Roll the filters back so the UI never shows an unexplained
+			// empty list after a rejected filter expression.
+			m.filters = msg.meta.prevFilters
+			m.showErrorTimed(fmt.Errorf("filter error: %w", msg.err))
+			return m, nil
+		}
 		m.showError(fmt.Errorf("reloading tasks: %w", msg.err))
 		if msg.meta.reason == reloadReasonAuto {
 			return m, m.maybeAutoRefreshTick()

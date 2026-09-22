@@ -517,35 +517,23 @@ func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
 // finishBlinkImmediately ends a blink that will never be animated: either
 // blinking is disabled, or the task has no row in the current table to flash.
 // It performs the deferred "done" the animation would have run at the end of
-// the cycle, then clears the blink state and reloads.
+// the cycle as an async gated Cmd (mutate + reload) and clears the blink
+// state. The blink flight is armed before blinkID is cleared so no window
+// exists where neither blink routing nor the gate blocks action keys.
 //
 // Clearing blinkID is what keeps the UI responsive. Update() routes every
 // keypress to handleBlinkingState while blinkID != 0, and only a blinkMsg
 // tick clears it again. Returning with blinkID set but no tick scheduled
 // wedges the session for good: navigation keys still work while every action
 // key is silently swallowed. See docs/debugging.md.
-func (m *Model) finishBlinkImmediately(id int, markDone bool) {
+func (m *Model) finishBlinkImmediately(id int, markDone bool) tea.Cmd {
+	var cmd tea.Cmd
 	if markDone {
-		for _, tsk := range m.tasks {
-			if tsk.ID == id {
-				m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
-				break
-			}
-		}
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().DoneContext(ctx, m.blinkDoneAddress(id))
-		cancel()
-		if err != nil {
-			m.showError(err)
-		}
+		addr := m.blinkDoneAddress(id)
+		cmd = m.scheduleMutateReload("Marking done…", mutateMeta{undo: m.doneUndoForID(id)}, doneOp(addr))
 	}
-	m.blinkID = 0
-	m.blinkAddr = ""
-	m.blinkRow = -1
-	m.blinkOn = false
-	m.blinkCount = 0
-	m.blinkMarkDone = false
-	m.reloadAndReport()
+	m.clearRowBlink()
+	return cmd
 }
 
 // blinkDoneAddress returns the address the deferred done command should
@@ -568,8 +556,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 	m.blinkMarkDone = markDone
 
 	if !m.blinkEnabled {
-		m.finishBlinkImmediately(id, markDone)
-		return nil
+		return m.finishBlinkImmediately(id, markDone)
 	}
 
 	m.blinkRow = -1
@@ -585,8 +572,7 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 		// (a due date moved past the filter window, a new wait date) leaves
 		// nothing to animate. Finish the blink now rather than returning with
 		// blinkID set and no tick scheduled.
-		m.finishBlinkImmediately(id, markDone)
-		return nil
+		return m.finishBlinkImmediately(id, markDone)
 	}
 	if m.disco {
 		m.theme = RandomTheme()
@@ -749,14 +735,6 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 	return rows
 }
 
-func (m *Model) reloadAndReport() bool {
-	if err := m.reload(); err != nil {
-		m.showError(fmt.Errorf("reloading tasks: %w", err))
-		return false
-	}
-	return true
-}
-
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd { return nil }
 
@@ -781,6 +759,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleShellDone(msg)
 	case taskReloadDoneMsg:
 		return m.handleTaskReloadDone(msg)
+	case mutateReloadDoneMsg:
+		return m.handleMutateReloadDone(msg)
 	case deleteSeriesDoneMsg:
 		return m.handleDeleteSeriesDone(msg)
 	case undoActionDoneMsg:
@@ -917,11 +897,17 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 // then on. See docs/debugging.md.
 func (m *Model) handleBlinkMsg() (tea.Model, tea.Cmd) {
 	detailBlinking := m.advanceDetailBlink()
-	rowBlinking := m.advanceRowBlink()
-	if detailBlinking || rowBlinking {
+	cmd := m.advanceRowBlink()
+	// The row blink is still running when blinkID is set; the returned cmd is
+	// the async Done pipeline scheduled on the final tick. Batch it with the
+	// next blink tick so a still-running detail blink can never drop it.
+	switch {
+	case detailBlinking && cmd != nil:
+		return m, tea.Batch(blinkCmd(), cmd)
+	case detailBlinking, m.blinkID != 0:
 		return m, blinkCmd()
 	}
-	return m, nil
+	return m, cmd
 }
 
 // advanceDetailBlink toggles the detail-view field highlight for this tick
@@ -943,46 +929,45 @@ func (m *Model) advanceDetailBlink() bool {
 	return false
 }
 
-// advanceRowBlink toggles the table row highlight for this tick and reports
-// whether the animation needs further ticks. On the final tick it runs the
-// deferred "done" the blink was covering for and reloads the task list.
-func (m *Model) advanceRowBlink() bool {
+// advanceRowBlink toggles the table row highlight for this tick and returns
+// the async pipeline Cmd scheduled on the final tick (deferred "done" mutate
+// + reload). The reload that used to run after every blink end is gone: every
+// blink is now started from a *DoneMsg that already applied fresh export
+// data, and no table-changing action can run while blinkID is set (keys are
+// routed to handleBlinkingState and auto-refresh skips blinks).
+func (m *Model) advanceRowBlink() tea.Cmd {
 	if m.blinkID == 0 {
-		return false
+		return nil
 	}
 
 	m.blinkOn = !m.blinkOn
 	m.blinkCount++
 	m.updateBlinkRow()
 	if m.blinkCount < blinkCycles {
-		return true
+		return nil
 	}
 
 	id := m.blinkID
 	mark := m.blinkMarkDone
 	addr := m.blinkDoneAddress(id)
+	var cmd tea.Cmd
+	if mark {
+		// Arm the mutating flight before clearing blinkID (see
+		// docs/async-task-commands.md, blink-end flight arming order).
+		cmd = m.scheduleMutateReload("Marking done…", mutateMeta{undo: m.doneUndoForID(id)}, doneOp(addr))
+	}
+	m.clearRowBlink()
+	return cmd
+}
+
+// clearRowBlink resets all table-row blink state.
+func (m *Model) clearRowBlink() {
 	m.blinkID = 0
 	m.blinkAddr = ""
+	m.blinkRow = -1
 	m.blinkOn = false
 	m.blinkCount = 0
 	m.blinkMarkDone = false
-
-	if mark {
-		for _, tsk := range m.tasks {
-			if tsk.ID == id {
-				m.pushUndoAction("done", []undoRestore{{uuid: tsk.UUID, status: "pending"}})
-				break
-			}
-		}
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().DoneContext(ctx, addr)
-		cancel()
-		if err != nil {
-			m.showError(err)
-		}
-	}
-	m.reloadAndReport()
-	return false
 }
 
 // anyInputActive reports whether the user is currently entering text or

@@ -228,8 +228,9 @@ func TestNewWithTaskwarriorUsesFakeForAddTask(t *testing.T) {
 
 	m.addingTask = true
 	m.addInput.SetValue("new task +agent")
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	if !reflect.DeepEqual(fake.addLines, []string{"new task +agent"}) {
 		t.Fatalf("add lines = %v", fake.addLines)
@@ -514,12 +515,14 @@ func TestAnnotateHotkey(t *testing.T) {
 	mp := &m // Get pointer to model
 	mv, _ := mp.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
 	mp = mv.(*Model)
+	var cmd tea.Cmd
 	for _, r := range "note" {
 		mv, _ = mp.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		mp = mv.(*Model)
 	}
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	mp = mv.(*Model)
+	drainCmds(t, mp, cmd)
 
 	data, err := os.ReadFile(annoFile)
 	if err != nil {
@@ -810,8 +813,9 @@ func TestReplaceAnnotationHotkey(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(annoFile)
 	if err != nil {
@@ -884,6 +888,8 @@ func TestHandleDescEditDoneUpdatesDescriptionAndRemovesTempFile(t *testing.T) {
 	if _, err := os.Stat(tempFile); !os.IsNotExist(err) {
 		t.Fatalf("temp file still exists after handler: %v", err)
 	}
+
+	drainCmds(t, &m, cmd)
 
 	logData, err := os.ReadFile(logFile)
 	if err != nil {
@@ -1046,12 +1052,20 @@ func TestHandleFilterModeReportsReloadError(t *testing.T) {
 	mv, cmd := (&m).handleFilterMode(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
-	if !m.filterEditing {
-		t.Fatalf("filter editing was cleared after reload failure")
+	// Edit mode exits immediately on Enter; the reload runs asynchronously.
+	if m.filterEditing {
+		t.Fatalf("filter editing was not cleared after commit")
 	}
 	if cmd == nil {
-		t.Fatalf("reload failure did not return a clear-status command")
+		t.Fatalf("filter commit did not return a reload command")
 	}
+	if got := len(m.filters); got != 1 {
+		t.Fatalf("filters were not applied before the reload: %#v", m.filters)
+	}
+
+	drainCmds(t, &m, cmd)
+
+	// The reload failed, so the previous (empty) filter set is restored.
 	if got := len(m.filters); got != 0 {
 		t.Fatalf("filters were not rolled back after reload failure: %#v", m.filters)
 	}
@@ -1094,11 +1108,13 @@ func TestDoneHotkey(t *testing.T) {
 
 	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = *mv.(*Model)
+	var cmd tea.Cmd
 	for i := 0; i < blinkCycles; i++ {
 		mp := &m
-		mv, _ = mp.Update(blinkMsg{})
+		mv, cmd = mp.Update(blinkMsg{})
 		m = *mv.(*Model)
 	}
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(doneFile)
 	if err != nil {
@@ -1144,11 +1160,13 @@ func TestUndoHotkey(t *testing.T) {
 
 	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = *mv.(*Model)
+	var blinkCmd tea.Cmd
 	for i := 0; i < blinkCycles; i++ {
 		mp := &m
-		mv, _ = mp.Update(blinkMsg{})
+		mv, blinkCmd = mp.Update(blinkMsg{})
 		m = *mv.(*Model)
 	}
+	drainCmds(t, &m, blinkCmd)
 	mp := &m
 	mv, cmd := mp.Update(tea.KeyPressMsg{Code: 'U', Text: "U"})
 	m = *mv.(*Model)
@@ -1904,8 +1922,9 @@ func TestDueDateHotkey(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(dueFile)
 	if err != nil {
@@ -1950,8 +1969,9 @@ func TestRandomDueDateHotkey(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(dueFile)
 	if err != nil {
@@ -2013,8 +2033,9 @@ func TestRecurrenceHotkey(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(recFile)
 	if err != nil {
@@ -2050,8 +2071,9 @@ func TestRecurringSeriesRecurrenceHotkey(t *testing.T) {
 	}
 	m.recurInput.SetValue("weekly")
 
-	mv, _ = (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	want := []fakeSeriesRecurrenceChange{{rootUUID: "root", rec: "weekly"}}
 	if !reflect.DeepEqual(fake.seriesRecurrences, want) {
@@ -2115,15 +2137,18 @@ func TestRecurringSeriesRecurrenceFailurePreservesErrorCommand(t *testing.T) {
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
 
+	// Edit mode exits immediately on Enter; the mutation runs asynchronously
+	// and the error is surfaced by the DoneMsg.
 	if cmd == nil {
-		t.Fatalf("expected timed error command")
+		t.Fatalf("expected async mutation command")
 	}
-	if !m.recurEditing {
-		t.Fatalf("recurrence input should stay active after failure")
+	if m.recurEditing {
+		t.Fatalf("recurrence input should exit edit mode on commit")
 	}
 	if m.blinkID != 0 {
 		t.Fatalf("success blink started for failed recurrence edit: blinkID=%d", m.blinkID)
 	}
+	drainCmds(t, &m, cmd)
 	if !strings.Contains(m.statusMsg, "series failed") {
 		t.Fatalf("statusMsg = %q, want recurrence error", m.statusMsg)
 	}
@@ -2150,8 +2175,9 @@ func TestRecurringSeriesRecurrenceFailureKeepsTimedErrorWhenBlinkDisabled(t *tes
 	m = *mv.(*Model)
 
 	if cmd == nil {
-		t.Fatalf("expected timed error command when blink is disabled")
+		t.Fatalf("expected async mutation command when blink is disabled")
 	}
+	drainCmds(t, &m, cmd)
 	if !strings.Contains(m.statusMsg, "series failed") {
 		t.Fatalf("statusMsg = %q, want recurrence error", m.statusMsg)
 	}
@@ -2229,8 +2255,12 @@ func TestHandleRecurrenceModeDetailBlinkTargetsRecurField(t *testing.T) {
 	m = *mv.(*Model)
 
 	if cmd == nil {
-		t.Fatalf("recurrence edit did not start a blink command")
+		t.Fatalf("recurrence edit did not start an async mutation command")
 	}
+	// Stop at the DoneMsg: draining would run the blink animation to
+	// completion and clear the blink state under assertion.
+	mv, _ = (&m).Update(cmd().(mutateReloadDoneMsg))
+	m = *mv.(*Model)
 	current = m.currentDetailTask()
 	if current == nil {
 		t.Fatalf("current task detail was cleared")
@@ -2263,8 +2293,12 @@ func TestHandleRecurrenceModeDetailFallsBackWhenRecurrenceRemoved(t *testing.T) 
 	m = *mv.(*Model)
 
 	if cmd == nil {
-		t.Fatalf("recurrence removal did not start a fallback blink command")
+		t.Fatalf("recurrence removal did not start an async mutation command")
 	}
+	// Stop at the DoneMsg: draining would run the blink animation to
+	// completion and clear the blink state under assertion.
+	mv, _ = (&m).Update(cmd().(mutateReloadDoneMsg))
+	m = *mv.(*Model)
 	current = m.currentDetailTask()
 	if current == nil {
 		t.Fatalf("current task detail was cleared")
@@ -2392,8 +2426,9 @@ func TestPriorityHotkey(t *testing.T) {
 	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
 	m = *mv.(*Model)
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(priFile)
 	if err != nil {
@@ -2445,8 +2480,9 @@ func TestAddHotkey(t *testing.T) {
 		m = *mv.(*Model)
 	}
 	mp := &m
-	mv, _ = mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	mv, cmd := mp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 
 	data, err := os.ReadFile(addFile)
 	if err != nil {
@@ -3078,8 +3114,9 @@ func TestCanceledTaskOperationContextReachesToggleStart(t *testing.T) {
 	}
 	m.cancelTaskOperations()
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	m = *mv.(*Model)
+	drainCmds(t, &m, cmd)
 	if !strings.Contains(m.statusMsg, context.Canceled.Error()) {
 		t.Fatalf("status = %q, want context canceled error", m.statusMsg)
 	}

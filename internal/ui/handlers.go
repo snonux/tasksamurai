@@ -1,25 +1,37 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/snonux/tasksamurai/internal/task"
 )
 
-// handleTextInput provides generic text input handling for all input modes
-func (m *Model) handleTextInput(msg tea.KeyPressMsg, input *textinput.Model, onEnter func(string) error, onExit func()) (tea.Model, tea.Cmd) {
+// commitFunc performs the Enter action for a text input mode. It returns the
+// tea.Cmd that runs the mutation+reload asynchronously, or an error (which
+// keeps the input mode open and shows the error via showErrorTimed). While a
+// Taskwarrior flight is active, commits return m.busyCommitErr() so the user
+// keeps their input instead of losing it to a Busy reject.
+type commitFunc func(value string) (tea.Cmd, error)
+
+// handleTextInput provides generic text input handling for all input modes.
+// Enter schedules the commit Cmd and exits the mode immediately; the result
+// (blink, error) is applied by the *DoneMsg handler.
+func (m *Model) handleTextInput(msg tea.KeyPressMsg, input *textinput.Model, onEnter commitFunc, onExit func()) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		value := input.Value()
-		if err := onEnter(value); err != nil {
+		cmd, err := onEnter(input.Value())
+		if err != nil {
 			return m, m.showErrorTimed(err)
 		}
 		input.Blur()
 		onExit()
 		m.updateTableHeight()
-		return m, nil
+		return m, cmd
 	case "esc":
 		input.Blur()
 		onExit()
@@ -33,76 +45,87 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg, input *textinput.Model, onE
 
 // handleAnnotationMode handles keyboard input when in annotation mode
 func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		// Annotation can be empty when replacing (to remove all)
-		if !m.replaceAnnotations && strings.TrimSpace(value) == "" {
-			return fmt.Errorf("annotation cannot be empty")
-		}
-
-		if m.replaceAnnotations {
-			ctx, cancel := m.taskOperationContext()
-			defer cancel()
-			if err := m.taskwarriorClient().ReplaceAnnotations(ctx, m.annotateAddr, value); err != nil {
-				return err
-			}
-			m.replaceAnnotations = false
-		} else {
-			ctx, cancel := m.taskOperationContext()
-			defer cancel()
-			if err := m.taskwarriorClient().AnnotateContext(ctx, m.annotateAddr, value); err != nil {
-				return err
-			}
-		}
-		if err := m.reload(); err != nil {
-			return fmt.Errorf("reloading tasks: %w", err)
-		}
-		return nil
-	}
-
 	onExit := func() {
 		m.annotating = false
 		m.replaceAnnotations = false
 	}
 
-	model, cmd := m.handleTextInput(msg, &m.annotateInput, onEnter, onExit)
-	if msg.String() == "enter" && m.annotateInput.Value() != "" {
-		// Start blink after successful annotation
-		return model, m.startBlink(m.annotateID, false)
+	onEnter := func(value string) (tea.Cmd, error) {
+		// Annotation can be empty when replacing (to remove all)
+		if !m.replaceAnnotations && strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("annotation cannot be empty")
+		}
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
+		}
+		addr := m.annotateAddr
+		replace := m.replaceAnnotations
+		var op mutateOp
+		if replace {
+			op = func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.ReplaceAnnotations(ctx, addr, value)
+			}
+		} else {
+			op = func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.AnnotateContext(ctx, addr, value)
+			}
+		}
+		// No blink when replacing all annotations with an empty value.
+		var blinkID int
+		if value != "" {
+			blinkID = m.annotateID
+		}
+		meta := mutateMeta{blinkID: blinkID}
+		meta.restoreInput = func(mm *Model) {
+			mm.annotating = true
+			mm.replaceAnnotations = replace
+			mm.annotateInput.SetValue(value)
+			mm.annotateInput.Focus()
+			mm.updateTableHeight()
+		}
+		return m.scheduleMutateReload("Annotating…", meta, op), nil
 	}
-	return model, cmd
+
+	return m.handleTextInput(msg, &m.annotateInput, onEnter, onExit)
 }
 
 // handleDescriptionMode handles keyboard input when editing description
 func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		if err := validateDescription(value); err != nil {
-			return err
-		}
-		ctx, cancel := m.taskOperationContext()
-		defer cancel()
-		if err := m.taskwarriorClient().SetDescriptionContext(ctx, m.descAddr, value); err != nil {
-			return err
-		}
-		if err := m.reload(); err != nil {
-			return fmt.Errorf("reloading tasks: %w", err)
-		}
-		return nil
-	}
-
 	onExit := func() {
 		m.descEditing = false
 	}
 
-	model, cmd := m.handleTextInput(msg, &m.descInput, onEnter, onExit)
-	if msg.String() == "enter" {
-		return model, m.startBlink(m.descID, false)
+	onEnter := func(value string) (tea.Cmd, error) {
+		if err := validateDescription(value); err != nil {
+			return nil, err
+		}
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
+		}
+		addr := m.descAddr
+		meta := mutateMeta{blinkID: m.descID}
+		meta.restoreInput = func(mm *Model) {
+			mm.descEditing = true
+			mm.descInput.SetValue(value)
+			mm.descInput.Focus()
+			mm.updateTableHeight()
+		}
+		return m.scheduleMutateReload("Saving description…", meta,
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetDescriptionContext(ctx, addr, value)
+			}), nil
 	}
-	return model, cmd
+
+	return m.handleTextInput(msg, &m.descInput, onEnter, onExit)
 }
 
 // handleTagsMode handles keyboard input when editing tags
 func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
+	onExit := func() {
+		m.tagsEditing = false
+	}
+
+	onEnter := func(value string) (tea.Cmd, error) {
 		words := strings.Fields(value)
 		var adds, removes []string
 		for _, w := range words {
@@ -110,7 +133,7 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				if len(w) > 1 {
 					tagName := w[1:]
 					if err := validateTagName(tagName); err != nil {
-						return fmt.Errorf("remove tag '%s': %w", tagName, err)
+						return nil, fmt.Errorf("remove tag '%s': %w", tagName, err)
 					}
 					removes = append(removes, tagName)
 				}
@@ -118,68 +141,72 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				w = strings.TrimPrefix(w, "+")
 				if w != "" {
 					if err := validateTagName(w); err != nil {
-						return fmt.Errorf("add tag '%s': %w", w, err)
+						return nil, fmt.Errorf("add tag '%s': %w", w, err)
 					}
 					adds = append(adds, w)
 				}
 			}
 		}
-		if len(adds) > 0 || len(removes) > 0 {
-			ctx, cancel := m.taskOperationContext()
-			defer cancel()
-			if len(adds) > 0 {
-				if err := m.taskwarriorClient().AddTagsContext(ctx, m.tagsAddr, adds); err != nil {
-					return err
-				}
-			}
-			if len(removes) > 0 {
-				if err := m.taskwarriorClient().RemoveTagsContext(ctx, m.tagsAddr, removes); err != nil {
-					return err
-				}
-			}
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
 		}
-		if err := m.reload(); err != nil {
-			return fmt.Errorf("reloading tasks: %w", err)
+		addr := m.tagsAddr
+		var ops []mutateOp
+		if len(adds) > 0 {
+			added := adds
+			ops = append(ops, func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.AddTagsContext(ctx, addr, added)
+			})
 		}
-		return nil
-	}
-
-	onExit := func() {
-		m.tagsEditing = false
-	}
-
-	model, cmd := m.handleTextInput(msg, &m.tagsInput, onEnter, onExit)
-	if msg.String() == "enter" {
+		if len(removes) > 0 {
+			removed := removes
+			ops = append(ops, func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.RemoveTagsContext(ctx, addr, removed)
+			})
+		}
+		meta := mutateMeta{blinkID: m.tagsID}
 		if m.showTaskDetail {
 			// In detail view, blink the tags field
-			return model, m.startDetailBlink(4) // Tags is field index 4
+			meta = mutateMeta{detailBlink: true, detailField: 4} // Tags is field index 4
 		}
-		return model, m.startBlink(m.tagsID, false)
+		meta.restoreInput = func(mm *Model) {
+			mm.tagsEditing = true
+			mm.tagsInput.SetValue(value)
+			mm.tagsInput.Focus()
+			mm.updateTableHeight()
+		}
+		return m.scheduleMutateReload("Updating tags…", meta, ops...), nil
 	}
-	return model, cmd
+
+	return m.handleTextInput(msg, &m.tagsInput, onEnter, onExit)
 }
 
 // handleDueEditMode handles due date editing
 func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().SetDueDateContext(ctx, m.dueAddr, m.dueDate.Format("2006-01-02"))
-		cancel()
-		if err != nil {
-			return m, m.showErrorTimed(err)
-		}
-		m.dueEditing = false
-		if !m.reloadAndReport() {
+		if m.taskFlightBlocks() {
+			_ = m.rejectIfBusy()
 			return m, nil
 		}
-		var cmd tea.Cmd
+		// In Taskwarrior, an empty due value would remove the date; the
+		// picker always commits a concrete date here.
+		due := m.dueDate.Format("2006-01-02")
+		addr := m.dueAddr
+		meta := mutateMeta{blinkID: m.dueID}
 		if m.showTaskDetail {
 			// In detail view, blink the due field
-			cmd = m.startDetailBlink(5) // Due is field index 5
-		} else {
-			cmd = m.startBlink(m.dueID, false)
+			meta = mutateMeta{detailBlink: true, detailField: 5} // Due is field index 5
 		}
+		m.dueEditing = false
+		meta.restoreInput = func(mm *Model) {
+			mm.dueEditing = true
+			mm.updateTableHeight()
+		}
+		cmd := m.scheduleMutateReload("Setting due…", meta,
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetDueDateContext(ctx, addr, due)
+			})
 		m.updateTableHeight()
 		return m, cmd
 	case "esc":
@@ -203,73 +230,76 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleRecurrenceMode handles recurrence editing
 func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		if err := validateRecurrence(value); err != nil {
-			return err
-		}
-		ctx, cancel := m.taskOperationContext()
-		defer cancel()
-		if m.recurSeries {
-			if err := m.taskwarriorClient().SetRecurringSeriesRecurrenceContext(ctx, m.recurRoot, value); err != nil {
-				return err
-			}
-		} else {
-			if err := m.taskwarriorClient().SetRecurrenceContext(ctx, m.recurAddr, value); err != nil {
-				return err
-			}
-		}
-		if err := m.reload(); err != nil {
-			return fmt.Errorf("reloading tasks: %w", err)
-		}
-		return nil
-	}
-
 	onExit := func() {
 		m.recurEditing = false
 		m.recurSeries = false
 		m.recurRoot = ""
 	}
 
-	model, cmd := m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
-	if msg.String() == "enter" {
-		// On failure, handleTextInput returns without calling onExit, so
-		// recurEditing stays true: skip the success blink and keep the
-		// timed error command returned above.
-		if m.recurEditing {
-			return model, cmd
+	onEnter := func(value string) (tea.Cmd, error) {
+		if err := validateRecurrence(value); err != nil {
+			return nil, err
 		}
-		if m.showTaskDetail {
-			if t := m.currentDetailTask(); t != nil && t.Recur != "" {
-				return model, m.startDetailBlink(fieldRecur)
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
+		}
+		series, root, addr := m.recurSeries, m.recurRoot, m.recurAddr
+		var op mutateOp
+		if series {
+			op = func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetRecurringSeriesRecurrenceContext(ctx, root, value)
+			}
+		} else {
+			op = func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetRecurrenceContext(ctx, addr, value)
 			}
 		}
-		return model, m.startBlink(m.recurID, false)
+		// The detail-vs-row blink decision needs the reloaded task data, so it
+		// is made in handleMutateReloadDone via detailBlinkIfRecur.
+		meta := mutateMeta{blinkID: m.recurID, detailBlinkIfRecur: m.showTaskDetail}
+		meta.restoreInput = func(mm *Model) {
+			mm.recurEditing = true
+			mm.recurSeries = series
+			mm.recurRoot = root
+			mm.recurInput.SetValue(value)
+			mm.recurInput.Focus()
+			mm.updateTableHeight()
+		}
+		return m.scheduleMutateReload("Setting recur…", meta, op), nil
 	}
-	return model, cmd
+
+	return m.handleTextInput(msg, &m.recurInput, onEnter, onExit)
 }
 
 // handleProjectMode handles project editing
 func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		ctx, cancel := m.taskOperationContext()
-		defer cancel()
-		return m.taskwarriorClient().SetProjectContext(ctx, m.projAddr, value)
-	}
-
 	onExit := func() {
 		m.projEditing = false
-		m.reloadAndReport()
 	}
 
-	model, cmd := m.handleTextInput(msg, &m.projInput, onEnter, onExit)
-	if msg.String() == "enter" {
+	onEnter := func(value string) (tea.Cmd, error) {
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
+		}
+		addr := m.projAddr
+		meta := mutateMeta{blinkID: m.projID}
 		if m.showTaskDetail {
 			// In detail view, blink the project field
-			return model, m.startDetailBlink(fieldProject) // Project field index in detail view
+			meta = mutateMeta{detailBlink: true, detailField: fieldProject}
 		}
-		return model, m.startBlink(m.projID, false)
+		meta.restoreInput = func(mm *Model) {
+			mm.projEditing = true
+			mm.projInput.SetValue(value)
+			mm.projInput.Focus()
+			mm.updateTableHeight()
+		}
+		return m.scheduleMutateReload("Setting project…", meta,
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetProjectContext(ctx, addr, value)
+			}), nil
 	}
-	return model, cmd
+
+	return m.handleTextInput(msg, &m.projInput, onEnter, onExit)
 }
 
 // handlePriorityMode handles priority selection
@@ -280,23 +310,25 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if err := validatePriority(priority); err != nil {
 			return m, m.showErrorTimed(err)
 		}
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().SetPriorityContext(ctx, m.priorityAddr, priority)
-		cancel()
-		if err != nil {
-			return m, m.showErrorTimed(err)
-		}
-		m.prioritySelecting = false
-		if !m.reloadAndReport() {
+		if m.taskFlightBlocks() {
+			_ = m.rejectIfBusy()
 			return m, nil
 		}
-		var cmd tea.Cmd
+		addr := m.priorityAddr
+		meta := mutateMeta{blinkID: m.priorityID}
 		if m.showTaskDetail {
 			// In detail view, blink the priority field
-			cmd = m.startDetailBlink(3) // Priority is field index 3
-		} else {
-			cmd = m.startBlink(m.priorityID, false)
+			meta = mutateMeta{detailBlink: true, detailField: 3} // Priority is field index 3
 		}
+		m.prioritySelecting = false
+		meta.restoreInput = func(mm *Model) {
+			mm.prioritySelecting = true
+			mm.updateTableHeight()
+		}
+		cmd := m.scheduleMutateReload("Setting priority…", meta,
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.SetPriorityContext(ctx, addr, priority)
+			})
 		m.updateTableHeight()
 		return m, cmd
 	case "esc":
@@ -319,28 +351,29 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // so that expressions with quoted values (e.g. description:"my task") are
 // passed to taskwarrior as a single argument. Any taskwarrior filter expression
 // that is valid on the command line (proj:xxx, +tag, description:"...", etc.)
-// is therefore accepted here too. Taskwarrior errors are propagated back to
-// the user via the status bar rather than being silently discarded.
+// is therefore accepted here too. The filter runs as an async reload Cmd; if
+// taskwarrior rejects the expression, handleTaskReloadDone restores the
+// previous filters so the UI never shows an unexplained empty list.
 func (m *Model) handleFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	onEnter := func(value string) error {
-		fields, err := parseFilterInput(value)
-		if err != nil {
-			return err
-		}
-		m.filters = fields
-		// Propagate taskwarrior errors so the user sees feedback when a
-		// filter expression is rejected by taskwarrior.
-		if err := m.reload(); err != nil {
-			// Roll back the filters to avoid leaving the UI in a broken state
-			// where an empty task list is shown without any explanation.
-			m.filters = nil
-			return fmt.Errorf("filter error: %w", err)
-		}
-		return nil
-	}
-
 	onExit := func() {
 		m.filterEditing = false
+	}
+
+	onEnter := func(value string) (tea.Cmd, error) {
+		fields, err := parseFilterInput(value)
+		if err != nil {
+			return nil, err
+		}
+		if m.taskFlightBlocks() {
+			return nil, m.busyCommitErr()
+		}
+		prev := append([]string(nil), m.filters...)
+		m.filters = fields
+		return m.scheduleTaskReload("Reloading…", reloadMeta{
+			reason:         reloadReasonFilter,
+			restoreFilters: true,
+			prevFilters:    prev,
+		}, true), nil
 	}
 
 	return m.handleTextInput(msg, &m.filterInput, onEnter, onExit)
@@ -350,50 +383,30 @@ func (m *Model) handleFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleAddTaskMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
+		if m.taskFlightBlocks() {
+			_ = m.rejectIfBusy()
+			return m, nil
+		}
 		oldIDs := make(map[int]struct{}, len(m.tasks))
 		for _, tsk := range m.tasks {
 			oldIDs[tsk.ID] = struct{}{}
 		}
-
-		ctx, cancel := m.taskOperationContext()
-		err := m.taskwarriorClient().AddLineContext(ctx, m.addInput.Value())
-		cancel()
-		if err != nil {
-			return m, m.showErrorTimed(err)
-		}
-
+		value := m.addInput.Value()
 		m.addingTask = false
 		m.addInput.Blur()
-		if !m.reloadAndReport() {
-			return m, nil
+		meta := mutateMeta{selectNewTask: true, oldIDs: oldIDs}
+		meta.restoreInput = func(mm *Model) {
+			mm.addingTask = true
+			mm.addInput.SetValue(value)
+			mm.addInput.Focus()
+			mm.updateTableHeight()
 		}
-
-		// Find the newly added task
-		var newID int
-		row := -1
-		for i, tsk := range m.tasks {
-			if _, ok := oldIDs[tsk.ID]; !ok {
-				newID = tsk.ID
-				row = i
-				break
-			}
-		}
-
+		cmd := m.scheduleMutateReload("Adding…", meta,
+			func(ctx context.Context, tw task.Taskwarrior) error {
+				return tw.AddLineContext(ctx, value)
+			})
 		m.updateTableHeight()
-		if row >= 0 {
-			prevRow := m.tbl.Cursor()
-			prevCol := m.tbl.ColumnCursor()
-			m.tbl.SetCursor(row)
-			m.tbl.SetColumnCursor(7) // Description column
-			m.updateSelectionHighlight(prevRow, m.tbl.Cursor(), prevCol, m.tbl.ColumnCursor())
-			if m.showUltra {
-				m.ultraFocusedID = newID
-				m.selectTaskByID(newID)
-				m.ultraFocusedID = 0
-			}
-			return m, m.startBlink(newID, false)
-		}
-		return m, nil
+		return m, cmd
 
 	case "esc":
 		m.addingTask = false

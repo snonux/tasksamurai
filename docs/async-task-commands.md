@@ -1,6 +1,12 @@
 # Plan: Run all external Taskwarrior commands asynchronously
 
-**Status:** plan only — do not implement from this document without a follow-up task.  
+**Status:** implemented (Phases 0–D complete; Phase E startup deliberately
+kept synchronous — see "Explicit exceptions" below). The pattern lives in
+`internal/ui/asyncreload.go` (reload-only flights), `internal/ui/asyncmutate.go`
+(mutate+reload flights), and `internal/ui/asyncdelete.go` (delete/undo).
+Every mutation, reload, shell run, completion load, and blink-end done runs
+inside a single-flight-gated `tea.Cmd`; nothing waits on `task` inside
+`Update` anymore.
 **Motivation:** `task` can be slow on large databases. Today most calls run
 inside Bubble Tea's `Update` path and block the entire TUI event loop until
 `task` exits (also noted in `docs/debugging.md` under genuine hangs).
@@ -22,6 +28,19 @@ inside Bubble Tea's `Update` path and block the entire TUI event loop until
 responsive: it hands the terminal to a child and freezes the Bubble Tea loop
 by design. Reuse only the `shellRunCmd` style: `tea.Cmd` + result message,
 with **no** sync `task`/`export` left in the `*DoneMsg` handler.
+
+### Documented exceptions (intentionally still synchronous)
+
+- **Startup load** (`NewWithTaskwarrior` → `reload()`): runs once before the
+  Bubble Tea event loop starts, so it blocks process start, never the event
+  loop (Phase E was deliberately not taken; the constructor contract and the
+  test suite depend on a fully loaded model).
+- **`task edit` via `tea.ExecProcess`** (`editCmd`): the editor must own the
+  terminal. The `editDoneMsg` handler itself only schedules an async reload.
+- **Browser launch** (`openURLCmd`): not a Taskwarrior command; detached.
+
+Everything else — all mutations, reloads, undo, delete, shell, completions,
+and the deferred done at blink end — runs as a gated async Cmd.
 
 `internal/task.RunArgs` already accepts `context.Context` and uses
 `exec.CommandContext`, so process cancellation exists; the UI often does not
@@ -239,6 +258,24 @@ Specify:
   only on successful `undoActionDoneMsg` (snapshot taken at schedule time;
   entry stays on the stack while in flight).
 - Cmds take value snapshots only; Update checks gen + `taskFlightMutating`.
+
+**Phase B/C notes (implemented):**
+
+- `handleTextInput` commits now return `(tea.Cmd, error)`: Enter validates,
+  exits the edit mode immediately, and schedules one gated mutate+reload Cmd
+  (label in the status line). While a flight is active the commit returns a
+  Busy error so the input mode stays open and no text is lost. If the
+  mutation itself fails, the DoneMsg re-opens the edit mode with the typed
+  value (`mutateMeta.restoreInput`), so nothing the user entered is lost.
+- Blinks start only from `*DoneMsg` handlers (`mutateMeta.blinkID` /
+  `detailBlink`), never on Enter. The detail-vs-row blink decision for
+  recurrence edits is made after the reload (`detailBlinkIfRecur`) because it
+  depends on the freshly exported data.
+- The trailing reload after every blink end was dropped: every blink starts
+  from a DoneMsg that already applied fresh export data, and no table change
+  can occur while `blinkID` is set (keys route to `handleBlinkingState`, and
+  auto-refresh skips blinks). A `markDone` blink end schedules one async
+  mutate+reload Cmd instead; the undo entry is pushed only on success.
 
 ### 7. Filter apply (Phase B detail)
 
