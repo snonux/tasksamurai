@@ -42,6 +42,18 @@ Press `B` to toggle the row blink animation after task modifications, and press
 `x` to toggle disco mode, which picks a random theme on every task change.
 All of these are also listed on the in-app help screen (`H`).
 
+## Scrolling
+
+Every screen scrolls. The task table pages with `pgup`/`pgdn` (or `b`), and
+half pages with `Ctrl+U`/`Ctrl+D`. The help screen, the `:` command output
+panel, and the task detail view scroll with `j`/`k` or arrow keys, page with
+`pgup`/`pgdn` (or `b`/`space`), and half-page with `Ctrl+U`/`Ctrl+D`; `g`/`Home`
+and `G`/`End` jump to the top or bottom. In the detail view, `↑`/`↓` move the
+field highlight and the view scrolls to keep it visible; `/` searches the
+detail view and `n`/`N` jump between matches. In table and ultra mode `space`
+refreshes the task list instead of paging. All long content stays reachable —
+nothing is cut off at the bottom of the screen.
+
 ## Screenshot
 
 ![Task Samurai screenshot](screenshot.png)

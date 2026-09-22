@@ -1248,6 +1248,21 @@ func (m *Model) helpSections() []uihelp.Section {
 			},
 		},
 		{
+			Title: "Task Detail View",
+			Items: []uihelp.Item{
+				{Key: "↑/k, ↓/j", Desc: "select field (scrolls into view)"},
+				{Key: "pgup/pgdn, b/space", Desc: "page up/down"},
+				{Key: "ctrl+u/ctrl+d", Desc: "half page up/down"},
+				{Key: "g/home, G/end", Desc: "first/last field"},
+				{Key: "/", Desc: "search detail view"},
+				{Key: "n, N", Desc: "next/previous match"},
+				{Key: "i, Enter", Desc: "edit selected field"},
+				{Key: "d, D, U", Desc: "done/delete/undo"},
+				{Key: "o", Desc: "open URL or @file"},
+				{Key: "q, ESC", Desc: "back to table"},
+			},
+		},
+		{
 			Title: "View & Search",
 			Items: []uihelp.Item{
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},

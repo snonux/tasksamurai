@@ -304,3 +304,13 @@ func TestDetailKeepsSelectedFieldVisibleAfterReload(t *testing.T) {
 		t.Fatalf("selected field line %d outside visible range %d-%d after reload", sel, top, bottom)
 	}
 }
+
+func TestHelpSectionsIncludeDetailViewScrolling(t *testing.T) {
+	m := newDetailScrollTestModel(t, []task.Task{{ID: 1, UUID: "one", Description: "d", Status: "pending"}})
+	content := m.buildHelpContent()
+	for _, want := range []string{"Task Detail View", "half page up/down", "next/previous match"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("help content missing %q", want)
+		}
+	}
+}
