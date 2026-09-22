@@ -47,7 +47,7 @@ func TestAgentFilterHotkeyValidationRejectsSharedKeyBindings(t *testing.T) {
 }
 
 func TestAgentFilterHotkeyRejectsCtrlRCaseVariants(t *testing.T) {
-	for _, key := range []string{"ctrl+r", "Ctrl+R", "CTRL+R"} {
+	for _, key := range []string{"ctrl+r", "Ctrl+R", "CTRL+R", "ctrl+u", "Ctrl+U", "ctrl+d", "Ctrl+D", "CTRL+D"} {
 		t.Run(key, func(t *testing.T) {
 			var m Model
 			if err := m.SetAgentFilterHotkey(key); err == nil {

@@ -99,6 +99,12 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "pgdown", "space":
 			m.helpViewport.PageDown()
 			return m, nil
+		case "ctrl+u":
+			m.helpViewport.HalfPageUp()
+			return m, nil
+		case "ctrl+d":
+			m.helpViewport.HalfPageDown()
+			return m, nil
 		case "g", "home":
 			m.helpViewport.GotoTop()
 			return m, nil

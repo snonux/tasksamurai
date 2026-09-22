@@ -248,6 +248,10 @@ func (m *Model) handleShellOutputMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.shellOutputViewport.PageUp()
 	case "pgdown", "space":
 		m.shellOutputViewport.PageDown()
+	case "ctrl+u":
+		m.shellOutputViewport.HalfPageUp()
+	case "ctrl+d":
+		m.shellOutputViewport.HalfPageDown()
 	case "g", "home":
 		m.shellOutputViewport.GotoTop()
 	case "G", "end":

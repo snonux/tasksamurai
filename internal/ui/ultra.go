@@ -83,6 +83,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 			Items: []uihelp.Item{
 				{Key: "j, k", Desc: "move down/up"},
 				{Key: "pgup, pgdn", Desc: "page up/down"},
+				{Key: "ctrl+u, ctrl+d", Desc: "half page up/down"},
 				{Key: "g, G, 0", Desc: "go to start/end"},
 				{Key: "space", Desc: "refresh tasks"},
 			},
@@ -1091,6 +1092,10 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraMoveCursor(m.ultraVisibleCount())
 	case "pgup", "b":
 		m.ultraMoveCursor(-m.ultraVisibleCount())
+	case "ctrl+d":
+		m.ultraMoveCursor(m.ultraVisibleCount() / 2)
+	case "ctrl+u":
+		m.ultraMoveCursor(-m.ultraVisibleCount() / 2)
 	case "g", "home":
 		m.ultraGoHome()
 	case "G", "end":
