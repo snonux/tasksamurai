@@ -54,6 +54,73 @@ func (m *Model) syncDetailViewport() {
 // next open.
 func (m *Model) resetDetailViewport() {
 	m.detailViewport = viewport.Model{}
+	m.detailFieldLines = nil
+	m.detailFieldEndLines = nil
+	m.detailSearchMatchLine = nil
+	m.detailSearchMatchIdx = 0
+	m.detailSearchFollow = false
+	m.detailFieldFollow = false
+}
+
+// scrollDetailToLine scrolls the detail viewport minimally so line is
+// visible. No-op when the viewport is not sized yet.
+func (m *Model) scrollDetailToLine(line int) {
+	height := m.detailViewport.Height()
+	if height == 0 {
+		return
+	}
+	top := m.detailViewport.YOffset()
+	bottom := top + height - 1
+	switch {
+	case line < top:
+		m.detailViewport.SetYOffset(line)
+	case line > bottom:
+		m.detailViewport.SetYOffset(line - height + 1)
+	}
+}
+
+// scrollDetailToField scrolls the highlighted detail field (or its whole
+// section, for multi-line fields like Description/Annotations) into view.
+func (m *Model) scrollDetailToField(field int) {
+	if field < 0 || field >= len(m.detailFieldLines) {
+		return
+	}
+	start := m.detailFieldLines[field]
+	if start < 0 {
+		return
+	}
+	end := start
+	if field < len(m.detailFieldEndLines) && m.detailFieldEndLines[field] > end {
+		end = m.detailFieldEndLines[field]
+	}
+	m.scrollDetailRangeIntoView(start, end)
+}
+
+// scrollDetailRangeIntoView scrolls minimally so the line range
+// [start, end] is fully visible when it fits the viewport; sections taller
+// than the viewport show their start.
+func (m *Model) scrollDetailRangeIntoView(start, end int) {
+	height := m.detailViewport.Height()
+	if height == 0 {
+		return
+	}
+	top := m.detailViewport.YOffset()
+	bottom := top + height - 1
+	if start >= top && end <= bottom {
+		return // fully visible
+	}
+	if end-start+1 <= height {
+		switch {
+		case start < top:
+			m.detailViewport.SetYOffset(start)
+		case end > bottom:
+			m.detailViewport.SetYOffset(end - height + 1)
+		}
+		return
+	}
+	if start < top || start > bottom {
+		m.detailViewport.SetYOffset(start)
+	}
 }
 
 // handleDetailScrollKey applies scroll keys to the detail viewport and
@@ -74,6 +141,29 @@ func (m *Model) handleDetailScrollKey(msg tea.KeyPressMsg) bool {
 		return false
 	}
 	return true
+}
+
+// detailStepSearchMatch moves the detail search match cursor by delta
+// (wrapping) and scrolls the match into view.
+func (m *Model) detailStepSearchMatch(delta int) {
+	matches := m.detailSearchMatchLine
+	if len(matches) == 0 {
+		m.statusMsg = "No matches"
+		return
+	}
+	// Clamp a stale index (e.g. after content edits removed matches).
+	if m.detailSearchMatchIdx >= len(matches) {
+		m.detailSearchMatchIdx = 0
+	}
+	idx := m.detailSearchMatchIdx + delta
+	switch {
+	case idx < 0:
+		idx = len(matches) - 1
+	case idx >= len(matches):
+		idx = 0
+	}
+	m.detailSearchMatchIdx = idx
+	m.scrollDetailToLine(matches[idx])
 }
 
 // detailScrollFooter renders the scroll-position indicator shown below the
@@ -101,6 +191,21 @@ func (m *Model) detailScrollFooter() string {
 // state sync, not user state (same pattern as the help screen).
 func (m *Model) renderDetailScreen() string {
 	m.syncDetailViewport()
+	if m.detailFieldFollow {
+		// The render just recomputed the line offsets for changed content;
+		// bring the tracked field back into view with fresh geometry.
+		m.detailFieldFollow = false
+		m.scrollDetailToField(m.detailFollowField)
+	}
+	if m.detailSearchFollow {
+		// The render just recomputed the match line offsets for the freshly
+		// confirmed search; bring the first match into view.
+		m.detailSearchFollow = false
+		if len(m.detailSearchMatchLine) > 0 {
+			m.detailSearchMatchIdx = 0
+			m.scrollDetailToLine(m.detailSearchMatchLine[0])
+		}
+	}
 	lines := []string{m.detailViewport.View()}
 	if footer := m.detailScrollFooter(); footer != "" {
 		lines = append(lines, footer)

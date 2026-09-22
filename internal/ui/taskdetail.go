@@ -68,6 +68,10 @@ const (
 func (m *Model) renderTaskDetail() string {
 	t := m.currentDetailTask()
 	if t == nil {
+		// Defensive symmetry with resetDetailViewport: no content, no offsets.
+		m.detailFieldLines = nil
+		m.detailFieldEndLines = nil
+		m.detailSearchMatchLine = nil
 		return "No task selected"
 	}
 
@@ -76,11 +80,24 @@ func (m *Model) renderTaskDetail() string {
 	var lines []string
 	lines = append(lines, titleStyle.Render(fmt.Sprintf("Task %d Details", t.ID)))
 	lines = append(lines, "")
-	lines, nextField := m.renderDetailFieldRows(lines, labelStyle, valueStyle)
-	lines = m.renderDetailDescription(lines, nextField, labelStyle, descStyle)
+	fieldLines := make([]int, fieldCount)
+	fieldEndLines := make([]int, fieldCount)
+	for i := range fieldLines {
+		fieldLines[i] = -1
+		fieldEndLines[i] = -1
+	}
+	var searchLines []int
+	lines, nextField := m.renderDetailFieldRows(lines, labelStyle, valueStyle, fieldLines, fieldEndLines, &searchLines)
+	lines = m.renderDetailDescription(lines, nextField, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
 	nextField++
-	lines = m.renderDetailAnnotations(lines, nextField, labelStyle, descStyle)
+	lines = m.renderDetailAnnotations(lines, nextField, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
 	lines = m.renderDetailFooter(lines)
+	// Render-time state sync (same pattern as the detail viewport content):
+	// these offsets describe the content that was just rendered and are used
+	// by field-follow scrolling and detail search navigation.
+	m.detailFieldLines = fieldLines
+	m.detailFieldEndLines = fieldEndLines
+	m.detailSearchMatchLine = searchLines
 	return strings.Join(lines, "\n")
 }
 
@@ -104,32 +121,36 @@ func (m *Model) detailStyles() (title, label, value, desc lipgloss.Style) {
 
 // renderDetailFieldRows appends the fixed and optional task fields (ID through
 // optional Recurrence) to lines and returns the updated slice together with the
-// field index of the next unrendered field (Description).
-func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lipgloss.Style) ([]string, int) {
+// field index of the next unrendered field (Description). Each field's first
+// rendered line offset and section end are recorded in fieldLines/
+// fieldEndLines for scroll-into-view support.
+func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lipgloss.Style, fieldLines, fieldEndLines []int, searchLines *[]int) ([]string, int) {
 	t := m.currentDetailTask()
 	cf := 0 // current field counter
 
-	lines = append(lines, m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderDetailPriorityField(labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderDetailTagsField(labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderDetailDueField(labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderDetailProjectField(labelStyle, valueStyle, cf))
-	cf++
-	lines = append(lines, m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, cf))
-	cf++
-	if t.Recur != "" {
-		lines = append(lines, m.renderDetailRecurField(labelStyle, cf))
+	// appendRow renders one single-line field row, records its line range
+	// (for scroll-into-view) and any search match in the rendered row.
+	appendRow := func(row string) {
+		fieldLines[cf] = len(lines)
+		fieldEndLines[cf] = len(lines)
+		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(row) {
+			*searchLines = append(*searchLines, len(lines))
+		}
+		lines = append(lines, row)
 		cf++
+	}
+
+	appendRow(m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, cf))
+	appendRow(m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, cf))
+	appendRow(m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, cf))
+	appendRow(m.renderDetailPriorityField(labelStyle, valueStyle, cf))
+	appendRow(m.renderDetailTagsField(labelStyle, valueStyle, cf))
+	appendRow(m.renderDetailDueField(labelStyle, valueStyle, cf))
+	appendRow(m.renderTaskFieldWithIndex("Start", m.formatTaskDate(t.Start), labelStyle, valueStyle, cf))
+	appendRow(m.renderDetailProjectField(labelStyle, valueStyle, cf))
+	appendRow(m.renderTaskFieldWithIndex("Entry", m.formatTaskDate(t.Entry), labelStyle, valueStyle, cf))
+	if t.Recur != "" {
+		appendRow(m.renderDetailRecurField(labelStyle, cf))
 	}
 	return lines, cf
 }
@@ -222,9 +243,13 @@ func (m *Model) renderDetailRecurField(labelStyle lipgloss.Style, cf int) string
 
 // renderDetailDescription appends the Description section (label + wrapped body)
 // to lines, applying selection/blink highlighting and search match colouring.
-func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
+// The field's first line offset and any search-match line offsets are recorded
+// for scroll-into-view support.
+func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, descStyle lipgloss.Style, fieldLines, fieldEndLines []int, searchLines *[]int) []string {
 	t := m.currentDetailTask()
 	lines = append(lines, "")
+
+	fieldLines[cf] = len(lines)
 
 	ls, vs := labelStyle, descStyle
 	if m.detailBlinkField == cf && m.detailBlinkOn {
@@ -240,10 +265,13 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 	if m.detailDescEditing {
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Italic(true).
 			Render("  [Editing in external editor...]"))
+		fieldEndLines[cf] = len(lines) - 1
 		return lines
 	}
 	if t.Description == "" {
-		return append(lines, vs.Render("-"))
+		lines = append(lines, vs.Render("-"))
+		fieldEndLines[cf] = len(lines) - 1
+		return lines
 	}
 	w := m.tbl.Width() - 4
 	if w < 20 {
@@ -253,20 +281,25 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 		d := l
 		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(l) {
 			d = m.highlightMatches(l, m.detailSearchRegex)
+			*searchLines = append(*searchLines, len(lines))
 		}
 		lines = append(lines, vs.Render(d))
 	}
+	fieldEndLines[cf] = len(lines) - 1
 	return lines
 }
 
 // renderDetailAnnotations appends the Annotations section to lines when the
 // task has annotations, applying selection highlighting and search colouring.
-func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, descStyle lipgloss.Style) []string {
+// The field's first line offset and any search-match line offsets are recorded
+// for scroll-into-view support.
+func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, descStyle lipgloss.Style, fieldLines, fieldEndLines []int, searchLines *[]int) []string {
 	t := m.currentDetailTask()
 	if len(t.Annotations) == 0 {
 		return lines
 	}
 	lines = append(lines, "")
+	fieldLines[cf] = len(lines)
 	ls, vs := labelStyle, descStyle
 	if m.detailFieldIndex == cf {
 		ls = ls.Background(lipgloss.Color(m.theme.SelectedBG))
@@ -286,10 +319,12 @@ func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, desc
 			}
 			if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(l) {
 				d = m.highlightMatches(d, m.detailSearchRegex)
+				*searchLines = append(*searchLines, len(lines))
 			}
 			lines = append(lines, vs.Render(d))
 		}
 	}
+	fieldEndLines[cf] = len(lines) - 1
 	return lines
 }
 

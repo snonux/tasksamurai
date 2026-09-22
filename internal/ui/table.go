@@ -145,6 +145,24 @@ type detailViewState struct {
 // on top.
 type detailScrollState struct {
 	detailViewport viewport.Model
+	// detailFieldLines maps field index -> first rendered line offset and
+	// detailFieldEndLines to the section's last line; recomputed on every
+	// detail render (render-time state sync).
+	detailFieldLines    []int
+	detailFieldEndLines []int
+	// detailSearchMatchLine holds rendered line offsets matching the detail
+	// search regex; detailSearchMatchIdx is the current n/N position.
+	detailSearchMatchLine []int
+	detailSearchMatchIdx  int
+	// detailSearchFollow scrolls the first match into view right after the
+	// user confirms a detail search with Enter.
+	detailSearchFollow bool
+	// detailFieldFollow re-scrolls detailFollowField into view on the next
+	// render after content changed (reload re-render or blink start). It is
+	// consumed in renderDetailScreen once the render has recomputed the line
+	// offsets, so the scroll uses fresh geometry.
+	detailFieldFollow bool
+	detailFollowField int
 }
 
 // ultraState holds the state for the ultra mode task list and its search UI.
@@ -522,6 +540,11 @@ func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
 	// made the very first tick hit the stop condition, so the field flashed
 	// once instead of blinking for blinkInterval * blinkCycles.
 	m.detailBlinkCount = 0
+	// Defer scroll-into-view to the next render: the content may have just
+	// changed (blink starts from DoneMsg handlers), so the scroll must use
+	// the freshly recomputed line offsets.
+	m.detailFieldFollow = true
+	m.detailFollowField = fieldIndex
 	return blinkCmd()
 }
 
@@ -685,6 +708,11 @@ func (m *Model) processTasks(data *reloadData) {
 
 	if m.showTaskDetail {
 		m.refreshCurrentTaskDetail()
+		// The re-rendered detail content may shift lines (e.g. an edited
+		// description changed length); re-scroll the highlighted field into
+		// view at the next render, using fresh geometry.
+		m.detailFieldFollow = true
+		m.detailFollowField = m.detailFieldIndex
 	}
 
 	m.computeColumnWidths()

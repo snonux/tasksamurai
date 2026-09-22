@@ -30,6 +30,10 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.detailSearching = false
 			m.detailSearchInput.Blur()
+			// Scroll the first match into view once the next render has
+			// computed the match line offsets (renderDetailScreen resets the
+			// index there).
+			m.detailSearchFollow = m.detailSearchRegex != nil
 			return m, nil
 		case "esc", "ctrl+c":
 			m.detailSearching = false
@@ -59,27 +63,33 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailSearchInput.Focus()
 		return m, nil
 	case "n":
-		// Next search match - not implemented yet but could be added
+		// Next detail search match (scrolls the match into view)
+		m.detailStepSearchMatch(1)
 		return m, nil
 	case "N":
-		// Previous search match - not implemented yet but could be added
+		// Previous detail search match
+		m.detailStepSearchMatch(-1)
 		return m, nil
 	case "up", "k":
 		if m.detailFieldIndex > 0 {
 			m.detailFieldIndex--
 		}
+		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
 	case "down", "j":
 		maxFields := m.getDetailFieldCount()
 		if m.detailFieldIndex < maxFields-1 {
 			m.detailFieldIndex++
 		}
+		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
 	case "g", "home":
 		m.detailFieldIndex = 0
+		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
 	case "G", "end":
 		m.detailFieldIndex = m.getDetailFieldCount() - 1
+		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
 	case "o":
 		return m.handleOpenURL()

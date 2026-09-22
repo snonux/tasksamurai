@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -156,5 +157,150 @@ func TestDetailViewportUpdateHandlesMouseWheelMsgs(t *testing.T) {
 	m = *mv.(*Model)
 	if m.detailViewport.YOffset() == 0 {
 		t.Fatalf("mouse wheel did not scroll the detail viewport")
+	}
+}
+
+func detailNeedleContent() []task.Task {
+	desc := ""
+	for i := 0; i < 40; i++ {
+		desc += "filler text to push content down the screen "
+		if i >= 20 && i%5 == 0 {
+			desc += "needle "
+		}
+		desc += "and some more prose words to wrap across lines. "
+	}
+	return []task.Task{{ID: 1, UUID: "one", Description: desc, Status: "pending"}}
+}
+
+// detailScrollContent builds a task whose detail content overflows the
+// viewport: a long description followed by many annotations, so the
+// Annotations field (and the tail of the description) sit below the fold.
+func detailScrollContent() []task.Task {
+	tsk := detailContent(60)[0]
+	for i := 0; i < 30; i++ {
+		tsk.Annotations = append(tsk.Annotations, task.Annotation{
+			Description: fmt.Sprintf("annotation note %d with some extra length", i+1),
+		})
+	}
+	return []task.Task{tsk}
+}
+
+func TestDetailFieldNavigationScrollsFieldIntoView(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailScrollContent())
+	openDetail(t, &m)
+
+	// G selects the last field (Annotations), which sits below the fold, so
+	// the viewport must scroll down to its section end.
+	mv, _ := m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	if m.detailViewport.YOffset() == 0 {
+		t.Fatalf("G did not scroll the last detail field into view")
+	}
+
+	// g returns to the first field, which must be visible again.
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
+	m = *mv.(*Model)
+	if sel := m.detailFieldLines[m.detailFieldIndex]; sel < m.detailViewport.YOffset() ||
+		sel > m.detailViewport.YOffset()+m.detailViewport.Height()-1 {
+		t.Fatalf("g did not bring the first field (line %d) into view: YOffset = %d",
+			sel, m.detailViewport.YOffset())
+	}
+
+	// j moves through fields and keeps the selected one visible.
+	for i := 0; i < 20; i++ {
+		mv, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+		m = *mv.(*Model)
+	}
+	if m.detailViewport.YOffset() == 0 {
+		t.Fatalf("j navigation did not scroll with the field highlight")
+	}
+}
+
+func TestDetailBlinkScrollsFieldIntoView(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailScrollContent())
+	openDetail(t, &m)
+
+	// Blink the last detail field (the Annotations section, deep in the
+	// content) while the viewport is at the top. The scroll-into-view is
+	// deferred to the next render, which recomputes line offsets.
+	lastField := m.getDetailFieldCount() - 1
+	m.startDetailBlink(lastField)
+	m.renderDetailScreen()
+	if m.detailViewport.YOffset() == 0 {
+		t.Fatalf("startDetailBlink did not scroll the blinking field into view")
+	}
+}
+
+func TestDetailSearchMatchNavigation(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailNeedleContent())
+	openDetail(t, &m)
+	m.detailSearching = true
+	m.detailSearchInput.SetValue("needle")
+	m.detailSearchInput.Focus()
+
+	// While typing, the search input renders below the viewport.
+	if got := m.renderDetailScreen(); !strings.Contains(got, "Search:") {
+		t.Fatalf("search input not rendered below the viewport while searching")
+	}
+
+	// Confirm the search; the next render computes match offsets and
+	// scrolls the first match into view.
+	mv, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+	m.renderDetailScreen()
+	if len(m.detailSearchMatchLine) == 0 {
+		t.Fatalf("no search match lines recorded from render")
+	}
+	if m.detailViewport.YOffset() == 0 {
+		t.Fatalf("search confirm did not scroll the first match into view")
+	}
+
+	// n moves to the next match.
+	first := m.detailSearchMatchIdx
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	m = *mv.(*Model)
+	if m.detailSearchMatchIdx != first+1 {
+		t.Fatalf("detailSearchMatchIdx = %d after n, want %d", m.detailSearchMatchIdx, first+1)
+	}
+
+	// N steps backwards and wraps at the start.
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'N', Mod: 0, Text: "N"})
+	m = *mv.(*Model)
+	if m.detailSearchMatchIdx != first {
+		t.Fatalf("detailSearchMatchIdx = %d after N, want %d", m.detailSearchMatchIdx, first)
+	}
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'N', Mod: 0, Text: "N"})
+	m = *mv.(*Model)
+	if m.detailSearchMatchIdx != len(m.detailSearchMatchLine)-1 {
+		t.Fatalf("detailSearchMatchIdx = %d after N wrap, want last match", m.detailSearchMatchIdx)
+	}
+}
+
+func TestDetailKeepsSelectedFieldVisibleAfterReload(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailScrollContent())
+	openDetail(t, &m)
+
+	// Scroll to the bottom field (Annotations) via G, then re-render with a
+	// description that grew, which shifts the Annotations section down.
+	mv, _ := m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	if m.detailViewport.YOffset() == 0 {
+		t.Fatalf("G did not scroll to the last field")
+	}
+
+	// Double the description so every line below it moves.
+	shifted := detailScrollContent()
+	shifted[0].Description += shifted[0].Description
+	data := reloadData{tasks: shifted}
+	m.processTasks(&data)
+	m.renderDetailScreen()
+
+	// The selected field's fresh position must be visible.
+	lastField := m.getDetailFieldCount() - 1
+	top := m.detailViewport.YOffset()
+	bottom := top + m.detailViewport.Height() - 1
+	sel := m.detailFieldLines[lastField]
+	if sel < top || sel > bottom {
+		t.Fatalf("selected field line %d outside visible range %d-%d after reload", sel, top, bottom)
 	}
 }
