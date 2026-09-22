@@ -610,23 +610,57 @@ func (m *Model) handleToggleBlink() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleToggleAutoRefresh enables or disables the periodic background reload
-// of the task list. When enabled it kicks off the reload timer; when disabled
-// the running loop stops itself on the next tick (see handleAutoRefresh).
-// Bumping autoRefreshGen on each (re)enable invalidates any ticks still in
-// flight from a previous loop so duplicate reload loops cannot accumulate.
-func (m *Model) handleToggleAutoRefresh() (tea.Model, tea.Cmd) {
-	m.autoRefresh = !m.autoRefresh
+// handleCycleAutoRefresh cycles the periodic background reload through
+// off → 10s → 60s → 5m → 15m → off. Each (re)enable or interval advance
+// bumps autoRefreshGen so stale ticks from the previous loop are dropped.
+func (m *Model) handleCycleAutoRefresh() (tea.Model, tea.Cmd) {
 	if !m.autoRefresh {
-		m.statusMsg = "Auto-refresh off"
-		return m, nil
+		// The cycle always restarts at the shortest interval.
+		m.autoRefreshInterval = autoRefreshIntervals[0]
+		m.autoRefresh = true
+		m.autoRefreshGen++
+		m.statusMsg = fmt.Sprintf("Auto-refresh on (every %s)", autoRefreshIntervalLabel(m.autoRefreshInterval))
+		return m, autoRefreshCmd(m.autoRefreshInterval, m.autoRefreshGen)
 	}
-	if m.autoRefreshInterval <= 0 {
-		m.autoRefreshInterval = autoRefreshDefaultInterval
+	idx := autoRefreshIntervalIndex(m.autoRefreshInterval)
+	if idx+1 < len(autoRefreshIntervals) {
+		m.autoRefreshInterval = autoRefreshIntervals[idx+1]
+		m.autoRefreshGen++
+		m.statusMsg = fmt.Sprintf("Auto-refresh on (every %s)", autoRefreshIntervalLabel(m.autoRefreshInterval))
+		return m, autoRefreshCmd(m.autoRefreshInterval, m.autoRefreshGen)
 	}
-	m.autoRefreshGen++
-	m.statusMsg = fmt.Sprintf("Auto-refresh on (every %s)", m.autoRefreshInterval)
-	return m, autoRefreshCmd(m.autoRefreshInterval, m.autoRefreshGen)
+	// The longest interval was reached: turn auto-refresh off.
+	m.autoRefresh = false
+	m.statusMsg = "Auto-refresh off"
+	return m, nil
+}
+
+// autoRefreshIntervals is the Z-key cycle: off → each of these → off.
+var autoRefreshIntervals = []time.Duration{
+	10 * time.Second,
+	60 * time.Second,
+	5 * time.Minute,
+	15 * time.Minute,
+}
+
+// autoRefreshIntervalLabel renders a cycle interval compactly
+// (10s, 1m, 5m, 15m) instead of Go's 1m0s style.
+func autoRefreshIntervalLabel(interval time.Duration) string {
+	if interval >= time.Minute && interval%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(interval/time.Minute))
+	}
+	return fmt.Sprintf("%ds", int(interval/time.Second))
+}
+
+// autoRefreshIntervalIndex returns the position of interval in the Z-key
+// cycle, or -1 when the interval is unset or custom.
+func autoRefreshIntervalIndex(interval time.Duration) int {
+	for i, candidate := range autoRefreshIntervals {
+		if candidate == interval {
+			return i
+		}
+	}
+	return -1
 }
 
 func toggleAgentFilter(filters []string) []string {

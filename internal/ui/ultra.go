@@ -132,7 +132,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},
-				{Key: "Z", Desc: "toggle auto-refresh"},
+				{Key: "Z", Desc: "cycle auto-refresh interval"},
 			},
 		},
 		{
@@ -435,7 +435,7 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 		if interval <= 0 {
 			interval = autoRefreshDefaultInterval
 		}
-		title += fmt.Sprintf(" | auto-refresh: on (%s)", interval)
+		title += fmt.Sprintf(" | auto-refresh: on (%s)", autoRefreshIntervalLabel(interval))
 	}
 	return fmt.Sprintf("%s | search: %s | %d tasks", title, filter, len(tasks))
 }

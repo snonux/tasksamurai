@@ -34,13 +34,15 @@ quit, the edited text is loaded back into the prompt so you can review it and pr
 open a scrollable output panel.
 
 Task Samurai has several toggle keys. Press `v` to switch between the full
-table and a compact view (Pri, Project, Description, Urg). Press `Z` to toggle
-auto-refresh, which reloads the task list every 10 seconds as if you pressed
-`space`; a persistent `auto-refresh: on (10s)` indicator appears in the status line
-(works in compact and ultra mode too, and reloads pause while you are typing).
-Press `B` to toggle the row blink animation after task modifications, and press
-`x` to toggle disco mode, which picks a random theme on every task change.
-All of these are also listed on the in-app help screen (`H`).
+table and a compact view (Pri, Project, Description, Urg). Press `Z` to cycle
+auto-refresh through off → 10s → 60s → 5m → 15m → off; while enabled the task
+list reloads in the background as if you pressed `space` at the chosen
+interval, and a persistent `auto-refresh: on (10s)` indicator appears in the
+status line (works in compact and ultra mode too, and reloads pause while you
+are typing). Press `B` to toggle the row blink animation after task
+modifications, and press `x` to toggle disco mode, which picks a random theme
+on every task change. All of these are also listed on the in-app help screen
+(`H`).
 
 ## Scrolling
 

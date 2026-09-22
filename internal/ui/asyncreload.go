@@ -40,6 +40,10 @@ type reloadMeta struct {
 	// rejects a newly applied filter expression (see handleFilterMode).
 	restoreFilters bool
 	prevFilters    []string
+	// autoRefreshGen snapshots the auto-refresh generation at schedule time
+	// for reloadReasonAuto so a stale reload never reschedules the loop
+	// after Z enabled/advanced it mid-flight.
+	autoRefreshGen int
 }
 
 type taskReloadDoneMsg struct {
@@ -91,6 +95,9 @@ func (m *Model) scheduleTaskReload(label string, meta reloadMeta, reportBusy boo
 	}
 	m.initTaskContext()
 	gen := m.taskOpGen
+	if meta.reason == reloadReasonAuto {
+		meta.autoRefreshGen = m.autoRefreshGen
+	}
 	tw := m.taskwarriorClient()
 	snap := m.captureReloadSnapshot()
 	return taskReloadCmd(m.taskContext, tw, snap, gen, meta)
@@ -111,7 +118,7 @@ func (m *Model) handleTaskReloadDone(msg taskReloadDoneMsg) (tea.Model, tea.Cmd)
 		}
 		m.showError(fmt.Errorf("reloading tasks: %w", msg.err))
 		if msg.meta.reason == reloadReasonAuto {
-			return m, m.maybeAutoRefreshTick()
+			return m, m.maybeAutoRefreshTick(msg.meta.autoRefreshGen)
 		}
 		return m, nil
 	}
@@ -129,15 +136,20 @@ func (m *Model) handleTaskReloadDone(msg taskReloadDoneMsg) (tea.Model, tea.Cmd)
 		return m.finishSearchReload()
 	case reloadReasonAuto:
 		m.clearReloadingStatus()
-		return m, m.maybeAutoRefreshTick()
+		return m, m.maybeAutoRefreshTick(msg.meta.autoRefreshGen)
 	default:
 		m.clearReloadingStatus()
 		return m, nil
 	}
 }
 
-func (m *Model) maybeAutoRefreshTick() tea.Cmd {
-	if !m.autoRefresh {
+// maybeAutoRefreshTick reschedules the auto-refresh loop after a finished
+// auto reload. It only fires when the finished reload belonged to the current
+// generation: Z may have enabled/advanced the cycle while the reload was in
+// flight, and rescheduling from a stale generation would create a second
+// permanent reload chain.
+func (m *Model) maybeAutoRefreshTick(fromGen int) tea.Cmd {
+	if !m.autoRefresh || fromGen != m.autoRefreshGen {
 		return nil
 	}
 	interval := m.autoRefreshInterval

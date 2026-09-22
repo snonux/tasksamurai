@@ -410,8 +410,9 @@ const blinkInterval = 150 * time.Millisecond
 // The total blink duration is blinkInterval * blinkCycles.
 const blinkCycles = 8
 
-// autoRefreshDefaultInterval is the delay between automatic task reloads
-// when auto-refresh is enabled.
+// autoRefreshDefaultInterval is the defensive fallback for auto-refresh
+// paths that encounter an unset interval; handleCycleAutoRefresh always
+// writes a concrete interval from the Z-key cycle when enabling.
 const autoRefreshDefaultInterval = 10 * time.Second
 
 func prepareDescriptionTempFile(description string, newTempFile func() (descriptionTempFile, error)) (string, error) {
@@ -1282,7 +1283,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},
-				{Key: "Z", Desc: "toggle auto-refresh"},
+				{Key: "Z", Desc: "cycle auto-refresh interval"},
 			},
 		},
 		{
@@ -1318,7 +1319,7 @@ func (m *Model) topStatusLine() string {
 		if interval <= 0 {
 			interval = autoRefreshDefaultInterval
 		}
-		line += fmt.Sprintf(" | auto-refresh: on (%s)", interval)
+		line += fmt.Sprintf(" | auto-refresh: on (%s)", autoRefreshIntervalLabel(interval))
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).
