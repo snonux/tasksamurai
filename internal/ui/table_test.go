@@ -1988,11 +1988,16 @@ func TestRandomDueDateHotkey(t *testing.T) {
 		t.Fatalf("unexpected command: %q", data)
 	}
 	dueStr := strings.TrimPrefix(parts[2], "due:")
-	dueTime, err := time.Parse("2006-01-02", dueStr)
+	dueTime, err := time.ParseInLocation("2006-01-02", dueStr, time.Local)
 	if err != nil {
 		t.Fatalf("parse due: %v", err)
 	}
-	days := int(time.Until(dueTime).Hours() / 24)
+	// Compare calendar dates: the random offset is 7-37 whole days, so the
+	// due date is 7-37 midnights from today. Wall-clock subtraction truncates
+	// partial days (and DST can shift an hour), so round to the nearest day.
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	days := int(dueTime.Sub(today).Round(24*time.Hour).Hours() / 24)
 	if days < 7 || days > 37 {
 		t.Fatalf("due date out of range: %d", days)
 	}

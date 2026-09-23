@@ -49,6 +49,13 @@ func (m *Model) handleBusyFlightKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showTaskDetail {
+		// Scrolling the detail viewport is read-only and safe during a
+		// blocking flight; route the scroll keys there before the table.
+		if m.handleDetailScrollKey(msg) {
+			return m, nil
+		}
+	}
 	if m.shellOutputVisible {
 		return m.handleShellOutputMode(msg)
 	}

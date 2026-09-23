@@ -60,6 +60,16 @@ func (m *Model) resetDetailViewport() {
 	m.detailSearchMatchIdx = 0
 	m.detailSearchFollow = false
 	m.detailFieldFollow = false
+	m.detailFollowPrevLine = 0
+	m.detailFollowPrevEnd = 0
+}
+
+// detailFieldLine returns lines[field] or -1 when the offset is unavailable.
+func detailFieldLine(lines []int, field int) int {
+	if field < 0 || field >= len(lines) {
+		return -1
+	}
+	return lines[field]
 }
 
 // scrollDetailToLine scrolls the detail viewport minimally so line is
@@ -193,9 +203,17 @@ func (m *Model) renderDetailScreen() string {
 	m.syncDetailViewport()
 	if m.detailFieldFollow {
 		// The render just recomputed the line offsets for changed content;
-		// bring the tracked field back into view with fresh geometry.
+		// bring the tracked field back into view with fresh geometry —
+		// unless the reload that armed this follow left the field's line
+		// range untouched (a no-op auto-refresh): re-scrolling would yank
+		// a manually scrolled view back to the highlighted field.
 		m.detailFieldFollow = false
-		m.scrollDetailToField(m.detailFollowField)
+		prevLine, prevEnd := m.detailFollowPrevLine, m.detailFollowPrevEnd
+		if prevLine < 0 || prevEnd < 0 ||
+			detailFieldLine(m.detailFieldLines, m.detailFollowField) != prevLine ||
+			detailFieldLine(m.detailFieldEndLines, m.detailFollowField) != prevEnd {
+			m.scrollDetailToField(m.detailFollowField)
+		}
 	}
 	if m.detailSearchFollow {
 		// The render just recomputed the match line offsets for the freshly
@@ -213,6 +231,13 @@ func (m *Model) renderDetailScreen() string {
 	if m.detailSearching {
 		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).
 			Render("Search: "+m.detailSearchInput.View()))
+	}
+	if msg := m.statusMsg; msg != "" {
+		// The table view shows statusMsg in its status bar; without this line
+		// the detail overlay would swallow the only feedback for busy-commit
+		// errors, detail search ("No matches"), invalid regexes, and similar.
+		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("245")).
+			Padding(0, 2).Render(msg))
 	}
 	return strings.Join(lines, "\n")
 }

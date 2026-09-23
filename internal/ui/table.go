@@ -163,6 +163,13 @@ type detailScrollState struct {
 	// offsets, so the scroll uses fresh geometry.
 	detailFieldFollow bool
 	detailFollowField int
+	// detailFollowPrevLine/PrevEnd snapshot the followed field's line range
+	// when a reload armed the follow. When the next render shows the range
+	// unchanged (a no-op auto-refresh), the follow is skipped so reading a
+	// scrolled detail view is never yanked back to the highlighted field.
+	// Both set to -1 (blink starts) means follow unconditionally.
+	detailFollowPrevLine int
+	detailFollowPrevEnd  int
 }
 
 // ultraState holds the state for the ultra mode task list and its search UI.
@@ -543,9 +550,12 @@ func (m *Model) startDetailBlink(fieldIndex int) tea.Cmd {
 	m.detailBlinkCount = 0
 	// Defer scroll-into-view to the next render: the content may have just
 	// changed (blink starts from DoneMsg handlers), so the scroll must use
-	// the freshly recomputed line offsets.
+	// the freshly recomputed line offsets. Blink feedback is always shown:
+	// arm an unconditional follow.
 	m.detailFieldFollow = true
 	m.detailFollowField = fieldIndex
+	m.detailFollowPrevLine = -1
+	m.detailFollowPrevEnd = -1
 	return blinkCmd()
 }
 
@@ -711,9 +721,13 @@ func (m *Model) processTasks(data *reloadData) {
 		m.refreshCurrentTaskDetail()
 		// The re-rendered detail content may shift lines (e.g. an edited
 		// description changed length); re-scroll the highlighted field into
-		// view at the next render, using fresh geometry.
+		// view at the next render, using fresh geometry. Snapshot the field's
+		// current line range: an unchanged range (periodic auto-refresh with
+		// identical data) must not yank a manually scrolled view back.
 		m.detailFieldFollow = true
 		m.detailFollowField = m.detailFieldIndex
+		m.detailFollowPrevLine = detailFieldLine(m.detailFieldLines, m.detailFieldIndex)
+		m.detailFollowPrevEnd = detailFieldLine(m.detailFieldEndLines, m.detailFieldIndex)
 	}
 
 	m.computeColumnWidths()

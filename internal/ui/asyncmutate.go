@@ -53,8 +53,11 @@ type mutateReloadDoneMsg struct {
 func mutateReloadCmd(parent context.Context, tw task.Taskwarrior, snap reloadSnapshot, gen int, meta mutateMeta, ops []mutateOp) tea.Cmd {
 	return func() tea.Msg {
 		msg := mutateReloadDoneMsg{gen: gen, meta: meta}
-		// Mutations and the export each get their own full taskOperationTimeout
-		// budget, matching the pre-async per-op timeouts.
+		// All mutations share one taskOperationTimeout budget; the export gets
+		// its own. A single budget keeps multi-op series (e.g. tag-to-project)
+		// strictly sequential while leaving the generous 30s overall cap —
+		// only the export is separated so a slow series cannot starve the
+		// reload that reports its result.
 		opCtx, cancel := context.WithTimeout(parent, taskOperationTimeout)
 		for _, op := range ops {
 			if err := op(opCtx, tw); err != nil {

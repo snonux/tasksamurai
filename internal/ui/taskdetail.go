@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/snonux/tasksamurai/internal/task"
 )
@@ -129,11 +130,13 @@ func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lip
 	cf := 0 // current field counter
 
 	// appendRow renders one single-line field row, records its line range
-	// (for scroll-into-view) and any search match in the rendered row.
+	// (for scroll-into-view) and any search match in the row's plain text.
+	// ANSI stripping matters: the styled row embeds SGR colour codes whose
+	// digits would otherwise spuriously match numeric search patterns.
 	appendRow := func(row string) {
 		fieldLines[cf] = len(lines)
 		fieldEndLines[cf] = len(lines)
-		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(row) {
+		if m.detailSearchRegex != nil && m.detailSearchRegex.MatchString(ansi.Strip(row)) {
 			*searchLines = append(*searchLines, len(lines))
 		}
 		lines = append(lines, row)

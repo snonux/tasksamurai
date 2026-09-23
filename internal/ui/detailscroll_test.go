@@ -314,3 +314,63 @@ func TestHelpSectionsIncludeDetailViewScrolling(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailReloadFollowSkipsUnchangedContent(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailScrollContent())
+	openDetail(t, &m)
+
+	// The user pages away from the highlighted field (which stays on the
+	// ID row at the top).
+	mv, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	m = *mv.(*Model)
+	scrolled := m.detailViewport.YOffset()
+	if scrolled == 0 {
+		t.Fatalf("pgdown did not scroll the detail viewport")
+	}
+
+	// A reload whose data is identical must not yank the view back.
+	same := detailScrollContent()
+	m.processTasks(&reloadData{tasks: same})
+	m.renderDetailScreen()
+	if m.detailViewport.YOffset() != scrolled {
+		t.Fatalf("unchanged reload yanked the scroll offset: %d -> %d",
+			scrolled, m.detailViewport.YOffset())
+	}
+
+	// Select a field deep in the content (Annotations, the last field), then
+	// page back up. A reload that shifts that field's line range (a longer
+	// description pushes the annotations down) must re-scroll it into view.
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	mv, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	m = *mv.(*Model)
+	if m.detailViewport.YOffset() != 0 {
+		t.Fatalf("pgup did not return to the top")
+	}
+
+	shifted := detailScrollContent()
+	shifted[0].Description += shifted[0].Description
+	m.processTasks(&reloadData{tasks: shifted})
+	m.renderDetailScreen()
+	top := m.detailViewport.YOffset()
+	bottom := top + m.detailViewport.Height() - 1
+	sel := detailFieldLine(m.detailFieldLines, m.detailFieldIndex)
+	if sel < top || sel > bottom {
+		t.Fatalf("selected field line %d outside visible range %d-%d after a reload that moved it",
+			sel, top, bottom)
+	}
+}
+
+func TestDetailScreenShowsStatusMessage(t *testing.T) {
+	m := newDetailScrollTestModel(t, detailScrollContent())
+	openDetail(t, &m)
+
+	if strings.Contains(m.renderDetailScreen(), "No matches") {
+		t.Fatalf("status message rendered without being set")
+	}
+	m.statusMsg = "No matches"
+	if !strings.Contains(m.renderDetailScreen(), "No matches") {
+		t.Fatalf("status message not rendered in the detail view")
+	}
+	m.statusMsg = ""
+}
