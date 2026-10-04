@@ -410,8 +410,9 @@ func (m *Model) taskOperationContext() (context.Context, context.CancelFunc) {
 }
 
 // blinkInterval controls how quickly the row flashes when a task changes.
-// A shorter interval results in a faster blink.
-const blinkInterval = 150 * time.Millisecond
+// A shorter interval results in a faster blink. 112.5ms blinks a third faster
+// than the previous 150ms (150ms * 3/4).
+const blinkInterval = 112500 * time.Microsecond
 
 // blinkCycles is the number of times to blink before stopping.
 // The total blink duration is blinkInterval * blinkCycles.
