@@ -148,8 +148,8 @@ func taskReloadCmd(parent context.Context, tw task.Taskwarrior, snap reloadSnaps
 func taskMutateThenReloadCmd(...) tea.Cmd  // common path today
 ```
 
-`reloadSnapshot` holds filters + ultra IDs (whatever `fetchTasks` needs) copied
-by value at schedule time.
+`reloadSnapshot` holds filters + ultra IDs + the completed-task display
+window (whatever `fetchTasks` needs) copied by value at schedule time.
 
 Result messages carry `gen int`, payload, and `err`. Prefer bundling
 mutate+reload in one Cmd when that matches today’s ordering.

@@ -211,7 +211,10 @@ func deleteSeries(opCtx, quitCtx context.Context, tw task.Taskwarrior, tsk task.
 		return nil, false, fmt.Errorf("task %d has no UUID", tsk.ID)
 	}
 
-	recurring := isRecurringTask(tsk)
+	// A completed recurring instance is deleted on its own: wiping the whole
+	// series — including its live pending instances — from a dimmed "archived"
+	// row on the D key would be a destructive surprise.
+	recurring := isRecurringTask(tsk) && tsk.Status != "completed"
 	tasks := []task.Task{tsk}
 	if recurring {
 		series, err := tw.RecurringSeries(opCtx, recurringRootUUID(tsk))

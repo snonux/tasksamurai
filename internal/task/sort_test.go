@@ -165,3 +165,45 @@ func TestIsOverdue(t *testing.T) {
 		})
 	}
 }
+
+func TestSortTasksCompletedLast(t *testing.T) {
+	tasks := []Task{
+		{ID: 1, Description: "pending overdue", Status: "pending", Due: "20200101T000000Z"},
+		{ID: 2, Description: "old done", Status: "completed", End: "20240101T000000Z"},
+		{ID: 3, Description: "recent done", Status: "completed", End: "20250101T000000Z"},
+		{ID: 4, Description: "pending", Status: "pending"},
+	}
+	SortTasks(tasks)
+
+	if tasks[0].ID != 1 {
+		t.Errorf("first task = %q, want pending overdue task first", tasks[0].Description)
+	}
+	if tasks[1].ID != 4 {
+		t.Errorf("second task = %q, want plain pending task second", tasks[1].Description)
+	}
+	if tasks[2].Description != "recent done" {
+		t.Errorf("third task = %q, want most recently completed first", tasks[2].Description)
+	}
+	if tasks[3].Description != "old done" {
+		t.Errorf("fourth task = %q, want older completed task last", tasks[3].Description)
+	}
+}
+
+func TestIsOverdueIgnoresCompleted(t *testing.T) {
+	now := time.Date(2024, time.January, 2, 12, 0, 0, 0, time.UTC)
+	if isOverdue(Task{Due: "20240101T000000Z", Status: "completed"}, now) {
+		t.Error("completed task must not count as overdue")
+	}
+}
+
+func TestSortTasksCompletedEndTiebreaker(t *testing.T) {
+	tasks := []Task{
+		{ID: 1, UUID: "u-b", Description: "later uuid", Status: "completed", End: "20250101T000000Z"},
+		{ID: 2, UUID: "u-a", Description: "earlier uuid", Status: "completed", End: "20250101T000000Z"},
+	}
+	SortTasks(tasks)
+
+	if tasks[0].UUID != "u-a" {
+		t.Errorf("tiebreaker = %q, want earlier UUID first for a stable order", tasks[0].UUID)
+	}
+}

@@ -69,6 +69,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"B"}, modes: keyBindingAll, desc: "toggle blinking", action: modelKeyAction((*Model).handleToggleBlink)},
 	{keys: []string{"v"}, modes: keyBindingAll, desc: "toggle compact view", action: modelKeyAction((*Model).handleToggleCompactView)},
 	{keys: []string{"Z"}, modes: keyBindingAll, desc: "cycle auto-refresh interval", action: modelKeyAction((*Model).handleCycleAutoRefresh)},
+	{keys: []string{"V"}, modes: keyBindingAll, desc: "cycle completed-task window", action: modelKeyAction((*Model).handleCycleCompletedWindow)},
 	{keys: []string{"space"}, modes: keyBindingAll, desc: "refresh tasks", action: modelKeyAction((*Model).handleRefresh)},
 }
 

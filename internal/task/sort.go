@@ -18,11 +18,29 @@ import (
 // 4. Tasks with earlier due dates
 // 5. Tasks sorted alphabetically by tags
 // 6. Tasks sorted by ID (oldest first)
+//
+// Completed tasks always sort after incomplete ones, most recently
+// completed first, so a completed-task overlay window keeps finished work
+// grouped at the bottom of the list.
 func SortTasks(tasks []Task) {
 	now := time.Now()
 
 	sort.Slice(tasks, func(i, j int) bool {
 		ti, tj := tasks[i], tasks[j]
+
+		completedI, completedJ := ti.Status == "completed", tj.Status == "completed"
+		if completedI != completedJ {
+			// Incomplete tasks first, completed tasks last.
+			return completedJ
+		}
+		if completedI {
+			// Both completed: most recently completed first. End uses
+			// DateFormat, so the lexicographic order matches time order.
+			if ti.End != tj.End {
+				return ti.End > tj.End
+			}
+			return ti.UUID < tj.UUID
+		}
 
 		if oi, oj := isOverdue(ti, now), isOverdue(tj, now); oi != oj {
 			return oi
@@ -94,6 +112,11 @@ func parseDueDate(value string) (time.Time, bool) {
 }
 
 func isOverdue(task Task, now time.Time) bool {
+	if task.Status == "completed" {
+		// A completed task that was due in the past is no longer overdue —
+		// without this guard it would sort back to the top of the list.
+		return false
+	}
 	due, ok := parseDueDate(task.Due)
 	return ok && now.After(due)
 }

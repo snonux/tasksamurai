@@ -21,6 +21,17 @@ func InProgressTasks(tasks []Task) int {
 	return count
 }
 
+// CompletedTasks returns the number of completed tasks provided.
+func CompletedTasks(tasks []Task) int {
+	count := 0
+	for _, t := range tasks {
+		if t.Status == "completed" {
+			count++
+		}
+	}
+	return count
+}
+
 // DueTasks returns the number of tasks with a due date that is not in the future.
 func DueTasks(tasks []Task, now time.Time) int {
 	count := 0

@@ -32,6 +32,10 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
+	if tsk.Status == "completed" {
+		m.statusMsg = "Cannot start a completed task"
+		return m, nil
+	}
 	id := tsk.ID
 	addr := taskAddress(*tsk)
 	started := tsk.Start != ""
@@ -56,10 +60,15 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
-	id, err := m.getSelectedTaskID()
+	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
 	}
+	if tsk.Status == "completed" {
+		m.statusMsg = "Task is already completed"
+		return m, nil
+	}
+	id := tsk.ID
 	return m, m.startBlink(id, true)
 }
 
@@ -695,6 +704,55 @@ func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
 	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
 }
 
+// completedWindows is the V-key cycle: off → each of these → off.
+var completedWindows = []time.Duration{
+	24 * time.Hour,
+	4 * time.Hour,
+	time.Hour,
+}
+
+// completedWindowIndex returns the position of window in the V-key cycle, or
+// -1 when the window is unset or custom.
+func completedWindowIndex(window time.Duration) int {
+	for i, candidate := range completedWindows {
+		if candidate == window {
+			return i
+		}
+	}
+	return -1
+}
+
+// handleCycleCompletedWindow cycles the completed-task display window through
+// off → 1 day → 4h → 1h → off. Completed tasks inside the window are shown
+// alongside the pending ones, dimmed grey with a strikethrough description,
+// and sort to the bottom of the list.
+func (m *Model) handleCycleCompletedWindow() (tea.Model, tea.Cmd) {
+	prev := m.completedWindow
+	idx := completedWindowIndex(m.completedWindow)
+	if idx+1 < len(completedWindows) {
+		m.completedWindow = completedWindows[idx+1]
+	} else {
+		m.completedWindow = 0
+	}
+	// Schedule first, then set the status message: beginTaskFlight
+	// overwrites statusMsg with the busy label, and clearReloadingStatus
+	// only resets that label, so a message set after scheduling survives the
+	// finished reload.
+	cmd := m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
+	if cmd == nil {
+		// Busy flight: the list does not reflect the new window, so roll the
+		// window back — the next press advances from the state the user saw.
+		m.completedWindow = prev
+		return m, nil
+	}
+	if m.completedWindow > 0 {
+		m.statusMsg = fmt.Sprintf("Showing tasks completed within %s", CompletedWindowLabel(m.completedWindow))
+	} else {
+		m.statusMsg = "Completed tasks hidden"
+	}
+	return m, cmd
+}
+
 func (m *Model) handleSearch() (tea.Model, tea.Cmd) {
 	m.clearEditingModes()
 	m.searching = true
@@ -859,13 +917,20 @@ func (m *Model) showError(err error) {
 
 // handleJumpToRandomTask jumps to a random pending task
 func (m *Model) handleJumpToRandomTask() (tea.Model, tea.Cmd) {
-	if len(m.tasks) == 0 {
+	// Completed tasks are display-only here; a random jump lands on live work.
+	var candidates []int
+	for i, tsk := range m.tasks {
+		if tsk.Status != "completed" {
+			candidates = append(candidates, i)
+		}
+	}
+	if len(candidates) == 0 {
 		m.statusMsg = "No tasks to jump to"
 		return m, nil
 	}
 
 	// Pick a random index
-	randomIndex := rand.Intn(len(m.tasks))
+	randomIndex := candidates[rand.Intn(len(candidates))]
 
 	// Update cursor position
 	prevRow := m.tbl.Cursor()
@@ -884,10 +949,11 @@ func (m *Model) handleJumpToRandomTask() (tea.Model, tea.Cmd) {
 
 // handleJumpToRandomTaskNoDue jumps to a random pending task without a due date
 func (m *Model) handleJumpToRandomTaskNoDue() (tea.Model, tea.Cmd) {
-	// Find all tasks without due dates
+	// Find all tasks without due dates; completed tasks are skipped so the
+	// jump stays on live work.
 	var noDueTasks []int
-	for i, task := range m.tasks {
-		if task.Due == "" {
+	for i, tsk := range m.tasks {
+		if tsk.Due == "" && tsk.Status != "completed" {
 			noDueTasks = append(noDueTasks, i)
 		}
 	}

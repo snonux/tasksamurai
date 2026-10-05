@@ -23,6 +23,7 @@ type Theme struct {
 	PrioHighBG     string
 	SearchFG       string
 	SearchBG       string
+	CompletedFG    string // dim foreground for completed-task rows
 }
 
 // DefaultTheme returns the color theme used by Task Samurai.
@@ -43,6 +44,7 @@ func DefaultTheme() Theme {
 		PrioHighBG:     "160", // dark red — subtler than bright 9
 		SearchFG:       "16",
 		SearchBG:       "220", // amber — easier on eyes than pure yellow 226
+		CompletedFG:    "243", // dim grey — completed tasks read as finished/archived
 	}
 }
 
@@ -64,6 +66,7 @@ func RandomTheme() Theme {
 	th.RowFG = contrastColor(th.RowBG)
 	th.StatusFG = contrastColor(th.StatusBG)
 	th.SearchFG = contrastColor(th.SearchBG)
+	th.CompletedFG = "243"
 	return th
 }
 

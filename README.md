@@ -41,7 +41,12 @@ interval, and a persistent `auto-refresh: on (10s)` indicator appears in the
 status line (works in compact and ultra mode too, and reloads pause while you
 are typing). Press `B` to toggle the row blink animation after task
 modifications, and press `x` to toggle disco mode, which picks a random theme
-on every task change. All of these are also listed on the in-app help screen
+on every task change. Press `V` to cycle the completed-task display window
+through off → 1 day → 4h → 1h → off: each setting additionally shows tasks
+completed within that timeframe before now, dimmed grey with a struck-through
+description and a `✓` in the ID column, sorted to the bottom of the list.
+The current window shows up in the top status line as `completed: on (1d)`.
+All of these are also listed on the in-app help screen
 (`H`).
 
 ## Scrolling

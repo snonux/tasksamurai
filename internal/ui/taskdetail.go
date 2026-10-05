@@ -79,7 +79,7 @@ func (m *Model) renderTaskDetail() string {
 	titleStyle, labelStyle, valueStyle, descStyle := m.detailStyles()
 
 	var lines []string
-	lines = append(lines, titleStyle.Render(fmt.Sprintf("Task %d Details", t.ID)))
+	lines = append(lines, titleStyle.Render(fmt.Sprintf("Task %s Details", m.taskIDLabel(t))))
 	lines = append(lines, "")
 	fieldLines := make([]int, fieldCount)
 	fieldEndLines := make([]int, fieldCount)
@@ -143,7 +143,7 @@ func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lip
 		cf++
 	}
 
-	appendRow(m.renderTaskFieldWithIndex("ID", fmt.Sprintf("%d", t.ID), labelStyle, valueStyle, cf))
+	appendRow(m.renderTaskFieldWithIndex("ID", m.taskIDLabel(t), labelStyle, valueStyle, cf))
 	appendRow(m.renderTaskFieldWithIndex("UUID", t.UUID, labelStyle, valueStyle, cf))
 	appendRow(m.renderTaskFieldWithIndex("Status", t.Status, labelStyle, valueStyle, cf))
 	appendRow(m.renderDetailPriorityField(labelStyle, valueStyle, cf))
@@ -419,6 +419,16 @@ func (m *Model) taskByUUID(uuid string) *task.Task {
 		}
 	}
 	return nil
+}
+
+// taskIDLabel returns the display form of a task ID: the numeric ID for
+// pending tasks, and a check mark for completed tasks, whose synthetic display
+// ID would otherwise leak into the detail view.
+func (m *Model) taskIDLabel(t *task.Task) string {
+	if t.Status == "completed" {
+		return "✓"
+	}
+	return fmt.Sprintf("%d", t.ID)
 }
 
 func (m *Model) currentDetailTask() *task.Task {

@@ -118,6 +118,11 @@ func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
 	if t == nil {
 		return m, nil
 	}
+	if t.Status == "completed" {
+		// Nothing to do — the view stays open so the user keeps context.
+		m.statusMsg = "Task is already completed"
+		return m, nil
+	}
 	id := t.ID
 	m.closeDetailView()
 	return m, m.startBlink(id, true)

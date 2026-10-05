@@ -308,11 +308,17 @@ type Model struct {
 	total      int
 	inProgress int
 	due        int
+	completed  int // completed tasks currently shown (0 when the window is off)
 
-	filters    []string
-	tasks      []task.Task
-	undoStack  []undoAction
-	browserCmd string
+	filters []string
+	tasks   []task.Task
+
+	// completedWindow is the completed-task display window toggled by the
+	// V key: 0 hides completed tasks; 24h/4h/1h additionally show tasks
+	// completed within that window before now.
+	completedWindow time.Duration
+	undoStack       []undoAction
+	browserCmd      string
 	// youtubeBrowserCmd, when non-empty, overrides browserCmd for YouTube
 	// links opened with the "o" key. This lets the user route videos to a
 	// browser better suited for them (e.g. chromium) while keeping the
@@ -714,9 +720,11 @@ func (m *Model) fetchTasks() (reloadData, error) {
 
 func (m *Model) processTasks(data *reloadData) {
 	m.tasks = data.tasks
+	assignCompletedDisplayIDs(m.tasks)
 	m.total = m.taskwarriorClient().TotalTasks(data.tasks)
 	m.inProgress = m.taskwarriorClient().InProgressTasks(data.tasks)
 	m.due = m.taskwarriorClient().DueTasks(data.tasks, time.Now())
+	m.completed = m.taskwarriorClient().CompletedTasks(data.tasks)
 
 	if m.showTaskDetail {
 		m.refreshCurrentTaskDetail()
@@ -737,6 +745,25 @@ func (m *Model) processTasks(data *reloadData) {
 		m.ultraFiltered = m.ultraFilteredIndexes(m.ultraSearchRegex)
 	} else {
 		m.rebuildUltraFiltered(data.ultraFilterIDs)
+	}
+}
+
+// assignCompletedDisplayIDs gives every completed task a negative display ID.
+// Taskwarrior exports completed tasks with ID 0 (they are outside the pending
+// working set), which would break the ID-based selection, blink, and ultra-mode
+// flows. Negative IDs never collide with real pending IDs and never reach the
+// task CLI: all mutations address completed tasks by UUID via taskAddress.
+// The IDs are assigned in list order (most recently completed first), so they
+// stay stable until a new completion renumbers older rows; ID-keyed selection
+// restore may then land on a different completed row, which is acceptable
+// because every mutating flow (delete, undo, detail) is UUID-keyed.
+func assignCompletedDisplayIDs(tasks []task.Task) {
+	next := -1
+	for i := range tasks {
+		if tasks[i].Status == "completed" && tasks[i].ID == 0 {
+			tasks[i].ID = next
+			next--
+		}
 	}
 }
 
@@ -1299,6 +1326,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},
 				{Key: "Z", Desc: "cycle auto-refresh interval"},
+				{Key: "V", Desc: "cycle completed-task window (1d/4h/1h/off)"},
 			},
 		},
 		{
@@ -1314,6 +1342,9 @@ func (m *Model) helpSections() []uihelp.Section {
 
 func (m *Model) statusLine() string {
 	status := fmt.Sprintf("Total:%d InProgress:%d Due:%d | press H for help", m.total, m.inProgress, m.due)
+	if m.completed > 0 {
+		status = fmt.Sprintf("Total:%d Done:%d InProgress:%d Due:%d | press H for help", m.total, m.completed, m.inProgress, m.due)
+	}
 	if m.statusMsg != "" {
 		status = m.statusMsg
 	}
@@ -1335,6 +1366,9 @@ func (m *Model) topStatusLine() string {
 			interval = autoRefreshDefaultInterval
 		}
 		line += fmt.Sprintf(" | auto-refresh: on (%s)", autoRefreshIntervalLabel(interval))
+	}
+	if m.completedWindow > 0 {
+		line += fmt.Sprintf(" | completed: on (%s)", CompletedWindowLabel(m.completedWindow))
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).
@@ -1440,8 +1474,16 @@ func (m *Model) highlightCellMatch(base lipgloss.Style, re *regexp.Regexp, raw, 
 }
 
 func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.Styles, selectedCol int) atable.Row {
+	completed := t.Status == "completed"
 	rowStyle := lipgloss.NewStyle()
-	if t.Start != "" {
+	if completed {
+		// Completed-task indicator: dim grey text across the whole row, so
+		// finished tasks read at a glance as "archived" next to the bright
+		// pending ones. The description additionally gets a strikethrough
+		// and the ID column shows a check mark instead of Taskwarrior's
+		// meaningless ID 0 for completed tasks.
+		rowStyle = rowStyle.Foreground(lipgloss.Color(m.theme.CompletedFG))
+	} else if t.Start != "" {
 		rowStyle = rowStyle.Background(lipgloss.Color(m.theme.StartBG))
 	}
 	if t.ID == m.blinkID && m.blinkOn {
@@ -1472,8 +1514,21 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	}
 
 	priStr := m.formatPriority(t.Priority, m.priWidth)
-	idStr := getStyle(colID).Render(strconv.Itoa(t.ID))
+	var idStr string
+	if completed {
+		// Check mark instead of the raw (synthetic) display ID.
+		idStr = getStyle(colID).Render("✓")
+	} else {
+		idStr = getStyle(colID).Render(strconv.Itoa(t.ID))
+	}
 	dueStr := m.formatDue(t.Due, m.dueWidth)
+	if completed {
+		// No overdue highlighting for finished tasks — a past due date on a
+		// done task is not actionable information.
+		dueStr = getStyle(colDue).Render(formatDueText(t.Due))
+		// Plain priority text instead of the colour pill.
+		priStr = getStyle(colPri).Render(t.Priority)
+	}
 	recurStr := m.highlightCell(getStyle(colRecur), re, recur)
 	projStr := m.highlightCell(getStyle(colProject), re, t.Project)
 	tagStr := m.highlightCell(getStyle(colTags), re, tags)
@@ -1483,7 +1538,13 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
 	annStr := m.highlightCellMatch(getStyle(colAnnotations), re, annRaw, annCount)
-	descStr := m.highlightCell(getStyle(colDescription), re, t.Description)
+	descStyle := getStyle(colDescription)
+	if completed {
+		// Strikethrough is the strongest "this is finished" cue in the row;
+		// search matches keep their highlight on top of it.
+		descStyle = descStyle.Strikethrough(true)
+	}
+	descStr := m.highlightCell(descStyle, re, t.Description)
 	urgStr := getStyle(colUrgency).Render(m.formatUrgency(urg, m.urgWidth))
 
 	cells := map[int]string{
@@ -1870,6 +1931,7 @@ var reservedAgentHotkeys = map[string]struct{}{
 	"ctrl+d": {},
 	"T":      {},
 	"U":      {},
+	"V":      {},
 	"W":      {},
 	"a":      {},
 	"b":      {},

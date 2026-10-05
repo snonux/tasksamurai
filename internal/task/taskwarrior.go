@@ -12,6 +12,7 @@ type Taskwarrior interface {
 	SortTasks(tasks []Task)
 	TotalTasks(tasks []Task) int
 	InProgressTasks(tasks []Task) int
+	CompletedTasks(tasks []Task) int
 	DueTasks(tasks []Task, now time.Time) int
 	EditCmd(addr string) *exec.Cmd
 	RunShellLine(ctx context.Context, line string) (RunResult, error)
@@ -62,6 +63,11 @@ func (Client) TotalTasks(tasks []Task) int {
 // InProgressTasks returns the number of started, incomplete tasks.
 func (Client) InProgressTasks(tasks []Task) int {
 	return InProgressTasks(tasks)
+}
+
+// CompletedTasks returns the number of completed tasks.
+func (Client) CompletedTasks(tasks []Task) int {
+	return CompletedTasks(tasks)
 }
 
 // DueTasks returns the number of due tasks.

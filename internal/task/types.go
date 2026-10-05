@@ -21,6 +21,7 @@ type Task struct {
 	Start       string       `json:"start"`
 	Entry       string       `json:"entry"`
 	Due         string       `json:"due"`
+	End         string       `json:"end"`
 	Priority    string       `json:"priority"`
 	Recur       string       `json:"recur"`
 	Parent      string       `json:"parent"`

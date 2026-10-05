@@ -70,6 +70,10 @@ func (f *fakeTaskwarrior) InProgressTasks(tasks []task.Task) int {
 	return task.InProgressTasks(tasks)
 }
 
+func (f *fakeTaskwarrior) CompletedTasks(tasks []task.Task) int {
+	return task.CompletedTasks(tasks)
+}
+
 func (f *fakeTaskwarrior) DueTasks(tasks []task.Task, now time.Time) int {
 	return task.DueTasks(tasks, now)
 }

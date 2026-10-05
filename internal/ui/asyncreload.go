@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -24,8 +25,26 @@ const (
 // reloadSnapshot is a value copy of everything taskReloadCmd needs so the
 // Cmd never closes over *Model (see docs/async-task-commands.md).
 type reloadSnapshot struct {
-	filters        []string
-	ultraFilterIDs []int
+	filters         []string
+	ultraFilterIDs  []int
+	completedWindow time.Duration
+}
+
+// CompletedWindowLabel renders a completed-task display window compactly
+// (1d, 4h, 1h); the zero window renders as "off". Any other duration falls
+// back to Go's formatting so the label never lies about the window.
+func CompletedWindowLabel(window time.Duration) string {
+	switch window {
+	case 0:
+		return "off"
+	case time.Hour:
+		return "1h"
+	case 4 * time.Hour:
+		return "4h"
+	case 24 * time.Hour:
+		return "1d"
+	}
+	return window.String()
 }
 
 // reloadMeta carries follow-up UI work for handleTaskReloadDone after an
@@ -65,7 +84,7 @@ func taskReloadCmd(parent context.Context, tw task.Taskwarrior, snap reloadSnaps
 }
 
 func exportReloadData(ctx context.Context, tw task.Taskwarrior, snap reloadSnapshot) (reloadData, error) {
-	filters := append(append([]string(nil), snap.filters...), "status:pending")
+	filters := append(append([]string(nil), snap.filters...), statusFilter(snap.completedWindow))
 	tasks, err := tw.Export(ctx, filters...)
 	if err != nil {
 		return reloadData{}, err
@@ -75,6 +94,19 @@ func exportReloadData(ctx context.Context, tw task.Taskwarrior, snap reloadSnaps
 		tasks:          tasks,
 		ultraFilterIDs: snap.ultraFilterIDs,
 	}, nil
+}
+
+// statusFilter returns the status constraint added to every export. With a
+// zero window it is the plain pending filter. With a completed-task display
+// window it expands to a pending OR completed-within-window group so finished
+// tasks appear alongside the pending ones.
+func statusFilter(completedWindow time.Duration) string {
+	if completedWindow <= 0 {
+		return "status:pending"
+	}
+	cutoff := time.Now().Add(-completedWindow)
+	return fmt.Sprintf("(status:pending or (status:completed and end.after:%s))",
+		cutoff.Format("2006-01-02T15:04:05"))
 }
 
 // scheduleTaskReload arms a reloading flight and returns an export Cmd.
@@ -160,7 +192,7 @@ func (m *Model) maybeAutoRefreshTick(fromGen int) tea.Cmd {
 }
 
 func (m *Model) finishShellReload(meta reloadMeta) (tea.Model, tea.Cmd) {
-	if meta.selectedID > 0 {
+	if meta.selectedID != 0 {
 		_ = m.selectTaskByID(meta.selectedID)
 	}
 	output := shellOutput(meta.shellResult, meta.shellErr)
@@ -201,8 +233,9 @@ func (m *Model) finishSearchReload() (tea.Model, tea.Cmd) {
 
 func (m *Model) captureReloadSnapshot() reloadSnapshot {
 	return reloadSnapshot{
-		filters:        append([]string(nil), m.filters...),
-		ultraFilterIDs: append([]int(nil), m.ultraFilteredTaskIDs()...),
+		filters:         append([]string(nil), m.filters...),
+		ultraFilterIDs:  append([]int(nil), m.ultraFilteredTaskIDs()...),
+		completedWindow: m.completedWindow,
 	}
 }
 

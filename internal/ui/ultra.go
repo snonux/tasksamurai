@@ -133,6 +133,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},
 				{Key: "Z", Desc: "cycle auto-refresh interval"},
+				{Key: "V", Desc: "cycle completed-task window (1d/4h/1h/off)"},
 			},
 		},
 		{
@@ -309,7 +310,7 @@ func (m *Model) reconcileUltraSelection() {
 		return
 	}
 
-	if m.ultraFocusedID > 0 {
+	if m.ultraFocusedID != 0 {
 		if m.ultraTaskIndexByID(m.ultraFocusedID) >= 0 {
 			_ = m.selectTaskByID(m.ultraFocusedID)
 			m.ultraFocusedID = 0
@@ -437,6 +438,9 @@ func (m *Model) ultraModeStatus(tasks []task.Task) string {
 		}
 		title += fmt.Sprintf(" | auto-refresh: on (%s)", autoRefreshIntervalLabel(interval))
 	}
+	if m.completedWindow > 0 {
+		title += fmt.Sprintf(" | completed: on (%s)", CompletedWindowLabel(m.completedWindow))
+	}
 	return fmt.Sprintf("%s | search: %s | %d tasks", title, filter, len(tasks))
 }
 
@@ -542,7 +546,13 @@ func (m *Model) ultraCursorStatus(tasks []task.Task) string {
 // ultraStatusText returns the plain-text representation of the consolidated
 // status line for search indexing. Priority is omitted when unset.
 func (m *Model) ultraStatusText(t task.Task) string {
-	parts := []string{fmt.Sprintf("#%d", t.ID)}
+	idText := fmt.Sprintf("#%d", t.ID)
+	if t.Status == "completed" {
+		// Keep the plain-text search index in sync with the rendered card,
+		// which shows a check mark instead of the synthetic display ID.
+		idText = "✓"
+	}
+	parts := []string{idText}
 	if t.Priority != "" {
 		parts = append(parts, t.Priority)
 	}
@@ -656,10 +666,20 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 // Age, recur, and start are omitted for compactness.
 func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	_ = width
+	completed := t.Status == "completed"
 	idText := fmt.Sprintf("#%d", t.ID)
+	if completed {
+		// Taskwarrior exports completed tasks with ID 0; show a check mark
+		// instead of the synthetic display ID.
+		idText = "✓"
+	}
 	statusText := ultraOrDash(t.Status)
 	urgencyText := fmt.Sprintf("%.1f", t.Urgency)
 	due := ultraDueValue(m, t.Due)
+	if completed {
+		// No overdue highlighting on a finished task (mirrors the table view).
+		due = ultraOrDash(formatDueText(t.Due))
+	}
 	project := ultraOrDash(t.Project)
 	tags := ultraOrDash(strings.Join(t.Tags, " "))
 
@@ -684,13 +704,17 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 
 	sep := ultraFieldSep(bg)
 
-	// ID badge: yellow bg + black text when the task is started; otherwise bold white.
+	// ID badge: yellow bg + black text when the task is started; a dim check
+	// mark when completed; otherwise bold white.
 	var idStyle lipgloss.Style
-	if t.Start != "" {
+	switch {
+	case completed:
+		idStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.CompletedFG))
+	case t.Start != "":
 		idStyle = lipgloss.NewStyle().Bold(true).
 			Foreground(lipgloss.Color("0")).
 			Background(lipgloss.Color(m.theme.UltraStartedBG))
-	} else {
+	default:
 		idStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("253"))
 	}
 	// Don't pass bg into the started ID badge — it has its own background.
@@ -699,14 +723,28 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 		idRendered = idStyle.Render(m.highlightMatches(idText, re))
 	}
 
-	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("246")), statusText, bg)
-	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(lipgloss.Color("214")), urgencyText, bg)
+	statusFG := lipgloss.Color("246")
+	urgencyFG := lipgloss.Color("214")
+	if completed {
+		// Dim the whole status line of a finished task so it reads as
+		// archived, mirroring the grey completed rows of the table view.
+		statusFG = lipgloss.Color(m.theme.CompletedFG)
+		urgencyFG = lipgloss.Color(m.theme.CompletedFG)
+	}
+	status := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(statusFG), statusText, bg)
+	urgency := m.ultraStyledText(re, lipgloss.NewStyle().Foreground(urgencyFG), urgencyText, bg)
 
 	parts := []string{idRendered}
 	// Only include priority when it is actually set (H/M/L).
 	if t.Priority != "" {
 		priorityText := t.Priority
-		parts = append(parts, m.ultraStyledText(re, ultraPriorityStyle(m.theme, t.Priority), priorityText, ""))
+		priorityStyle := ultraPriorityStyle(m.theme, t.Priority)
+		if completed {
+			// Plain dim priority instead of the colour pill (mirrors the
+			// table view, which drops the pill on finished tasks).
+			priorityStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.CompletedFG))
+		}
+		parts = append(parts, m.ultraStyledText(re, priorityStyle, priorityText, ""))
 	}
 	parts = append(parts,
 		status, urgency,
@@ -720,6 +758,12 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 func (m *Model) renderUltraDescriptionWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	// Brighter foreground ("253") than annotations to give description visual priority.
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("253"))
+	if t.Status == "completed" {
+		// Completed-task indicator: dim grey with a strikethrough, so a
+		// finished task reads at a glance as done even out of the corner of
+		// the eye.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.CompletedFG)).Strikethrough(true)
+	}
 	if bg != "" {
 		style = style.Background(lipgloss.Color(bg))
 	}
@@ -1212,12 +1256,19 @@ func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
-	id, ok := m.ultraPrepareSelectedTask()
+	_, ok := m.ultraPrepareSelectedTask()
 	if !ok {
 		return m, nil
 	}
-
-	return m, m.startBlink(id, true)
+	tsk, err := m.getSelectedTask()
+	if err != nil {
+		return m, nil
+	}
+	if tsk.Status == "completed" {
+		m.statusMsg = "Task is already completed"
+		return m, nil
+	}
+	return m, m.startBlink(tsk.ID, true)
 }
 
 func (m *Model) handleUltraDeleteTask() (tea.Model, tea.Cmd) {

@@ -26,3 +26,15 @@ func TestStats(t *testing.T) {
 		t.Errorf("due tasks wrong: %d", DueTasks(tasks, now))
 	}
 }
+
+func TestCompletedTasks(t *testing.T) {
+	tasks := []Task{
+		{Description: "t1"},
+		{Description: "t2", Status: "completed"},
+		{Description: "t3", Status: "completed"},
+		{Description: "t4", Status: "deleted"},
+	}
+	if got := CompletedTasks(tasks); got != 2 {
+		t.Errorf("CompletedTasks = %d, want 2", got)
+	}
+}
