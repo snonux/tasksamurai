@@ -82,5 +82,5 @@ func (m *Model) writeTaskSummary(w io.Writer) {
 func (m *Model) writeWindowInfo(w io.Writer) {
 	fmt.Fprintln(w, "-- Window / config --")
 	fmt.Fprintf(w, "windowHeight=%d\n", m.windowHeight)
-	fmt.Fprintf(w, "browserCmd=%q youtubeBrowserCmd=%q agentFilterHotkey=%q\n", m.browserCmd, m.youtubeBrowserCmd, m.agentFilterHotkey)
+	fmt.Fprintf(w, "browserCmd=%q youtubeBrowserCmd=%q agentFilterHotkey=%q\n", m.browserCmd, m.youtubeBrowserCmd, m.agentFilterHotkeyLabel())
 }

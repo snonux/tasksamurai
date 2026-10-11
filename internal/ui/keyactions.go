@@ -485,7 +485,7 @@ func (m *Model) handleFilter() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleToggleAgentFilter() (tea.Model, tea.Cmd) {
-	m.filters = toggleAgentFilter(m.filters)
+	m.filters = toggleTagFilter(m.filters, "agent")
 	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
 }
 
@@ -673,31 +673,35 @@ func autoRefreshIntervalIndex(interval time.Duration) int {
 }
 
 func toggleAgentFilter(filters []string) []string {
-	next := "+agent"
-	index := -1
+	return toggleTagFilter(filters, "agent")
+}
 
-	for i, filter := range filters {
-		switch filter {
-		case "+agent":
-			next = "-agent"
-			index = i
-		case "-agent":
-			next = "+agent"
-			index = i
-		}
-		if index != -1 {
-			break
-		}
-	}
-
-	if index == -1 {
-		out := append([]string(nil), filters...)
-		return append(out, next)
-	}
-
+func toggleTagFilter(filters []string, tag string) []string {
 	out := append([]string(nil), filters...)
-	out[index] = next
-	return out
+	for i, filter := range out {
+		switch filter {
+		case "+" + tag:
+			out[i] = "-" + tag
+			return out
+		case "-" + tag:
+			out[i] = "+" + tag
+			return out
+		}
+	}
+	return append(out, "+"+tag)
+}
+
+func (m *Model) handleToggleAutoFilter() (tea.Model, tea.Cmd) {
+	m.filters = toggleTagFilter(m.filters, "auto")
+	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
+}
+
+func (m *Model) handleJumpToFirstTask() (tea.Model, tea.Cmd) {
+	if m.showUltra {
+		m.ultraGoHome()
+		return m, nil
+	}
+	return m.handleTableNavigation(tea.KeyPressMsg{Code: tea.KeyHome})
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {

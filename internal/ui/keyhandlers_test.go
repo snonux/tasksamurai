@@ -56,8 +56,8 @@ func TestAgentFilterHotkeyRejectsCtrlRCaseVariants(t *testing.T) {
 			if err := validateAgentFilterHotkey(key); err == nil {
 				t.Fatalf("expected direct validation collision for agent hotkey %q", key)
 			}
-			if got := m.agentFilterHotkeyLabel(); got != "3" {
-				t.Fatalf("colliding hotkey changed label: got %q want %q", got, "3")
+			if got := m.agentFilterHotkeyLabel(); got != "4" {
+				t.Fatalf("colliding hotkey changed label: got %q want %q", got, "4")
 			}
 		})
 	}

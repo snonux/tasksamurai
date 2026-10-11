@@ -2607,7 +2607,7 @@ func TestToggleAgentFilter(t *testing.T) {
 	}
 }
 
-func TestAgentFilterHotkeyDefaultsToThree(t *testing.T) {
+func TestAgentFilterHotkeyDefaultsToFour(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := filepath.Join(tmp, "task")
 
@@ -2636,10 +2636,10 @@ func TestAgentFilterHotkeyDefaultsToThree(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '3', Text: "3"})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '4', Text: "4"})
 	m = *mv.(*Model)
 	if !reflect.DeepEqual(m.filters, []string{"+agent"}) {
-		t.Fatalf("3 did not toggle agent filter: %#v", m.filters)
+		t.Fatalf("4 did not toggle agent filter: %#v", m.filters)
 	}
 }
 
@@ -2786,8 +2786,8 @@ func TestAgentFilterHotkeyRejectsUppercaseNamedKeyCollision(t *testing.T) {
 	if err := m.SetAgentFilterHotkey("Enter"); err == nil {
 		t.Fatalf("expected collision for named hotkey Enter")
 	}
-	if got := m.agentFilterHotkeyLabel(); got != "3" {
-		t.Fatalf("colliding named hotkey changed label: got %q want %q", got, "3")
+	if got := m.agentFilterHotkeyLabel(); got != "4" {
+		t.Fatalf("colliding named hotkey changed label: got %q want %q", got, "4")
 	}
 }
 
@@ -2798,8 +2798,8 @@ func TestAgentFilterHotkeyRejectsShellPromptSharedKeys(t *testing.T) {
 			if err := m.SetAgentFilterHotkey(key); err == nil {
 				t.Fatalf("expected collision for shell prompt hotkey %q", key)
 			}
-			if got := m.agentFilterHotkeyLabel(); got != "3" {
-				t.Fatalf("colliding shell prompt hotkey changed label: got %q want %q", got, "3")
+			if got := m.agentFilterHotkeyLabel(); got != "4" {
+				t.Fatalf("colliding shell prompt hotkey changed label: got %q want %q", got, "4")
 			}
 		})
 	}
@@ -2837,8 +2837,8 @@ func TestAgentFilterHotkeyCollisionIsRejected(t *testing.T) {
 	if err := m.SetAgentFilterHotkey("u"); err == nil {
 		t.Fatalf("expected collision for hotkey u")
 	}
-	if got := m.agentFilterHotkeyLabel(); got != "3" {
-		t.Fatalf("colliding hotkey changed label: got %q want %q", got, "3")
+	if got := m.agentFilterHotkeyLabel(); got != "4" {
+		t.Fatalf("colliding hotkey changed label: got %q want %q", got, "4")
 	}
 
 	mv, _ := (&m).Update(tea.KeyPressMsg{Code: 'u', Text: "u"})

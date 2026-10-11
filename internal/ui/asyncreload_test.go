@@ -350,7 +350,7 @@ func TestAgentToggleSchedulesAsyncReload(t *testing.T) {
 	}
 	baseline := fake.exports
 
-	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: '3', Text: "3"})
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: '4', Text: "4"})
 	m = *mv.(*Model)
 	if cmd == nil {
 		t.Fatal("agent toggle should schedule reload")

@@ -324,7 +324,7 @@ type Model struct {
 	// browser better suited for them (e.g. chromium) while keeping the
 	// default browser (e.g. firefox) for everything else.
 	youtubeBrowserCmd string
-	agentFilterHotkey string
+	hotkeys           Hotkeys
 	taskwarrior       task.Taskwarrior
 
 	theme        Theme
@@ -646,7 +646,7 @@ func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior
 	if isNilTaskwarrior(tw) {
 		return Model{}, errors.New("taskwarrior client is nil")
 	}
-	m := Model{filters: filters, browserCmd: browserCmd, agentFilterHotkey: "3", taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
+	m := Model{filters: filters, browserCmd: browserCmd, taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
 	m.initTaskContext()
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
@@ -1254,12 +1254,12 @@ func (m *Model) helpSections() []uihelp.Section {
 			Items: []uihelp.Item{
 				{Key: "↑/k, ↓/j", Desc: "move up/down"},
 				{Key: "←/h, →/l", Desc: "move left/right"},
-				{Key: "0, g, Home", Desc: "go to start"},
+				{Key: m.configuredHotkeys().First + ", g, Home", Desc: "go to start"},
 				{Key: "G, End", Desc: "go to end"},
 				{Key: "pgup/pgdn, b", Desc: "page up/down"},
 				{Key: "ctrl+u/ctrl+d", Desc: "half page up/down"},
-				{Key: "1", Desc: "jump to random task"},
-				{Key: "2", Desc: "jump to random task (no due date)"},
+				{Key: m.configuredHotkeys().Random, Desc: "jump to random task"},
+				{Key: m.configuredHotkeys().RandomNoDue, Desc: "jump to random task (no due date)"},
 			},
 		},
 		{
@@ -1309,6 +1309,7 @@ func (m *Model) helpSections() []uihelp.Section {
 			Title: "View & Search",
 			Items: []uihelp.Item{
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
+				{Key: m.configuredHotkeys().Auto, Desc: "toggle +auto/-auto filter"},
 				{Key: "f", Desc: "change filter"},
 				{Key: ":", Desc: "run task command prompt"},
 				{Key: ";", Desc: "run task command prompt for selected task"},
@@ -1816,46 +1817,12 @@ func (m *Model) SetUltra(u bool) {
 	m.ultraStartup = u
 }
 
-// SetAgentFilterHotkey configures the key that toggles the agent filter.
-// The chosen key must not collide with any existing command in normal or
-// ultra mode. If it does, the current hotkey is left unchanged and an error is
-// returned so callers can surface the conflict.
-func (m *Model) SetAgentFilterHotkey(key string) error {
-	key = normalizeAgentFilterHotkey(key)
-	if key == "" {
-		return nil
-	}
-	if err := validateAgentFilterHotkey(key); err != nil {
-		return err
-	}
-	m.agentFilterHotkey = key
-	return nil
-}
-
 // SetYouTubeBrowserCmd configures the browser command used specifically for
 // YouTube links opened with the "o" key. An empty value (the default) means
 // YouTube links are opened with the regular browser command like any other
 // URL. Surrounding whitespace is trimmed so a blank flag value counts as unset.
 func (m *Model) SetYouTubeBrowserCmd(cmd string) {
 	m.youtubeBrowserCmd = strings.TrimSpace(cmd)
-}
-
-func (m *Model) agentFilterHotkeyLabel() string {
-	if strings.TrimSpace(m.agentFilterHotkey) == "" {
-		return "3"
-	}
-	return m.agentFilterHotkey
-}
-
-func validateAgentFilterHotkey(key string) error {
-	key = normalizeAgentFilterHotkey(key)
-	if key == "" {
-		return nil
-	}
-	if sharedKeyBindingContains(key) || reservedAgentHotkeyContains(key) {
-		return fmt.Errorf("agent hotkey %q conflicts with an existing command", key)
-	}
-	return nil
 }
 
 func sharedKeyBindingContains(key string) bool {
@@ -1885,7 +1852,7 @@ func normalizeAgentFilterHotkey(key string) string {
 		return "down"
 	case "end":
 		return "end"
-	case "enter":
+	case "enter", "ctrl+m":
 		return "enter"
 	case "esc", "escape":
 		return "esc"
@@ -1901,7 +1868,9 @@ func normalizeAgentFilterHotkey(key string) string {
 		return "right"
 	case "space":
 		return "space"
-	case "tab":
+	case "shift+tab":
+		return "shift+tab"
+	case "tab", "ctrl+i":
 		return "tab"
 	case "up":
 		return "up"
@@ -1914,9 +1883,6 @@ func normalizeAgentFilterHotkey(key string) string {
 
 var reservedAgentHotkeys = map[string]struct{}{
 	"+":      {},
-	"0":      {},
-	"1":      {},
-	"2":      {},
 	"A":      {},
 	"B":      {},
 	"C":      {},
@@ -1927,6 +1893,7 @@ var reservedAgentHotkeys = map[string]struct{}{
 	"N":      {},
 	"R":      {},
 	"ctrl+r": {},
+	"ctrl+c": {},
 	"ctrl+u": {},
 	"ctrl+d": {},
 	"T":      {},

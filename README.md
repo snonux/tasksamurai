@@ -18,6 +18,18 @@ Task Samurai invokes the `task` command to read and modify tasks. The tasks are 
 
 Press `H` to view all available hotkeys.
 
+Press `4` to toggle the `+agent` / `-agent` filter and `5` to toggle
+`+auto` / `-auto`, in table or ultra mode. With neither sign present, the first
+press adds the positive filter. Each later press switches between including
+and excluding that tag, preserving other filters.
+
+The number-key actions are configurable with the flags below. Any digit
+`0`–`9` can be assigned; `3` and `6`–`9` are unassigned by default. For example,
+`tasksamurai --agent-hotkey 7 --auto-hotkey 8` moves the tag toggles to `7` and
+`8`. To swap two actions, use `--agent-hotkey 5 --auto-hotkey 4`. Help reflects
+your assignments. Keys that conflict with other commands or each other are
+rejected, and the default assignments are used.
+
 Example: press `+`, type `Buy milk` and hit Enter to add a new task called "Buy milk".
 
 Press `R` to edit the selected task's recurrence. On a recurring task, press
@@ -102,10 +114,17 @@ tasksamurai -- -excludetag +includetag
 - `--version`: print the Task Samurai version and exit
 - `--browser-cmd <command>`: command used to open URLs (default: firefox on Linux, open on macOS)
 - `--youtube-browser-cmd <command>`: command used to open `youtube.com` / `youtu.be` links with the `o` key (default: `chromium`, so YouTube videos play in a browser better suited for them than the general `--browser-cmd` default). Set it to `""` to route YouTube links through `--browser-cmd` like any other URL.
-- `--agent-hotkey <key>`: hotkey used to toggle the `+agent` / `-agent` filter (default: `3`)
+- `--first-hotkey <key>`: jump to the first task (default: `0`)
+- `--random-hotkey <key>`: jump to a random pending task in table mode (default: `1`)
+- `--random-no-due-hotkey <key>`: jump to a random pending task without a due date in table mode (default: `2`)
+- `--agent-hotkey <key>`: toggle the `+agent` / `-agent` filter (default: `4`)
+- `--auto-hotkey <key>`: toggle the `+auto` / `-auto` filter (default: `5`)
 - `--debug-log <path>`: path to debug log file for Taskwarrior commands
 - `--debug-dir <directory>`: directory for runtime debug output (goroutine dumps, profiles)
 - `--disco`: start Task Samurai in disco mode, changing the theme every time a task is modified
+
+Hotkeys accept a single character, `tab`, `shift+tab`, or `ctrl+<letter>`;
+reserved command keys cannot be reassigned. An empty value uses the default.
 
 ## Debugging
 

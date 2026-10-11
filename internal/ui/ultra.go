@@ -84,7 +84,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "j, k", Desc: "move down/up"},
 				{Key: "pgup, pgdn", Desc: "page up/down"},
 				{Key: "ctrl+u, ctrl+d", Desc: "half page up/down"},
-				{Key: "g, G, 0", Desc: "go to start/end"},
+				{Key: "g, G, " + m.configuredHotkeys().First, Desc: "go to start/end"},
 				{Key: "space", Desc: "refresh tasks"},
 			},
 		},
@@ -113,6 +113,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "R", Desc: "edit recurrence"},
 				{Key: "ctrl+r", Desc: "edit recurring series recurrence"},
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
+				{Key: m.configuredHotkeys().Auto, Desc: "toggle +auto/-auto filter"},
 				{Key: "f", Desc: "change filter"},
 			},
 		},
@@ -1144,8 +1145,6 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraGoHome()
 	case "G", "end":
 		m.ultraGoEnd()
-	case "0":
-		m.ultraGoHome()
 	case "enter":
 		return m.handleUltraEditTask()
 	}

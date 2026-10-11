@@ -142,10 +142,6 @@ func (m *Model) handleNormalMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.ultraOffset = 0
 		m.ultraEnsureVisible()
 		return m, nil
-	case "1":
-		return m.handleJumpToRandomTask()
-	case "2":
-		return m.handleJumpToRandomTaskNoDue()
 	default:
 		// Pass through to table for navigation
 		return m.handleTableNavigation(msg)
@@ -192,8 +188,26 @@ func (m *Model) ultraSharedKeyHandlers() sharedKeyHandlers {
 }
 
 func (m *Model) handleSharedKey(key string, mode keyBindingMode, handlers sharedKeyHandlers) (bool, tea.Model, tea.Cmd) {
-	if key == m.agentFilterHotkeyLabel() {
-		model, cmd := m.handleToggleAgentFilter()
+	hotkeys := m.configuredHotkeys()
+	var handler func() (tea.Model, tea.Cmd)
+	switch normalizeAgentFilterHotkey(key) {
+	case hotkeys.Agent:
+		handler = m.handleToggleAgentFilter
+	case hotkeys.Auto:
+		handler = m.handleToggleAutoFilter
+	case hotkeys.First:
+		handler = m.handleJumpToFirstTask
+	case hotkeys.Random:
+		if mode == keyBindingNormal {
+			handler = m.handleJumpToRandomTask
+		}
+	case hotkeys.RandomNoDue:
+		if mode == keyBindingNormal {
+			handler = m.handleJumpToRandomTaskNoDue
+		}
+	}
+	if handler != nil {
+		model, cmd := handler()
 		return true, model, cmd
 	}
 

@@ -30,7 +30,12 @@ func main() {
 	// empty string ("") to route YouTube links through --browser-cmd like any
 	// other URL.
 	youtubeBrowserCmd := flag.String("youtube-browser-cmd", "chromium", "command used to open youtube.com/youtu.be links (defaults to chromium; set to \"\" to use --browser-cmd)")
-	agentHotkey := flag.String("agent-hotkey", "3", "key used to toggle the +agent/-agent filter")
+	hotkeys := ui.DefaultHotkeys()
+	flag.StringVar(&hotkeys.First, "first-hotkey", hotkeys.First, "key used to jump to the first task")
+	flag.StringVar(&hotkeys.Random, "random-hotkey", hotkeys.Random, "key used to jump to a random task (table mode)")
+	flag.StringVar(&hotkeys.RandomNoDue, "random-no-due-hotkey", hotkeys.RandomNoDue, "key used to jump to a random task without a due date (table mode)")
+	flag.StringVar(&hotkeys.Agent, "agent-hotkey", hotkeys.Agent, "key used to toggle the +agent/-agent filter")
+	flag.StringVar(&hotkeys.Auto, "auto-hotkey", hotkeys.Auto, "key used to toggle the +auto/-auto filter")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
@@ -55,9 +60,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := m.SetAgentFilterHotkey(*agentHotkey); err != nil {
-		fmt.Fprintln(os.Stderr, "invalid --agent-hotkey:", err)
-		fmt.Fprintln(os.Stderr, "using default hotkey 3")
+	if err := m.SetHotkeys(hotkeys); err != nil {
+		fmt.Fprintln(os.Stderr, "invalid hotkey configuration:", err)
+		fmt.Fprintln(os.Stderr, "using default hotkeys (0, 1, 2, 4, 5)")
 	}
 	m.SetYouTubeBrowserCmd(*youtubeBrowserCmd)
 	m.SetDisco(*disco)
