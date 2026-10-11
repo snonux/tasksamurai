@@ -36,6 +36,7 @@ func main() {
 	flag.StringVar(&hotkeys.RandomNoDue, "random-no-due-hotkey", hotkeys.RandomNoDue, "key used to jump to a random task without a due date (table mode)")
 	flag.StringVar(&hotkeys.Agent, "agent-hotkey", hotkeys.Agent, "key used to toggle the +agent/-agent filter")
 	flag.StringVar(&hotkeys.Auto, "auto-hotkey", hotkeys.Auto, "key used to toggle the +auto/-auto filter")
+	flag.StringVar(&hotkeys.Track, "track-hotkey", hotkeys.Track, "key used to toggle the +track/-track filter")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
@@ -62,7 +63,7 @@ func main() {
 
 	if err := m.SetHotkeys(hotkeys); err != nil {
 		fmt.Fprintln(os.Stderr, "invalid hotkey configuration:", err)
-		fmt.Fprintln(os.Stderr, "using default hotkeys (0, 1, 2, 4, 5)")
+		fmt.Fprintln(os.Stderr, "using default hotkeys (0, 1, 2, 3, 4, 5)")
 	}
 	m.SetYouTubeBrowserCmd(*youtubeBrowserCmd)
 	m.SetDisco(*disco)

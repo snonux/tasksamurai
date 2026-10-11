@@ -114,6 +114,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: "ctrl+r", Desc: "edit recurring series recurrence"},
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
 				{Key: m.configuredHotkeys().Auto, Desc: "toggle +auto/-auto filter"},
+				{Key: m.configuredHotkeys().Track, Desc: "toggle +track/-track filter"},
 				{Key: "f", Desc: "change filter"},
 			},
 		},

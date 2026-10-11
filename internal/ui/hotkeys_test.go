@@ -12,12 +12,13 @@ import (
 
 func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 	var m Model
-	if got := m.configuredHotkeys(); got != (Hotkeys{"0", "1", "2", "4", "5"}) {
+	if got := m.configuredHotkeys(); got != (Hotkeys{"0", "1", "2", "4", "5", "3"}) {
 		t.Fatalf("defaults = %+v", got)
 	}
-	// Every digit can be assigned, including ones reserved by older versions.
+	// Track gets a fixed unassigned key ("Q") so reassigning Agent to "3"
+	// does not collide with the track default.
 	for _, key := range "0123456789" {
-		h := Hotkeys{First: "F", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y"}
+		h := Hotkeys{First: "F", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y", Track: "Q"}
 		if err := m.SetHotkeys(h); err != nil {
 			t.Fatalf("digit %c: %v", key, err)
 		}
@@ -25,7 +26,7 @@ func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 			t.Fatalf("got %+v, want %+v", got, h)
 		}
 	}
-	if err := m.SetHotkeys(Hotkeys{First: "9", Random: "2", RandomNoDue: "1", Agent: "5", Auto: "4"}); err != nil {
+	if err := m.SetHotkeys(Hotkeys{First: "9", Random: "2", RandomNoDue: "1", Agent: "5", Auto: "4", Track: "6"}); err != nil {
 		t.Fatalf("swap: %v", err)
 	}
 	if err := m.SetHotkeys(Hotkeys{Agent: " Tab ", Auto: "SHIFT+TAB"}); err != nil {
@@ -45,8 +46,9 @@ func TestHotkeysInvalidConfigurationIsAtomic(t *testing.T) {
 		{First: "q"}, {Agent: "Enter"}, {Auto: "Ctrl+R"}, {Auto: "ctrl+c"},
 		{Agent: "nonsense"}, {Auto: "ctrl+ab"}, {Auto: "\x01"}, {Agent: string([]byte{0xff})},
 		{Agent: "tab", Auto: "CTRL+I"}, {Auto: "CTRL+M"},
+		{Agent: "3"}, {Track: "q"}, {Track: "3", Auto: "3"},
 	} {
-		t.Run(strings.TrimSpace(h.First+h.Random+h.RandomNoDue+h.Agent+h.Auto), func(t *testing.T) {
+		t.Run(strings.TrimSpace(h.First+h.Random+h.RandomNoDue+h.Agent+h.Auto+h.Track), func(t *testing.T) {
 			var m Model
 			if err := m.SetHotkeys(Hotkeys{First: "9", Agent: "7", Auto: "8"}); err != nil {
 				t.Fatal(err)
@@ -63,7 +65,7 @@ func TestHotkeysInvalidConfigurationIsAtomic(t *testing.T) {
 }
 
 func TestTagFilterTogglePreservesOtherFilters(t *testing.T) {
-	for _, tag := range []string{"agent", "auto"} {
+	for _, tag := range []string{"agent", "auto", "track"} {
 		other := "agent"
 		if tag == other {
 			other = "auto"
@@ -110,7 +112,7 @@ func TestTagHotkeysInBothViews(t *testing.T) {
 			if err := m.SetHotkeys(h); err != nil {
 				t.Fatal(err)
 			}
-			for _, binding := range []struct{ key, tag string }{{h.Agent, "agent"}, {h.Auto, "auto"}} {
+			for _, binding := range []struct{ key, tag string }{{h.Agent, "agent"}, {h.Auto, "auto"}, {h.Track, "track"}} {
 				for _, sign := range []string{"+", "-", "+"} {
 					baseline := fake.exports
 					_, cmd := m.Update(tea.KeyPressMsg{Code: rune(binding.key[0]), Text: binding.key})
@@ -141,7 +143,7 @@ func TestReboundNavigationAndHelp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := Hotkeys{First: "9", Random: "6", RandomNoDue: "7", Agent: "8", Auto: "3"}
+	h := Hotkeys{First: "9", Random: "6", RandomNoDue: "7", Agent: "8", Auto: "3", Track: "5"}
 	if err := m.SetHotkeys(h); err != nil {
 		t.Fatal(err)
 	}
@@ -165,12 +167,12 @@ func TestReboundNavigationAndHelp(t *testing.T) {
 		found := map[string]bool{}
 		for _, section := range sections {
 			for _, item := range section.Items {
-				if item.Desc == "toggle +agent/-agent filter" || item.Desc == "toggle +auto/-auto filter" {
+				if item.Desc == "toggle +agent/-agent filter" || item.Desc == "toggle +auto/-auto filter" || item.Desc == "toggle +track/-track filter" {
 					found[item.Key] = true
 				}
 			}
 		}
-		if !found["8"] || !found["3"] {
+		if !found["8"] || !found["3"] || !found["5"] {
 			t.Fatalf("help does not reflect rebound filters: %v", found)
 		}
 	}

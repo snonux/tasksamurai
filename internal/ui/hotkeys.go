@@ -14,17 +14,18 @@ type Hotkeys struct {
 	RandomNoDue string
 	Agent       string
 	Auto        string
+	Track       string
 }
 
 // DefaultHotkeys returns the default number-key assignments.
 func DefaultHotkeys() Hotkeys {
-	return Hotkeys{First: "0", Random: "1", RandomNoDue: "2", Agent: "4", Auto: "5"}
+	return Hotkeys{First: "0", Random: "1", RandomNoDue: "2", Agent: "4", Auto: "5", Track: "3"}
 }
 
 func (h Hotkeys) normalized() Hotkeys {
 	defaults := DefaultHotkeys()
-	keys := []*string{&h.First, &h.Random, &h.RandomNoDue, &h.Agent, &h.Auto}
-	fallbacks := []string{defaults.First, defaults.Random, defaults.RandomNoDue, defaults.Agent, defaults.Auto}
+	keys := []*string{&h.First, &h.Random, &h.RandomNoDue, &h.Agent, &h.Auto, &h.Track}
+	fallbacks := []string{defaults.First, defaults.Random, defaults.RandomNoDue, defaults.Agent, defaults.Auto, defaults.Track}
 	for i, key := range keys {
 		*key = normalizeAgentFilterHotkey(*key)
 		if *key == "" {
@@ -41,7 +42,7 @@ func (m *Model) SetHotkeys(h Hotkeys) error {
 	seen := make(map[string]string)
 	for _, binding := range []struct{ name, key string }{
 		{"first", h.First}, {"random", h.Random}, {"random-no-due", h.RandomNoDue},
-		{"agent", h.Agent}, {"auto", h.Auto},
+		{"agent", h.Agent}, {"auto", h.Auto}, {"track", h.Track},
 	} {
 		if err := validateConfigurableHotkey(binding.key); err != nil {
 			return fmt.Errorf("%s hotkey: %w", binding.name, err)

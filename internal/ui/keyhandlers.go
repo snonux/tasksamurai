@@ -195,6 +195,8 @@ func (m *Model) handleSharedKey(key string, mode keyBindingMode, handlers shared
 		handler = m.handleToggleAgentFilter
 	case hotkeys.Auto:
 		handler = m.handleToggleAutoFilter
+	case hotkeys.Track:
+		handler = m.handleToggleTrackFilter
 	case hotkeys.First:
 		handler = m.handleJumpToFirstTask
 	case hotkeys.Random:

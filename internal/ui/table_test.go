@@ -2678,10 +2678,10 @@ func TestAgentFilterHotkeyCanBeRebound(t *testing.T) {
 		t.Fatalf("SetAgentFilterHotkey: %v", err)
 	}
 
-	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '3', Text: "3"})
+	mv, _ := (&m).Update(tea.KeyPressMsg{Code: '9', Text: "9"})
 	m = *mv.(*Model)
 	if !reflect.DeepEqual(m.filters, []string{"project:home"}) {
-		t.Fatalf("3 unexpectedly changed filters: %#v", m.filters)
+		t.Fatalf("9 unexpectedly changed filters: %#v", m.filters)
 	}
 
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: '7', Text: "7"})

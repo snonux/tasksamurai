@@ -489,6 +489,12 @@ func (m *Model) handleToggleAgentFilter() (tea.Model, tea.Cmd) {
 	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
 }
 
+// handleToggleTrackFilter toggles the +track/-track tag filter.
+func (m *Model) handleToggleTrackFilter() (tea.Model, tea.Cmd) {
+	m.filters = toggleTagFilter(m.filters, "track")
+	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
+}
+
 func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
 	m.clearEditingModes()
 	m.addingTask = true
