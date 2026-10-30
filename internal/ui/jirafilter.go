@@ -16,6 +16,7 @@ import (
 type jiraFilterEntry struct {
 	filter   config.Filter
 	identity string
+	origin   string
 }
 
 type jiraFilterMatch struct {
@@ -35,12 +36,11 @@ func (m *Model) handleJiraFilterPicker() (tea.Model, tea.Cmd) {
 	if m.jira.source == nil {
 		return m, nil
 	}
-	entries := []jiraFilterEntry{{filter: config.Filter{Name: "none"}}}
+	entries := m.jiraFilterEntries()
 	cursor := 0
-	for _, filter := range m.jira.settings.Filters {
-		entries = append(entries, jiraFilterEntry{filter: filter, identity: "local:" + filter.Name})
-		if entries[len(entries)-1].identity == m.jira.filterID {
-			cursor = len(entries) - 1
+	for i, entry := range entries {
+		if entry.identity == m.jira.filterID {
+			cursor = i
 		}
 	}
 	query := textinput.New()
@@ -48,12 +48,17 @@ func (m *Model) handleJiraFilterPicker() (tea.Model, tea.Cmd) {
 	_ = query.Focus()
 	m.jira.picker = jiraFilterPicker{open: true, entries: entries, allEntries: entries, cursor: cursor, query: query}
 	m.updateTableHeight()
+	if !m.jira.filtersAttempted {
+		return m, m.scheduleJiraFilters(false)
+	}
 	return m, nil
 }
 
 func (m *Model) handleJiraFilterPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	picker := &m.jira.picker
 	switch msg.String() {
+	case "ctrl+r":
+		return m, m.scheduleJiraFilters(false)
 	case "esc":
 		picker.open = false
 		m.updateTableHeight()
@@ -90,7 +95,7 @@ func (m *Model) handleJiraFilterPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.C
 func (m *Model) jiraFilterPickerView() string {
 	picker := m.jira.picker
 	width := m.ultraRenderWidth()
-	lines := []string{ansi.Truncate("Jira filters · ↑/↓ Ctrl+n/p · Enter apply · Esc cancel", width, "…")}
+	lines := []string{ansi.Truncate("Jira filters · ↑/↓ Ctrl+n/p · Ctrl+r refresh · Enter apply · Esc cancel", width, "…")}
 	picker.query.SetWidth(max(1, width-8))
 	lines = append(lines, ansi.Truncate(picker.query.View(), width, "…"))
 	visible := 8
@@ -111,6 +116,11 @@ func (m *Model) jiraFilterPickerView() string {
 			label = "(none) all issues"
 		}
 		label = ansi.Truncate(prefix+strings.Join(strings.Fields(label), " "), width, "…")
+		if entry.origin != "" {
+			marker := " (" + entry.origin + ")"
+			label = ansi.Truncate(label, max(0, width-len(marker)), "…") + dim.Render(marker)
+			label = ansi.Truncate(label, width, "…")
+		}
 		if remaining := width - ansi.StringWidth(label) - 2; remaining > 0 && entry.filter.JQL != "" {
 			hint := strings.Join(strings.Fields(entry.filter.JQL), " ")
 			label += "  " + dim.Render(ansi.Truncate(hint, remaining, "…"))

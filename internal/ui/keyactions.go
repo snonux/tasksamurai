@@ -780,7 +780,7 @@ func (m *Model) handleJumpToFirstTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
-	return m, tea.Batch(m.scheduleTaskReload("Reloading…", reloadMeta{}, true), m.scheduleJiraReload(true))
+	return m, tea.Batch(m.scheduleTaskReload("Reloading…", reloadMeta{}, true), m.scheduleJiraReload(true), m.scheduleJiraFilters(true))
 }
 
 // completedWindows is the V-key cycle: off → each of these → off.

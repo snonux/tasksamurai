@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/snonux/tasksamurai/internal/config"
+	"github.com/snonux/tasksamurai/internal/jira"
 	"github.com/snonux/tasksamurai/internal/task"
 )
 
@@ -18,26 +19,32 @@ import (
 type ModelOption func(*Model) error
 
 type jiraState struct {
-	source        IssueSource
-	settings      config.Jira
-	reloadToken   func(context.Context) error
-	view          string
-	filter        config.Filter
-	filterID      string
-	tasks         []task.Task
-	lastFetched   time.Time
-	loading       bool
-	gen           int
-	cancel        context.CancelFunc
-	displayIDs    map[string]int
-	nextID        int
-	detailGen     int
-	detailCancel  context.CancelFunc
-	commentCancel context.CancelFunc
-	commenting    bool
-	remaining     map[string]int
-	picker        jiraFilterPicker
-	closed        bool
+	source           IssueSource
+	settings         config.Jira
+	reloadToken      func(context.Context) error
+	view             string
+	filter           config.Filter
+	filterID         string
+	tasks            []task.Task
+	lastFetched      time.Time
+	loading          bool
+	gen              int
+	cancel           context.CancelFunc
+	displayIDs       map[string]int
+	nextID           int
+	detailGen        int
+	detailCancel     context.CancelFunc
+	commentCancel    context.CancelFunc
+	commenting       bool
+	remaining        map[string]int
+	picker           jiraFilterPicker
+	cloudFilters     []jira.SavedFilter
+	filtersAttempted bool
+	filtersLoading   bool
+	filtersGen       int
+	filtersCancel    context.CancelFunc
+	filtersFetched   time.Time
+	closed           bool
 }
 
 type jiraReloadDoneMsg struct {
@@ -240,6 +247,9 @@ func (m *Model) jiraStatusToken() string {
 		age += " ↻"
 	}
 	name := ansi.Truncate(m.jira.filter.Name, 18, "…")
+	if strings.HasPrefix(m.jira.filterID, "cloud:") {
+		name += " (cloud)"
+	}
 	limit := ""
 	if m.jira.settings.MaxResults > 0 && len(m.jira.tasks) >= m.jira.settings.MaxResults {
 		limit = " · limit"

@@ -413,6 +413,9 @@ func (m *Model) cancelTaskOperations() {
 	if m.jira.cancel != nil {
 		m.jira.cancel()
 	}
+	if m.jira.filtersCancel != nil {
+		m.jira.filtersCancel()
+	}
 	if m.jira.detailCancel != nil {
 		m.jira.detailCancel()
 	}
@@ -876,6 +879,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleJiraDetailDone(msg)
 	case jiraCommentDoneMsg:
 		return m.handleJiraCommentDone(msg)
+	case jiraFiltersDoneMsg:
+		return m.handleJiraFiltersDone(msg)
 	case jiraReloadDoneMsg:
 		return m.handleJiraReloadDone(msg)
 	case debug.DumpStateMsg:
@@ -1162,7 +1167,7 @@ func (m *Model) handleAutoRefresh(msg autoRefreshMsg) (tea.Model, tea.Cmd) {
 	// so this handler does not Batch a Tick together with the export Cmd.
 	if !m.anyInputActive() && m.blinkID == 0 && !m.taskFlightActive() {
 		if cmd := m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonAuto}, false); cmd != nil {
-			return m, tea.Batch(cmd, m.scheduleJiraReload(false))
+			return m, tea.Batch(cmd, m.scheduleJiraReload(false), m.scheduleJiraFilters(false))
 		}
 	}
 	return m, autoRefreshCmd(interval, m.autoRefreshGen)

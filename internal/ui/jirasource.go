@@ -16,4 +16,11 @@ type IssueSource interface {
 	AddComment(context.Context, string, string) (task.Annotation, error)
 }
 
+// FilterSource is the optional saved-filter capability used by the picker.
+type FilterSource interface {
+	FetchFilters(context.Context) ([]jira.SavedFilter, error)
+}
+
+var _ FilterSource = (*jira.Client)(nil)
+
 var _ IssueSource = (*jira.Client)(nil)
