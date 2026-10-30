@@ -3305,7 +3305,7 @@ func TestUltraHelpUsesUltraBindingsAndClosesBeforeLeavingUltra(t *testing.T) {
 	if !strings.Contains(view, "exit ultra mode") {
 		t.Fatalf("ultra help content missing ultra exit binding: %q", view)
 	}
-	if !strings.Contains(view, "open URL or @file from description or annotations") {
+	if !strings.Contains(view, "open URL, @file, or Jira issue in browser") {
 		t.Fatalf("ultra help content missing open-url binding: %q", view)
 	}
 	if strings.Contains(view, "edit current field") {

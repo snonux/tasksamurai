@@ -1340,7 +1340,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "J", Desc: "edit project"},
 				{Key: "T", Desc: "convert first tag to project"},
 				{Key: "a, A", Desc: "add/replace annotations"},
-				{Key: "o", Desc: "open URL or @file from description or annotations"},
+				{Key: "o", Desc: "open URL, @file, or Jira issue in browser"},
 			},
 		},
 		{
@@ -1354,7 +1354,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "n, N", Desc: "next/previous match"},
 				{Key: "i, Enter", Desc: "edit selected field"},
 				{Key: "d, D, U", Desc: "done/delete/undo"},
-				{Key: "o", Desc: "open URL or @file"},
+				{Key: "o", Desc: "open URL, @file, or Jira issue in browser"},
 				{Key: "q, ESC", Desc: "back to table"},
 			},
 		},

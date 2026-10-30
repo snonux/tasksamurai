@@ -96,7 +96,8 @@ func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
 	return m, m.scheduleDeleteSeries(*tsk)
 }
 
-// handleOpenURL implements the "o" key. URLs take precedence over file
+// handleOpenURL implements the "o" key. Jira issue URLs take precedence over
+// description URLs and file references. For Taskwarrior tasks, URLs precede file
 // references: the binding began life as an open-URL action, so a task that
 // carries both keeps opening the URL. When no URL is present the description
 // and annotations are scanned for an @path/to/file.txt reference, which is
@@ -104,6 +105,13 @@ func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
 func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	task := m.getTaskForOpenURL()
 	if task == nil {
+		return m, nil
+	}
+
+	if isJiraTask(task) {
+		if url := m.jiraIssueURL(task); url != "" {
+			return m, openURLCmd(m.browserForURL(url), url, task.ID)
+		}
 		return m, nil
 	}
 
@@ -116,6 +124,14 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// jiraIssueURL builds the browser address locally from the stable issue identity.
+func (m *Model) jiraIssueURL(t *task.Task) string {
+	if !isJiraTask(t) || m.jira.settings.Site == "" {
+		return ""
+	}
+	return strings.TrimRight(m.jira.settings.Site, "/") + "/browse/" + url.PathEscape(strings.TrimPrefix(t.UUID, "jira:"))
 }
 
 // browserForURL picks the command used to open rawURL. YouTube video links are
