@@ -340,3 +340,60 @@ func TestJiraRequestsSurviveTaskwarriorContextRecreation(t *testing.T) {
 		}
 	}
 }
+
+func TestJiraDetailCommentInputRendered(t *testing.T) {
+	for _, mode := range []string{"table", "ultra"} {
+		for _, existing := range []bool{false, true} {
+			name := mode + "/empty"
+			if existing {
+				name = mode + "/existing"
+			}
+			t.Run(name, func(t *testing.T) {
+				m, source := newJiraDetailFixture(t)
+				_, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+				m.showUltra = mode == "ultra"
+				source.issue = func(context.Context, string) (task.Task, error) {
+					issue := jiraRows()[0]
+					issue.Description = strings.Repeat("Long detail content for scrolling. ", 100)
+					return issue, nil
+				}
+				source.comments = func(context.Context, string) (jira.CommentPage, error) {
+					if existing {
+						return jira.CommentPage{Annotations: []task.Annotation{{Description: "Existing server comment"}}}, nil
+					}
+					return jira.CommentPage{}, nil
+				}
+				_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+				drainCmds(t, &m, cmd)
+				_ = m.View()
+				originalHeight := m.detailViewport.Height()
+				_, _ = m.Update(jiraKeyPress("a"))
+				for _, r := range "Visible typed comment" {
+					_, _ = m.Update(jiraKeyPress(string(r)))
+				}
+				view := ansi.Strip(m.View().Content)
+				if !strings.Contains(view, "comment: Visible typed comment") {
+					t.Fatalf("comment prompt and typed value missing from View: %s", view)
+				}
+				if m.detailViewport.Height() != originalHeight-1 {
+					t.Fatal("comment input did not reserve a viewport line")
+				}
+				if line := strings.Index(view, "comment: "); line < 0 || strings.Count(view[:line], "\n") < m.detailViewport.Height() {
+					t.Fatal("comment input rendered inside the scrolling viewport")
+				}
+				m.detailViewport.GotoBottom()
+				if view = ansi.Strip(m.View().Content); !strings.Contains(view, "comment: Visible typed comment") {
+					t.Fatal("scrolling hid the comment input")
+				}
+				_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+				view = ansi.Strip(m.View().Content)
+				if m.annotating || !m.showTaskDetail || strings.Contains(view, "comment: ") || m.detailViewport.Height() != originalHeight {
+					t.Fatal("cancel did not remove input and restore detail viewport")
+				}
+				if source.calls.Load() != 1 {
+					t.Fatal("editing or rendering refetched the Jira list")
+				}
+			})
+		}
+	}
+}

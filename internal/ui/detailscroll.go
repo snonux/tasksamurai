@@ -23,6 +23,9 @@ func (m *Model) detailViewSize() (width, height int) {
 	if height <= 0 {
 		height = 20
 	}
+	if m.annotating {
+		height = max(1, height-1)
+	}
 	return width, height
 }
 
@@ -195,7 +198,7 @@ func (m *Model) detailScrollFooter() string {
 
 // renderDetailScreen renders the scrollable detail overlay: the viewport
 // with the task detail content plus a scroll-position footer and, while the
-// user is searching, the search input below the viewport (so it stays
+// user is searching or commenting, the input below the viewport (so it stays
 // visible even when the content is scrolled). View() calls this every
 // frame, so the content is refreshed from live state here — render-time
 // state sync, not user state (same pattern as the help screen).
@@ -227,6 +230,10 @@ func (m *Model) renderDetailScreen() string {
 	lines := []string{m.detailViewport.View()}
 	if footer := m.detailScrollFooter(); footer != "" {
 		lines = append(lines, footer)
+	}
+	if m.annotating {
+		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).
+			Render(m.annotateInput.View()))
 	}
 	if m.detailSearching {
 		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).
