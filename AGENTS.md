@@ -1,109 +1,129 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for coding agents working in this repository.
 
-## Project Overview
+## Project overview
 
-TaskSamurai is a fast Terminal User Interface (TUI) for Taskwarrior written in Go. It provides a keyboard-driven table interface for task management with extensive hotkey support and real-time integration with the Taskwarrior CLI.
+TaskSamurai is a Go terminal UI for Taskwarrior, built with Bubble Tea. Optional
+Jira Cloud issues merge into the same table and ultra view. Taskwarrior remains
+required; an absent default config or absent `[jira]` section disables Jira.
 
-## Development Commands
+## Development commands
 
 ```bash
-# Build the application
-mage build
-# or simply
-mage
-
-# Run the application
+mage build          # default mage target also builds
 mage run
-
-# Run all tests
 mage test
-
-# Install to $GOPATH/bin
+mage verify         # gofmt, errcheck, ordinary tests and Mage tests
 mage install
-
-# Clean build artifacts
 mage clean
 
-# Run with debug logging
 ./tasksamurai --debug-log debug.log
-
-# Run with custom browser command
 ./tasksamurai --browser-cmd chromium
-
-# Run with disco mode (random theme changes)
 ./tasksamurai --disco
+./tasksamurai --config /path/to/config.toml
+./tasksamurai --no-jira
 ```
 
-## Coding best practices
+Optional live Jira checks need real credentials and dedicated projects:
 
-Follow the coding best practices for Go projects as per ~/git/conf/snippets/go/go-projects/gogios.md
+```bash
+export JIRA_TEST_SITE=https://snonux.atlassian.net
+export JIRA_TEST_EMAIL=your-atlassian-account@example.com
+export JIRA_TEST_TOKEN_FILE=~/.jira_api_token
+export JIRA_TEST_PROJECT=TST
+export JIRA_TEST_SECOND_PROJECT=TST2
+mage jiracheck
+JIRA_INTEGRATION=1 JIRA_TEST_UNBOUNDED=1 mage jiratest
+```
+
+`jiracheck` only reads authentication, project and create-metadata endpoints.
+`jiratest` needs two distinct projects and explicit opt-in. The optional
+`JIRA_TEST_UNBOUNDED` probe asserts this site's restriction; leave it unset on
+other sites. `mage build`, `mage test` and `mage verify` never enable live Jira
+tests. Do not claim skipped integration tests validate live behavior.
+
+## Go conventions
+
+Use value semantics where practical, consistent receiver styles, context as the
+first parameter for blocking operations, wrapped errors, and focused consumer
+interfaces. Keep code under `internal/`, entry points under `cmd/`, format with
+gofmt/goimports, and run errcheck. The local full reference, when available, is
+`~/.agents/skills/go-best-practices/SKILL.md`.
 
 ## Architecture
 
-### Core Components
+- `cmd/tasksamurai/main.go`: flags, config loading, optional Jira client wiring
+  and Bubble Tea startup.
+- `internal/config/`: strict TOML loading, path/default selection, validation and
+  credential-file rereading. Configuration values never retain the token.
+- `internal/task/`: Taskwarrior CLI operations, JSON parsing, sorting and stats.
+  `task.Task` also carries optional Jira display/source metadata.
+- `internal/jira/`: bounded, contextual REST requests; mapping, comments/ADF,
+  transitions, field edits and saved filters. Reads may retry once; writes
+  never automatically retry.
+- `internal/ui/table.go`: main `Model`, message dispatch and table rendering.
+  `keyhandlers.go` and `keyactions.go` define bindings/actions; `handlers.go`
+  handles inputs, and `detail_handlers.go` handles detail fields.
+- `internal/ui/asyncreload.go`, `asyncmutate.go`, `asyncdelete.go` and
+  `taskflight.go`: the Taskwarrior single-flight pipelines.
+- `internal/ui/jirareload.go`, `jiradetail.go`, `jiramutation.go`, `jirafields.go`
+  and `jirafilters.go`: independent Jira caches, requests and completion messages.
+  `jirasource.go` owns consumer interfaces; `jiraguard.go` owns routing policy.
+- `internal/atable/`: table sizing, scrolling and cell rendering.
+- `internal/ui/theme.go`: themes and disco mode.
 
-1. **cmd/tasksamurai/main.go**: Entry point that initializes flags, creates the UI model, and starts the Bubble Tea program.
+Network results change issue/filter caches only in Bubble Tea's Update loop.
+Commands capture immutable snapshots. Jira and Taskwarrior request contexts remain independent;
+quit cancels outstanding work. Fetch generations reject stale reads, and filter
+epochs distinguish A→B→A selection changes during writes.
 
-2. **internal/task/**: Taskwarrior integration layer
-   - Executes `task` commands for all CRUD operations
-   - Parses JSON export format from Taskwarrior
-   - Handles task filtering, sorting, and statistics calculation
-   - All operations require the `task` command to be available in PATH
+## Important invariants
 
-3. **internal/ui/**: Terminal UI implementation using Bubble Tea framework
-   - Main model in `model.go` handles application state and message processing
-   - `table.go` manages the task table display
-   - `input.go` processes keyboard input and executes commands
-   - `theme.go` handles color themes and disco mode
-   - Search functionality with regex support in search methods
+- Jira identity is the `jira:KEY` UUID prefix. Numeric display IDs are synthetic,
+  unique and stable for a Jira session; never send them or Jira UUIDs to `task`.
+  `IDText` supplies issue keys in all views, including completed issues.
+- Keep the routing policy and every activation/commit/editor/delayed-action
+  boundary consistent. A route-policy change alone does not enable a write.
+- Jira search caches refetch on startup, space, auto-refresh and filter changes.
+  View cycling and ordinary navigation reuse them. Detail opening refreshes
+  only that issue and its first comment page; writes patch from confirmed
+  results, with one per-issue GET after a 204 field/transition response.
+- Same-filter refresh failures retain last-good rows. A changed filter clears
+  old rows, and late writes must not cancel the new filter's fetch.
+- `f` and tag toggles filter Taskwarrior. `F` selects Jira JQL; `6` cycles sources.
+  The global `:` prompt and `+` remain Taskwarrior operations.
+- Keep credentials, Basic auth headers and raw token contents out of model/debug
+  dumps and diagnostics. Token-file reads trim surrounding whitespace only.
+- Preserve real Jira labels separately from the virtual `jira` display tag.
+  Priority writes use High/Medium/Low; summaries are strings, comments are ADF.
+- Map statuses by category `new`/`indeterminate`/`done`, never custom status names.
+  Use `resolutiondate`, falling back to `updated`, for completed-window timing.
 
-4. **internal/atable/**: Custom table widget implementation
-   - Provides flexible table rendering for the task display
-   - Handles column widths, scrolling, and cell formatting
+## Testing
 
-### Key Design Patterns
+Tests live alongside implementation files. There are three Jira layers:
 
-- **Message-Driven Architecture**: Uses Bubble Tea's message passing for all UI updates
-- **Command Pattern**: All Taskwarrior operations go through the `internal/task` package
-- **MVC-like Structure**: Clear separation between data (task), view (table), and control (input handling)
+1. Unit/fixture tests cover config, mapping, routing, cache races and rendering.
+2. `httptest` servers cover real HTTP payloads, pagination, auth and failures.
+3. `//go:build integration` tests opt into the live site and both test projects.
 
-### Integration Points
+Tests that invoke Taskwarrior use isolated temporary data directories and skip
+when `task` is unavailable. Run packages rather than individual source files:
 
-- **Taskwarrior CLI**: All task operations execute `task` commands via `exec.Command`
-- **Terminal**: Uses ANSI escape sequences and terminal control through Bubble Tea
-- **External Browser**: Opens URLs via configurable browser command
-
-## Testing Approach
-
-Tests are located alongside implementation files (*_test.go pattern). Key test areas:
-
-- Task operations and JSON parsing in `internal/task/`
-- UI component behavior in `internal/ui/`
-- Tests create temporary directories for isolated Taskwarrior environments
-- Tests check for `task` command availability and skip if not present
-
-Run a single test file:
 ```bash
-go test ./internal/task/task_test.go
+go test ./internal/task
+go test ./internal/ui
+go test -race ./internal/jira ./internal/ui -run 'Test(Jira|Routing|SetField)'
+JIRA_INTEGRATION=0 go test -tags integration ./internal/jira
 ```
 
-Run tests for a specific package:
-```bash
-go test ./internal/ui/
-```
+Live fixtures use an exact per-run summary marker. Re-fetch and check project,
+key, UUID and marker before each mutation or deletion. Cleanup touches only the
+current run: delete best-effort, or resolve with a warning when deletion is
+forbidden. Never sweep other runs or real user issues. The configured account
+returned DELETE 403 during verification; resolved marked fixtures remain in
+`TST` and `TST2`.
 
-## Important Implementation Notes
-
-1. **Taskwarrior Dependency**: The application requires Taskwarrior to be installed and available in PATH. All operations fail gracefully if `task` is not available.
-
-2. **State Management**: The UI state is managed through the main model in `internal/ui/model.go`. State updates happen through Bubble Tea messages.
-
-3. **Error Handling**: Errors from Taskwarrior commands are displayed in the status bar at the bottom of the UI.
-
-4. **Performance**: The table widget uses efficient rendering to handle large task lists. Only visible rows are rendered.
-
-5. **Configuration**: User preferences like browser command and debug logging are passed via command-line flags, not configuration files.
-
-6. **Hotkeys**: Extensive hotkey system defined in `internal/ui/input.go`. See README.md for complete reference.
+See `README.md` for user controls and `docs/jira-support.md` for the implemented
+design, deviations and verification record.

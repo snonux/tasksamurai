@@ -1,540 +1,360 @@
-# Jira support for TaskSamurai — design plan
+# Jira support — implemented design and verification
 
-Status: planned (not implemented). This document is the single source of truth
-for the Jira integration. Task descriptions in `ask` reference sections of this
-file; keep both in sync when the plan changes.
+Status: phases 1 and 2 implemented on 2026-10-30. This is the design record for
+`internal/config`, `internal/jira` and their UI integration. The original Jira
+task series is implemented; creation of Jira issues from the TUI remains outside
+scope. The client create helper serves the gated test harness.
 
-## 1. Scope and decisions (already made)
+## 1. Scope and decisions
 
-- Phase 1 reads issues and comments, adds **comments**, and **opens issues in
-  a browser** (opening is a local action, not a Jira write). Phase 2 adds transitions and field edits.
-- Config file: **TOML** (`BurntSushi/toml` — the only new dependency).
-- Token via **`token_file` reference** (`~/.jira_api_token`), not inline.
-- Jira issue keys render in the **existing Taskwarrior ID column**.
-- Issues are **merged into the main table** (no separate view).
-- View-source cycle on a new configurable hotkey, default **6** (`0`–`5` are
-  taken: First/Random/RandomNoDue/Track/Agent/Auto).
-- Jira filter selection on hotkey **F** (lowercase `f` is the Taskwarrior
-  filter; `J` is taken by "edit project").
+Jira Cloud is an optional second source merged into the Taskwarrior table and
+ultra view. Taskwarrior remains required. The implementation supports issue and
+comment reads, adding comments, opening issues, workflow transitions, due dates,
+priorities, labels and summaries. The existing ID column shows Jira issue keys;
+there is no separate Jira table or new source column.
 
-## 2. Config file (`internal/config`, new package)
+One TOML file configures one Jira site. `github.com/BurntSushi/toml` is the only
+new dependency. Tokens live in a separate referenced file. `6` cycles cached
+source views, and `F` selects local or saved cloud filters with fuzzy search.
 
-Location `~/.config/tasksamurai/config.toml`; override via `--config` flag or
-`TASKSAMURAI_CONFIG` env. Config-path precedence: explicit flag > non-empty env > default path. Values
-come from the selected file over built-in defaults; there are no per-field env
-overrides. A missing default path disables Jira; an explicitly selected missing
-path is an error. Missing
-default file or missing `[jira]` section → Jira disabled, current behavior unchanged.
+## 2. Config file (`internal/config`)
+
+Default location: `~/.config/tasksamurai/config.toml`. Config-path precedence is
+explicit `--config` > non-empty `TASKSAMURAI_CONFIG` > default path. File values
+override built-in defaults; there are no per-field environment overrides.
+A missing default file or absent `[jira]` disables Jira. An explicitly selected
+missing file is an error.
 
 ```toml
 [jira]
-enabled       = true             # optional; default true when the section exists
-site          = "https://snonux.atlassian.net"
-email         = "paul.buetow@gmail.com"
-token_file    = "~/.jira_api_token"
-saved_filters = true             # also list the account's Jira saved filters in the picker
-default_filter = "open"         # optional; name from the list, absent = "none"
-default_view  = "both"           # "tw" | "both" | "jira"
-max_results   = 100
-timeout      = "10s"
+enabled = true
+site = "https://example.atlassian.net"
+email = "your-atlassian-account@example.com"
+token_file = "~/.jira_api_token"
+saved_filters = true
+default_filter = "tests"
+default_view = "both"
+max_results = 100
+timeout = "10s"
 
 [[jira.filters]]
-name = "open"
-jql = "project = X AND resolution = Unresolved ORDER BY updated DESC"
+name = "tests"
+jql = "project in (TST, TST2) ORDER BY updated DESC"
 
 [[jira.filters]]
 name = "mine"
-jql = "project = X AND assignee = currentUser() ORDER BY due ASC"
+jql = "project in (TST, TST2) AND assignee = currentUser() ORDER BY updated DESC"
 ```
 
-- `enabled = false` (or the `--no-jira` runtime flag) switches Jira off
-  without deleting the config. **One site per config in v1** — a multi-site
-  `[[jira.instances]]` shape is a possible future extension, explicitly out
-  of scope now.
-- Recommend `chmod 600` on the config file; the token file already is 600.
+Defaults are enabled when `[jira]` exists, saved filters enabled, view `both`,
+100 issues maximum and a 10s request timeout. Without `default_filter`, selection
+starts at `(none)`. A site that forbids unbounded search then shows the F-picker
+hint until a restricted filter succeeds.
 
-- `[[jira.filters]]` (array of tables) preserves order → deterministic menu
-  order. Validation: unique names, non-empty JQL, `default_filter` must
-  reference an existing name, timeout parses, token file exists and non-empty.
-  Malformed TOML → startup error naming path/line; unreadable file → path
-  and cause, exit. Validate enabled configs only: HTTPS origin site (no
-  userinfo, query, fragment or path), email, positive max_results and timeout,
-  default_view enum, filters, token file. Tests may inject an HTTP httptest
-  origin at the client boundary. Unknown TOML keys are errors. --no-jira or
-  enabled=false bypass Jira-specific validation and token reads (TOML syntax
-  errors still fail). Defaults: both, 100, 10s, saved_filters=true. Resolve
-  relative token_file paths against the config directory; expand ~/ via the
-  home directory, reject unsupported ~user syntax.
-- Token-file reading: trim only **surrounding** whitespace/newlines, never
-  interior characters — the token's trailing `=13A2ACBF` is part of it
-  (verified: stripping the `=…` suffix causes 401).
-- Phase-2 optional overrides:
+Enabled configurations validate an HTTPS origin without credentials/path/query/
+fragment, email, positive bounds, view enum, unique ordered filter names,
+non-empty JQL, a valid default-filter name and a readable non-empty token file.
+Unknown settings, TOML syntax and field-type errors fail startup. Disabled Jira
+(`enabled=false` or `--no-jira`) skips semantic validation and credential reads;
+structural TOML errors still fail.
+
+`~/` expands via the home directory; `~user` is rejected. Relative token-file
+paths resolve against the config directory. Only surrounding token whitespace
+is trimmed; interior characters and any `=…` suffix remain intact. Recommend
+mode 600 for token and config files. Config values never retain token contents.
+Explicit space refresh rereads the token; other config changes need a restart.
+
+Optional workflow overrides preserve native JSON field shapes:
 
 ```toml
-[jira.transitions]        # optional disambiguation only
+[jira.transitions]
 done = "Close Issue"
+# start = "Begin Work"
+# stop = "Return to Backlog"
 
-[jira.transition_fields]   # optional defaults for screened transitions
-resolution = { name = "Done" } # native JSON object, not a scalar string
+[jira.transition_fields]
+resolution = { name = "Done" }
 ```
 
-## 3. Jira client (`internal/jira`, new package)
+## 3. Jira client (`internal/jira`)
 
-`net/http` + `encoding/json` only. Basic auth `email:token`. Historical observations below were recorded against the live `snonux.atlassian.net` account on 2026-10-30
-(token `~/.jira_api_token`, login `paul.buetow@gmail.com`; note:
-`paul@buetow.org` gives 401 — the Atlassian account email is the gmail one).
+The client uses `net/http` and `encoding/json`, Basic auth with the Atlassian
+account email and complete token, per-operation deadlines and bounded bodies.
+Redirects are disabled. Client formatting, error fragments and debug paths
+redact credentials. Credentials are owned behind the client, with synchronized
+rereading through `ReloadToken`.
 
-### API facts
+| Operation | API and contract |
+| --- | --- |
+| Issue search | Read-only POST `/rest/api/3/search/jql`; `nextPageToken` pagination, total result cap, key deduplication and repeated-token detection |
+| Issue detail | GET `/rest/api/3/issue/{key}` with only mapped fields |
+| Comments | First GET page at `/issue/{key}/comment`, max 50, plus remaining count; POST uses ADF and returns the created annotation |
+| Transitions | GET `/issue/{key}/transitions?expand=transitions.fields`; POST uses a string transition ID and native `fields` |
+| Field edits | One PUT `/issue/{key}` for summary, labels, priority or due date |
+| Saved filters | GET `/filter/search?expand=jql` with `startAt` pagination; missing/inaccessible JQL is omitted |
+| Test issue creation | POST `/issue` with project, discovered issue-type ID and a **plain string** summary |
 
-- Search: **`POST /rest/api/3/search/jql`** (JSON body). The old
-  `GET /rest/api/3/search` is gone (410 with migration notice). The new API
-  paginates with `nextPageToken`, not `startAt`. Send a `fields` array limited
-  to the mapped fields (`summary`, `status`, `priority`, `duedate`, `project`,
-  `labels`, `updated`, `created`, `assignee`, `resolutiondate`) — smaller, faster payloads.
-- Comment fetch pagination: `GET /rest/api/3/issue/{key}/comment` paginates;
-  fetch the first page only and render a "+n more" truncation hint in the
-  detail view rather than pretending the list is complete.
-- The site rejects **unbounded JQL** with 400 "Unbounded JQL queries are not
-  allowed here" → configured/selected filters must include a restriction
-  (e.g. `project = X AND …`).
-- Comments: `POST /rest/api/3/issue/{issueKey}/comment` with **ADF** body
-  (v3 requires ADF, not plain strings):
+Search requests include summary, status, priority, duedate, project, labels,
+updated, created, assignee and resolutiondate. Legacy `/search` is not used.
+The test harness discovers issue types through create metadata. The UI never
+uses admin workflow-search APIs.
 
-  ```json
-  {"body":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"the comment"}]}]}}
-  ```
+Comments convert multiline text into ADF paragraphs. Reading ADF handles nested
+paragraphs/lists, hard breaks, mentions, cards and unknown wrappers. Blank
+comments and summaries are refused. UI priority writes use names High/Medium/Low.
+Due dates are a date string or JSON null for clearing; labels are arrays.
 
-  Multi-line input → one `<paragraph>` per line. Endpoint and auth verified
-  reachable (404 only for a fake issue key, which short-circuits before body
-  validation).
-- Fetch comments of one issue: `GET /rest/api/3/issue/{key}/comment` (used
-  for the lazy-load in the detail view).
-- Transitions: `GET /rest/api/3/issue/{key}/transitions` with `?expand=transitions.fields` returns the
-  transitions available from the issue's current status (what the web UI
-  uses; works with a plain user token). `POST` executes via
-  `{"transition":{"id":"N"}}` plus `fields` when the transition has a required
-  screen.
-- `GET /rest/api/3/statuses`… not needed: statuses carry a
-  **`statusCategory.key`**; recognized categories are `new`, `indeterminate`,
-  and `done` (`undefined` follows the unknown-category fallback)
-  independent of custom workflows. This is the workflow-independent
-  discriminator for both mapping and transition selection.
-- `GET /rest/api/3/workflow/search` happens to be readable with this token,
-  but it is an admin API: **never design against it**.
-- `GET /rest/api/3/filter/search?expand=jql` lists **saved filters** (paginated,
-  `values[].name` + `values[].jql`; all filters visible to the user);
-  `GET /rest/api/3/filter/my` (own filters) also works. The plain
-  `GET /rest/api/3/filter` is deprecated — its error response itself points
-  to the Search filters operation. Both search/my verified 200 with the
-  token (0 filters on the site so far, matching 0 projects).
-- The original inspection found **zero projects** — a manual test project (suggested
-  key `TST`) must be created once before integration tests can run.
+Read operations, including POST search, retry once on 429/5xx with cancelable,
+bounded Retry-After/backoff. Writes never retry automatically. A transition or
+field write generally returns 204; one issue GET refreshes its cache row. An
+applied write followed by a failed GET is reported as that distinct outcome.
+Malformed/HTML/oversized responses and missing required result arrays fail
+without replacing last-good rows.
 
-### Error mapping (status bar, never exit, never degrade TW rows)
+401 reports the email/full-token hint, 403 reports operation permission, 404
+reports missing issue, and invalid JQL preserves a bounded redacted API fragment.
+Unbounded JQL 400 prompts for a restricted filter. Issue endpoints may mask failed
+authentication as 404, so the live bad-token test uses `/myself` as its 401 oracle.
 
-| Condition | Message shape |
-|---|---|
-| 401 | "Jira: wrong email or truncated token (the `=…` suffix is part of the token)" |
-| 400 unbounded JQL | "this Jira site requires a restricted filter — press F to pick one" |
-| 400 bad JQL | show the API's JQL error fragment verbatim |
-| 404 | "Jira issue not found" |
-| 403 | "no permission for this Jira operation" (e.g. can view but not comment) |
-| 429 / 5xx | reads only: one cancelable bounded backoff retry (honor Retry-After within timeout), then keep last-good rows and report error |
-| non-JSON body (Cloudflare HTML pages) | "unexpected response from Jira (HTTP nnn)" — never panic on `json.Unmarshal` |
-
-- Client and config code must never log, dump or echo the token
-  (incl. `Authorization` headers and the model debug dump in
-  `internal/ui/debug_dump.go` — if config state is dumped, the token field
-  is redacted).
-
-### Interface seams
-
-- Define the consumer interface in `internal/ui`; the concrete client stays in
-  `internal/jira`. This avoids making phase-1 fakes implement unused phase-2
-  methods. Shared value types (CommentPage, SavedFilter, Transition) live in jira.
-
-  ```go
-  type IssueSource interface {
-      FetchIssues(ctx context.Context, jql string) ([]task.Task, error)
-      FetchIssue(ctx context.Context, issueKey string) (task.Task, error)
-      FetchComments(ctx context.Context, issueKey string) (jira.CommentPage, error)
-      AddComment(ctx context.Context, issueKey, text string) (task.Annotation, error)
-  }
-  // Add optional FilterSource, TransitionSource and FieldSource capabilities
-  // as their tasks land; do not require unsupported methods on phase-1 fakes.
-  // FetchFilters(ctx) ([]jira.SavedFilter, error)
-  // Transitions(ctx, key) ([]jira.Transition, error)
-  // DoTransition(ctx, key, id string, fields map[string]any) error
-  // SetField(ctx, key, field string, value any) error
-  ```
-
-- `CommentPage` contains annotations and a remaining count. `SavedFilter`
-  contains ID, name, JQL and origin; identity is origin + ID (local: name),
-  never just display name. Missing JQL is not an unrestricted filter: report
-  or omit the inaccessible entry.
-- Token rotation is injected as a credential-reload callback at the UI boundary;
-  client requests snapshot credentials under a lock. A failed reload reports
-  the error and retains last-good rows; it must not silently use the stale token
-  for the requested refresh. The model never contains raw credentials.
-- Every request has a context deadline, bounded response size, closed body and
-  escaped issue-key path segment. Do not forward credentials across origins
-  on redirects. Redact token and encoded Basic credentials from API error
-  fragments before display. Never automatically retry comment/create/transition
-  or field writes: ambiguous failures may already have committed remotely.
-- `CreateIssue(ctx, projectKey, issueTypeID, summary)` is for gated tests (not
-  the UI): POST /issue with a **plain string summary**, project and issue type.
-  Only descriptions and comment bodies use ADF. Discover a usable issue type
-  for the test project through create metadata (or an explicit test setting).
-- Comments return their created annotation; transitions and edits usually
-  return 204 without an updated issue. On their success perform one per-issue
-  GET and patch the cache, never a blanket search. If the write succeeds but
-  GET fails, report that distinction; do not repeat the write. ADF-to-text
-  handles paragraphs, lists, hardBreak, mentions and unknown nested nodes.
+The UI owns `IssueSource`; `FilterSource`, `TransitionSource` and `FieldSource`
+are optional capabilities. Phase-1 fakes need not implement later operations.
+`WithJira` supplies source/settings/token-reload callback through variadic model
+options. Existing `New`/`NewWithTaskwarrior` calls remain valid.
 
 ## 4. Mapping issues → `task.Task`
 
-Reuses the existing struct with the identity and rendering adjustments below
-so table/search/detail/ultra support both sources.
+| Task field | Jira mapping |
+| --- | --- |
+| `IDText` | Issue key such as `TST-42` or `TST2-42` |
+| `UUID` | `jira:KEY`, the source discriminator and stable mutation identity |
+| `Description` / `Project` | Summary string / project key |
+| `Status` / `Start` | Category `new` → pending; `indeterminate` → pending plus updated-time approximation for Start; `done` → completed with Start cleared |
+| `Entry` / `End` | Created / resolutiondate, falling back to updated for completed issues; never fetch time |
+| `Due` | Jira date-only value mapped to `YYYYMMDDT000000Z` |
+| `Priority` | Highest/High/H → H, Lowest/Low/L → L, otherwise M |
+| `Tags` | Virtual `jira` tag plus source labels; normal search indexes these |
+| `JiraLabels` | Separate raw label metadata, excluded from Taskwarrior JSON, preserving a real label named `jira` during unrelated edits |
+| `Assignee` | Display-only assignee name in details |
+| `Annotations` | Lazy first comment page, plus confirmed newly posted comments |
+| `Urgency` | Display score from priority and due date; existing sorting remains overdue/start/priority/due/tags/ID |
 
-| Task field | Jira source | Note |
-|---|---|---|
-| ID column text | issue key `TS-42` | new optional string field on `task.Task` (`IDText`); when set, the ID column renders it instead of `strconv.Itoa(t.ID)`; the `✓` completed glyph stays for TW rows |
-| `Description` | `fields.summary` | no prefix (key is in the ID column) |
-| `UUID` | `jira:TS-42` | prefixed → collision-safe; the guard's discriminator |
-| `Project` | `fields.project.key` | |
-| `Status` | **`fields.status.statusCategory.key`** | `new`→`pending`, `indeterminate`→`pending` + `Start` set, `done`→`completed`; unknown category → `pending` + debug-log warning. Never map by status *name* (workflows are custom) |
-| `Due` | `fields.duedate` | date-only; convert to `YYYYMMDDT000000Z` (start of day) — pinned choice |
-| `Priority` | `fields.priority` | Jira name → H/M/L map, default M |
-| `Tags` | `jira` + labels | the `jira` tag gives free tag filtering; the tag is virtual: exclude it from label edits |
-| `Urgency` | **computed** | Display score: H=6, M=3, L=1 plus a due contribution clamped to 0..12, decreasing linearly from overdue by 7 days (12) to due in 14 days (0); no due=0. Existing default sort uses overdue/start/priority/due/tags/ID, not urgency; retain it |
-| `Entry`, `Start`, `End` | created, updated, resolutiondate | Parse RFC3339 including Jira offsets. Start uses updated as an approximation for indeterminate; done End uses resolutiondate, falling back to updated. Clear Start on done. End drives V window; never substitute fetch time |
-| `Annotations` | comments (lazy) | fetched when the detail view opens, rendered in the annotations area; first page + "+n more" hint |
-| `Assignee` | `fields.assignee.displayName` | new optional string field, display-only: shown in the Jira detail view, never a column or tag |
+Unknown status categories, including `undefined`, fall back to pending and a
+debug warning. Dates accept Jira offsets and convert to UTC. Urgency base is
+H=6/M=3/L=1 plus a clamped 0..12 due contribution decreasing linearly from seven
+days overdue to fourteen days ahead.
 
-**UI row identity:** Every Jira row receives a unique nonzero synthetic numeric
-ID in the UI before rendering, stable by `jira:KEY` for the session. Reserve a
-negative-ID allocator shared with completed TW rows to prevent collisions;
-never use ID=0, a Jira issue number, or a hash with unchecked collisions.
-UUID remains the mutation/detail identity. Selection, ultra, blinking, editor
-callbacks and reload restoration must preserve UUID across re-sort; synthetic
-IDs must never be sent to Taskwarrior. IDText applies in table, width
-calculation, cell expansion/search and detail labels, including completed rows.
+The UI assigns nonzero negative display IDs stable by UUID for the session,
+sharing an allocator with completed Taskwarrior rows. These IDs never reach the
+Taskwarrior CLI. Issue keys render in normal/expanded/detail/ultra views and
+search, with ANSI/CJK-aware width calculation.
 
-**Resolved (done-category) Jira rows:** keep the issue **key** in the ID
-  column (never the `✓` glyph — the key is their identity), apply the same
-  strikethrough styling as completed TW rows, and follow the same
-  completed-task window (`V`) as TW completed rows.
+Completed Jira rows retain their key and completed strikethrough styling;
+completed Taskwarrior rows show `✓`. `V` filters Jira completion times locally.
+The selected JQL must itself include completed issues for them to be available.
 
 ## 5. UI integration
 
 ### Caching and freshness
 
-Faster navigation and fewer API calls: an **in-memory cache** on the Model
-holds the last-fetched issues, the selected filter, the saved-filter list and
-a last-fetched timestamp. Jira refetch happens **only** on:
+Taskwarrior and Jira have independent async flights and contexts. Constructors
+load Taskwarrior; Init schedules Jira without delaying first paint. The model
+holds separate Taskwarrior/Jira caches and filters them by source/completed
+window before search, display and statistics. Source cycling never fetches.
 
-1. startup (first fetch),
-2. explicit `space` refresh (refetches TW + Jira issues + saved filters),
-3. **periodic auto-refresh** (`Z` interval) — also refetches Jira; the
-   interval is user-controlled so Jira API budget follows it, and the
-   429-retry/backoff handles throttling,
-4. filter selection change (new JQL requires a fetch),
-5. Jira write operations — which update the cache **after confirmed success**
-   (created-comment response, or one per-issue GET for 204 writes), never via blanket refetches.
+Issue-list fetch triggers are startup, space, periodic Z refresh and Jira filter
+changes. A Taskwarrior mutation reload does not fetch Jira. Space also rereads
+the token; a failed credential read aborts that refresh and retains last-good
+rows. Same-filter failures retain cache; a new filter clears the old rows.
 
-Explicitly *not* refetching on: post-mutation reloads (of TW rows), view
-cycling (hotkey 6 filters at render — already the design), picker open,
-navigation. The persistent status bar shows source mode, filter and last successful issue
-fetch time, for example `[both · jira: mine · 14:32]`; initial state is loading
-or never. Saved-filter timestamps are separate; a filter fetch must not make
-stale issue rows appear fresh.
+Opening Jira details fetches fresh fields and the first comment page, then
+patches the cache. Assignee, URL and a `+n more` comment hint appear in detail.
+Jira list rows omit annotation counts. Comment success appends the server-created
+annotation/date; field/transition success refreshes just the affected issue.
+Cached comments survive a fields-only GET. There is no disk cache.
 
-**Opening a Jira task's detail view is always fresh**: single
-`GET /rest/api/3/issue/{key}` plus the comments fetch on open; the response
-**updates the cached row**, so returning to the table shows current data for
-that issue — cheap per-issue refresh semantics.
+Network completion messages change caches only in Update. Commands capture
+snapshots. Read generations reject superseded work; writes invalidate stale
+same-lifetime reads. Filter epochs distinguish A→B→A, so an earlier write cannot
+cancel the fetch for a newly selected filter. Jira contexts survive unrelated
+Taskwarrior context recreation. Quit cancels outstanding requests. Table and
+ultra selection follow active-view UUIDs through sorting/filtering.
 
-Not in v1: a disk cache for instant/offline startup (token-protected data at
-rest) — deferred.
+The persistent token shows source mode, filter, last successful issue-list fetch
+time and loading/result-cap indicators. Cloud filters add `(cloud)`. Saved-filter
+refresh time is separate and cannot make stale issue rows appear fresh. Status
+text is bounded to available width.
 
-**Concurrency and startup rules:**
+### Source cycle and filter picker
 
-- The **first Jira fetch is async**: `ui.New` must never block first paint
-  on the network — TW rows render immediately, Jira rows appear when the
-  first fetch completes (a slow/unreachable site can only delay Jira rows,
-  never the TUI).
-- **Fetch coalescing**: a filter change or explicit refresh cancels/supersedes
-  an in-flight Jira fetch (use separate Jira cancellation/generation state);
-  results apply with a sequence guard so a stale response can never overwrite
-  newer data.
-- **Token rotation without restart**: the token file is re-read on every
-  explicit `space` refresh, so a rotated token takes effect without killing
-  the TUI.
-- **Status bar layout**: mode, filter and age compress into one token —
-  `[both · jira: mine · 14:32]` — so it shares the status line with existing
-  TW info and error messages without overflow.
+`6` cycles tw→both→jira→tw and is configurable with `--jira-hotkey`; disabled
+Jira makes it a no-op. Default view comes from config (`both` fallback).
 
-### Merged table and reload
+`F` works in table/ultra with `(none)`, local filters in file order and saved
+cloud entries marked by origin. Cloud identity uses its ID, not name, allowing
+duplicate names. Typing matches rune subsequences across names and JQL with
+stable ranking; clearing restores source order. `(none)` stays first/reachable.
+Printable j/k/r enter the query. Arrows/Ctrl+n/Ctrl+p navigate; Enter applies,
+Esc cancels and Ctrl+r refreshes cloud filters.
 
-- Keep independent async Jira and TW flights. TW constructor/reloads use
-  `exportReloadData` unchanged; Jira completion merges cached rows on the
-  Bubble Tea goroutine without waiting for TW or vice versa. Jira errors degrade gracefully:
-  status-bar message, keep last-good rows, TW rows unaffected.
-- `ui.NewWithTaskwarrior` gains variadic options (`WithJira` carrying source and settings; nil = disabled);
-  existing call sites/tests unchanged.
+Saved filters load lazily at first open, or earlier through space/auto-refresh.
+Reopening reuses cache. Refresh preserves query/selected identity and never
+changes active JQL. Failure keeps the last-good cloud list, or locals alone
+before first success, with a status note. `saved_filters=false` makes no cloud
+requests.
 
-### View cycle (hotkey 6, configurable `-jira-hotkey`)
+### Comments, browser and field editors
 
-- States: `tw` → `both` → `jira` → `tw`… Default from config `default_view`
-  (fallback `both`). Disabled Jira → hotkey no-ops.
-- Both sources stay in memory; filtering happens at render → cycling is
-  instant, no refetch. Status bar shows the mode briefly after toggling.
-- Register in the `Hotkeys` struct + `SetHotkeys` conflict validation (pattern
-  of Agent/Auto/Track), help screen entry, README table.
+`a` uses a visible `comment:` input and only appends after confirmation. `o`
+constructs the escaped issue URL locally and uses the normal browser chain,
+ahead of description URL/@file scanning. Details refresh on every open in table
+and ultra; completed issues moving outside V remain readable in their open
+detail view through the authoritative cache.
 
-### Named filters and the `F` picker
-
-- Model state: selected filter (start = `default_filter`, else "none").
-  Per-session; no config write-back.
-- `F` opens a lightweight list overlay (patterned on `filterInput` overlays;
-  must work in table and ultra mode): first entry `(none) all issues`, then
-  the named filters (`name` + dim truncated JQL hint). `j`/`k`/arrows before search is added,
-  `Enter` applies, `Esc` cancels.
-- On apply: async **Jira-only** refetch with the new JQL (TW rows untouched),
-  status bar `jira filter: mine`. Active filter name shown persistently
-  while Jira rows are visible, e.g. `[jira: mine]`.
-- "(none)" = fetch with no JQL restriction; on the 400 unbounded-JQL error
-  show the pick-a-filter hint and no Jira rows until a filter succeeds. On any filter identity change, clear prior-filter rows
-  immediately: a failed new filter must never display old-filter issues under
-  its name. A same-filter refresh failure retains last-good rows.
-- **Fuzzy search over the picker entries**: the picker grows an embedded
-  text input; typing live-filters the list with an in-repo subsequence-style
-  matcher (fzf-like, **no new dependency**) matching over `name` and the
-  JQL text. arrows and Ctrl+n/Ctrl+p navigate the filtered list; printable `j`/`k` enter text, `Enter` applies,
-  `Esc` cancels, the `(none)` entry always stays reachable (it sorts first
-  and never gets filtered out entirely). Clearing the input restores the
-  full list.
-- **Saved Jira filters** (`saved_filters = true`, default true):
-  `FetchFilters` lazily on the picker's first open, cached for the session
-  (Ctrl+r refreshes the picker; printable `r` enters search text). The picker shows three groups:
-  `(none)`, local `[[jira.filters]]`, then the account's saved filters with
-  an origin marker (e.g. dim `cloud`); duplicate names across groups are
-  fine because the origin distinguishes them. On fetch failure: local list
-  only on the first failure, or retain last-good cloud entries on refresh failure,
-  plus one status-bar note. Saved-filter JQL can be unbounded → the same
-  400 pick-a-filter handling as any other filter.
-- Orthogonal to the view cycle: view controls *whether* Jira rows show,
-  filter controls *which* issues are fetched.
-
-### Commenting (`a` on a Jira row)
-
-- The existing annotate input opens with prompt `"comment: "`; on submit the
-  text becomes a Jira comment instead of `task annotate`. This is the one
-  mutation Jira rows allow in v1.
-- Confirmed-success UI: on success append the returned annotation to the cache row's `Annotations`
-  (entry from returned comment timestamp) so the count/detail update immediately; the next explicit Jira refresh
-  reconciles. Blink machinery reused.
-- Detail view lazy-loads comments (`GET …/comment`), mapping
-  `created` (ISO-8601) → `DateFormat` and `body` (ADF → plain text) →
-  annotation entries. In list mode Jira rows show no comment count in v1.
-- Empty input refused locally (no API call).
-
-### `o` opens the issue
-
-- In `handleOpenURL` (`keyactions.go`), check the `jira:` address prefix
-  **first**: open `{site}/browse/{key}` through the existing
-  `openURLCmd`/`browserForURL` chain (atlassian.net ≠ YouTube →
-  `browserCmd`). Issue URL wins over description-URL/file-ref scanning. No
-  pre-validation, no extra API call. Help text:
-  `"o: open URL, @file, or Jira issue in browser"`.
+Jira summary edits use the inline editor. Field editors stay visible in a
+scrolled detail viewport; typing stays in the input and cannot trigger another
+mutation hotkey. In the table Enter opens details and `i` edits the selected
+cell; inside details Enter/`i` edit the highlighted field. The client supports
+multiline ADF comments; the TUI uses its existing text input.
 
 ## 6. Control behavior matrix on Jira rows
 
-A shared routing policy used by all dispatch points keyed off the `jira:` prefix:
-control → `{TW method | Jira method | blocked-reason}`. Blocked-reasons are
-per-control data so the status bar says *why*. Table-driven unit test
-enumerates every control × jira row. Install the baseline guard in the merge
-task before any Jira row is selectable; the later routing task consolidates
-and verifies it. Test table, ultra, detail, aliases and field editors; assert
-that no blocked path invokes a Taskwarrior mutation with a synthetic ID or
-`jira:` UUID. Global filters f/3/4/5 remain TW-only; search applies to both.
-Global U on a Jira row is blocked; off that row it still undoes the last TW
-action. Adding with + always creates a TW task.
+`jiraguard.go` is the shared global/Taskwarrior/Jira/blocked/field policy.
+Aliases and reasons are centralized; activation, commit, external-editor,
+delayed-done and undo boundaries enforce routing. Generic TW-only completion
+rejects Jira addresses even though `d` is a supported Jira operation.
 
-### Works unchanged (global)
+| Control | Implemented Jira behavior |
+| --- | --- |
+| `a`, `o` | Add comment / open issue |
+| `d` | Available done-category transition; completed issues no-op politely |
+| `s` | Available indeterminate/new transition for start/stop |
+| `w`, `W`, `r` | Set, clear or randomize due date |
+| `p`, `t`, `e`/`E` | Priority, incremental labels, inline summary |
+| Enter / `i` | Open details or delegate to an editable field in the relevant view |
+| `A` | Block wholesale comment replacement; use a |
+| `D`, `U` | Block Jira deletion and undo |
+| `R`/Ctrl+r | Block recurrence outside the picker |
+| `J`, table `T` | Block project moves/tag-to-project conversion |
+| `;` | Block selected Jira task commands |
+| `+`, global `:` | Taskwarrior creation/command prompt, including Jira-only view |
+| `f`, `3`/`4`/`5` | Taskwarrior filters only |
+| `6`, `F`, space, `Z`, `V` | Source/filter/refresh/completed-window controls in table/ultra |
 
-`H`, `q`, `esc`, `/` `?` search, `f`, `c` `C` `x` `B` `v` `Z` `V`,
-`space` (now also refetches Jira), `:` (global TW prompt), `0`–`3`, `g`/`G`, arrows, Enter → detail
-view (read-only, comments lazy-loaded), ultra mode.
+Transition detection is lazy at keypress. Category-based candidates are filtered
+by an optional exact-name override, then selected deterministically by name/ID.
+The chosen transition is reported. Required screen fields use correctly shaped
+config or metadata defaults; missing fields are named without posting.
 
-### Translates to Jira
+Jira writes serialize against other Jira writes, independently of Taskwarrior.
+The generic mutation pipeline distinguishes failed writes from applied writes
+whose follow-up read failed. It never repeats an ambiguous write or searches
+the entire list afterward.
 
-Phase 1: `a` → comment; `o` → open `{site}/browse/{key}`.
+## 7. Testing strategy and gates
 
-Phase 2:
+### 7.1 Unit/fixtures
 
-| Control | Jira operation | API |
-|---|---|---|
-| `d` done | transition to a done-category status | `GET`+`POST /transitions` |
-| `s` start/stop | transition to indeterminate / back to new | same |
-| `w`/`W` | set/clear `fields.duedate` | `PUT /issue/{key}` |
-| `p` | set `fields.priority` (H/M/L ↔ Jira name map) | `PUT /issue/{key}` |
-| `t` | edit `fields.labels` (virtual `jira` tag excluded) | `PUT /issue/{key}` |
-| `e`/`E` | edit plain string `fields.summary` | `PUT /issue/{key}` |
+Config parsing/defaults/validation/path precedence/token handling; mapping and
+source labels; literal control outcomes and actual TW UUID calls; shared-field
+editors; CJK/long keys; table/ultra/detail rendering; cancellation, stale reads,
+filter epochs, token reload failure and active-view selection. Both TST/TST2
+project and issue-key cells are asserted in hermetic UI rendering tests.
 
-### Transition selection (phase 2, dynamic detection)
+### 7.2 httptest
 
-Detection is **lazy, at keypress time** (one extra GET per action, never
-prefetched on reload). Selection: `to.statusCategory.key == "done"` (resp.
-`"indeterminate"`); config name override → single candidate → if still
-ambiguous, pick deterministically + status-bar note *"transitioned via
-'Close Issue'"*; zero candidates → polite message (e.g. `d` on a done issue).
-`GET /transitions?expand=transitions.fields` includes each transition's field metadata: required
-screen fields with a config default of the correct JSON shape are sent along; otherwise error names
-the fields (*"transition 'Close Issue' requires: Resolution"*).
+Real HTTP request/response assertions cover search/filter pagination, auth,
+field payloads, ADF, metadata/required fields, retries, cancellation, 401/403/404/
+400/429/5xx, HTML/malformed/missing arrays, redirects and body limits. UI→HTTP
+field tests assert one PUT plus one issue GET and no TW mutation or bulk search.
 
-### Blocked
+### 7.3 Live integration (gated)
 
-| Control | Reason / message |
-|---|---|
-| `A` replace annotations | "comments can't be replaced wholesale — use `a` to add" |
-| `D` delete | "Jira issues can't be deleted from here" |
-| `U` undo | "no undo for Jira issues" |
-| `R`, `ctrl+r` recurrence | "Jira issues have no recurrence" |
-| `J` edit project (move issue) | "moving Jira issues not supported (yet)" |
-| `T` tag→project (table) | same family |
-| `E`, `r`, `i` / column Enter / detail Enter | aliases must route through the same policy: E summary edit, r random due (blocked in v1, due edit in phase 2); i/Enter dispatch by field; never bypass via external task editor |
-| `;` task prompt on jira row | "task commands don't work on Jira issues" |
-| `+` add | unchanged (adds TW task); `+` creating Jira issues in jira-only view is a possible phase 3 |
-
-For phase-2-translatable controls still blocked in v1 the message says so:
-*"not yet — Jira write support for due dates is planned"*.
-
-## 7. Testing strategy (three layers)
-
-### 7.1 Unit/fixtures (fast, hermetic)
-
-- `internal/config`: TOML parse (array order), `~` expansion, token-file
-  trimming (surrounding whitespace only — fixture shaped like the real file
-  with the `=…` suffix), every validation error, config-path precedence flag > env > default.
-- Mapping: statusCategory mapping (incl. unknown category fallback), duedate
-  conversion pinned to `T000000Z`, priority/labels/tags, `jira:` UUID prefix,
-  `IDText` rendering (and that the `✓` glyph still applies to TW rows).
-- Comment: ADF building incl. multi-line paragraph split; empty input refused
-  locally; `created` ISO → `DateFormat`.
-- Routing table: every control × `jira:` row → expected outcome.
-
-### 7.2 httptest (fake API, full negative matrix)
-
-Auth header; pagination via `nextPageToken`; 401; 400 unbounded JQL; 400 bad
-JQL fragment; 404; 429 + backoff retry; 5xx; **HTML body instead of JSON**
-(never panic); missing optional fields; transition scenarios (single /
-ambiguous with and without override / zero candidates / required fields
-defaulted vs. error); comment round-trip; `s` on an in-progress issue;
-permission-denied (can't be produced on a single-user site → fake only).
-
-### 7.3 Integration against the live site (gated)
-
-File `internal/jira/integration_test.go` with `//go:build integration` —
-not compiled in normal `mage test`/`mage verify`/CI. A `requireIntegration(t)`
-skip guard checks env even under the tag:
+The live files use `//go:build integration`; runtime opt-in remains mandatory:
 
 ```bash
-JIRA_INTEGRATION=1                          # explicit opt-in
-JIRA_TEST_SITE=https://snonux.atlassian.net
-JIRA_TEST_EMAIL=paul.buetow@gmail.com
-JIRA_TEST_TOKEN_FILE=~/.jira_api_token      # default
-JIRA_TEST_PROJECT=TST                       # mandatory, no default — refuse without
+export JIRA_TEST_SITE=https://snonux.atlassian.net
+export JIRA_TEST_EMAIL=your-atlassian-account@example.com
+export JIRA_TEST_TOKEN_FILE=~/.jira_api_token
+export JIRA_TEST_PROJECT=TST
+export JIRA_TEST_SECOND_PROJECT=TST2
+mage jiracheck
+JIRA_INTEGRATION=1 JIRA_TEST_UNBOUNDED=1 mage jiratest
 ```
 
-**Safety protocol:** every issue created in a run gets summary marker
-`ts-integration-<unix-nano>`; tests query the configured, safely quoted project plus the exact run marker and re-fetch and verify project + exact marker immediately before every mutation/deletion; cleanup sweeps only this run's exact marker; cross-run cleanup
-requires a separate explicit opt-in and a stale-age fence; the guard refuses to run without
-`JIRA_TEST_PROJECT`; `t.Cleanup` deletes created issues best-effort
-(fallback: transition to done + warning — deletion is hygiene, not
-assertion). Token never echoed; failures print bounded, secret-redacted response fragments, never
-`Authorization` headers. Sequential, small volumes (rate limits).
+Both projects must be distinct and explicit for the mutation suite. Optional
+`JIRA_TEST_ISSUE_TYPE_ID` selects a creatable non-subtask type. Otherwise create
+metadata is used, preferring Task when available. `jiracheck` is read-only and
+can check one project, or both when the second is set.
 
-**Coverage:** auth sanity (`/myself`); bounded JQL finds created issues;
-**unbounded JQL → 400** only when a site-specific opt-in enables this probe
-(the cleanup/search helpers always stay bounded); create → search →
-map (`IDText`, statusCategory) → comment → transition new→indeterminate→done
-via category detection → mapping shows completed → cleanup (end-to-end);
-comment on a *resolved* issue still works; 401 with a deliberately bad
-token; 404 fake key; pagination (N issues, small page size).
+Each run creates four fixtures across both projects with an exact
+`ts-integration-<unix-nano>` summary prefix. Queries restrict project and run
+marker. Every mutation/delete re-fetches and validates project, key, UUID and
+exact marker. `t.Cleanup` deletes only its registered fixtures; 403 triggers a
+fenced done fallback and warning. No TestMain/cross-run sweep is implemented.
+Token/header contents never appear in diagnostics.
 
-**Prereq:** historical inspection found no projects. Before opting in, verify
-an explicitly designated test project (suggested `TST`, "TaskSamurai Integration
-Tests") exists and permits the intended operations; no automatic project creation.
+Coverage includes auth/project/type preflight, bounded eventual-index polling,
+real one-issue pages through the production client, distinct project/issue keys,
+summary/priority/labels/due-set-clear, multiline comments, start→stop→start→done,
+resolved comments, 404, invalid bounded JQL 400 and bad-token 401 via `/myself`.
+`JIRA_TEST_UNBOUNDED=1` additionally enables this site's unbounded-query 400 probe;
+omit it for sites that permit unbounded queries.
 
-### 7.4 New mage targets (optional, everything else unchanged)
+### 7.4 Normal gates
 
-```text
-mage jiratest    # prereq-check (token file, JIRA_TEST_PROJECT set), then
-                 # go test -tags integration -count=1 -v ./internal/jira/...
-mage jiracheck   # dry-run: site reachable, project exists, prints the plan
-```
+`mage build`, `mage test` and `mage verify` never enable live Jira tests.
+`JIRA_INTEGRATION=0 go test -tags integration ./internal/jira` compiles the live
+harness while skipping network operations. Hermetic ownership tests reject
+foreign projects, keys, UUIDs, other markers and marker-prefix collisions.
 
-`Test`/`Verify`/`Build` never gain tags, env lookups, or network. CI (if any)
-runs `mage verify` only.
+## 8. Implementation record
 
-## 8. Implementation order and phases
+| Tasks | Delivered |
+| --- | --- |
+| ux3 | Plan/API/code review and clarified task contracts |
+| vx3, wx3 | TOML config, safe REST client/mapping and initial live scaffolding |
+| xx3, yx3 | Issue-key rendering, independent cached merge, stable IDs and initial guards |
+| zx3, 0y3, 8y3, 9y3 | Source cycle, local picker, fuzzy search and cloud filters |
+| 1y3, 2y3, 3y3 | Confirmed comments/fresh details, browser opening and complete routing policy |
+| 5y3, 6y3 | Dynamic transitions and field edits through the shared write pipeline |
+| 4y3 | Fenced two-project live lifecycle suite |
+| fy3, ly3 | Existing ignored-error gate repairs and comment/filter lifetime race fix |
+| 7y3 | README, agent guidance and this implementation record |
 
-1. `internal/config` + TOML dependency wiring (+ tests)
-2. `internal/jira` client: search, mapping, error mapping, `CreateIssue`
-   (+ httptest); integration harness scaffolding (build tag, mage targets)
-3. `IDText` rendering change in the ID column (+ mapping tests)
-4. Reload pipeline: independent async fetch + graceful degradation + merged rows,
-   CLI client/options wiring, stable synthetic IDs and baseline mutation guards
-5. View cycle hotkey 6 (+ `Hotkeys` plumbing, help, README later)
-6. Filter picker `F` (+ status bar), then picker fuzzy search, then saved
-   Jira filters in the picker
-7. Commenting via `a` (+ lazy-load comments in detail view)
-8. `o` opens issue in browser
-9. Routing policy consolidation + blocked messages (v1 matrix complete)
-10. Integration scaffolding remains hermetic; full live-suite task follows step 12
-11. Phase 2: transitions (`d`, `s`) with dynamic detection
-12. Phase 2: field edits (`w`/`W`, `p`, `t`, `e`), then full gated integration suite
-13. Docs: README (hotkey table, config section, `F`/`6`), AGENTS.md update,
-    this file kept as the design record
+Implementation refinements relative to the initial plan: real category keys
+are new/indeterminate/done; summaries are strings; writes returning 204 require a
+per-issue GET; consumer capabilities are optional; source IDs are synthetic;
+contexts and filter epochs protect requests across navigation/writes; raw labels
+preserve a real `jira` label; printable picker keys take precedence over old
+j/k/r navigation; cleanup is per-run rather than a cross-run sweep.
 
-Dependency chain for agent tasks mirrors this order; see the `ask` task
-list (`+jira`).
+## 9. Review and verification record (2026-10-30)
 
-## 9. Review record (ux3, 2026-10-30)
+The initial read-only review observed zero projects. The user then authorized
+API creation and requested two test projects. `TST` (id 10000) and `TST2`
+(id 10001) were created from the classic Kanban template and passed read-only
+checks. Status-category reads confirmed new/indeterminate/done plus undefined.
 
-Reviewed all 16 Jira tasks against the current constructors, ID-based selection,
-completed-ID allocator, keybindings (including E/r/i), reload single-flight,
-detail editors and Mage targets. This plan governs conflicting older task
-annotations. Every affected task receives a review annotation.
+`mage build` and full `mage verify` passed after integration, as did focused
+race/static checks and the opted-out tagged harness. The full live
+`mage jiratest` passed in 39.4s with both projects and the optional unbounded
+probe enabled. Both project lifecycles passed; distinct mapping and real
+pagination were exercised. Rendering of the corresponding different keys is
+covered separately by UI fixtures, not a claim of an interactive live TUI run.
 
-A read-only live GET /statuscategory returned new / indeterminate / done plus
-undefined; the original todo / in-progress assumption was incorrect. Historical
-zero-project and authentication observations above remain context, not a current
-prerequisite check; jiracheck must verify the configured project without creating
-it. No live issue mutation was performed for this review.
+A first live run exposed an incorrect 401 oracle: issue lookup with a bad token
+returned 404. The authenticated `/myself` probe passed, followed by the full
+rerun. Live DELETE returned 403. All eight marked fixtures from the two runs
+were independently read back as done in their original projects through the
+permitted cleanup fallback. No unrelated issue was mutated or deleted.
 
-API references checked:
+Required fresh-context task reviews found and resolved selection, editor
+visibility and filter-lifetime races. Test-only refinements include an exact
+ANSI strikethrough assertion and live pagination without high fixture volume.
 
-- [Issues: create, edit, transitions and their response shapes](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/)
-- [Filters: search and expansion](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-filters/)
+Primary API references checked during implementation:
+
+- [Issues: create, fields and transitions](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/)
+- [Saved filters and JQL expansion](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-filters/)
 - [Status categories](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-workflow-status-categories/)
-
-Tests must cover cancellations, stale detail results (issue identity and fetch
-sequence), filter changes during in-flight work, writes racing search/detail
-responses, duplicate cloud filter names/IDs and credential reload failure.
-A write invalidates older read generations so late reads cannot erase a newly
-posted comment or field change. Only the Update loop mutates caches; commands
-use immutable snapshots. Completed-window filtering applies locally to cached
-Jira rows before source/search filtering and statistics. Bound max_results over
-all search pages, deduplicate by key, stop repeated page tokens with an error,
-and preserve last-good rows on partial-page failure. A truncated result cap is
-visible. Filter list refresh failure keeps last-good cloud entries (or locals
-only if none exist) and never changes the active JQL.
-
-Implementation acceptance includes mage build, mage verify, targeted hermetic
-coverage and gated-test compilation with opt-in absent. Live-suite execution is
-reported separately and remains pending if credentials/project/permissions are
-unavailable; passing skipped tests does not prove live behavior. The integration
-task depends on both phase-2 tasks so it can test the complete sequence rather
-than leaving TODO stubs. Docs land after it; no phase-2 placeholder is completion.
+- [Project creation](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/)

@@ -12,7 +12,7 @@ Task Samurai is a fast terminal interface for [Taskwarrior](https://taskwarrior.
 
 ## How it works
 
-Task Samurai invokes the `task` command to read and modify tasks. The tasks are displayed in a Bubble Tea table where each row represents a task. Hotkeys trigger Taskwarrior commands such as starting, completing or annotating tasks. The UI refreshes automatically after each action so the table is always up to date.
+Task Samurai invokes the `task` command to read and modify tasks. The tasks are displayed in a Bubble Tea table where each row represents a task. Hotkeys trigger Taskwarrior commands such as starting, completing or annotating tasks. Taskwarrior changes refresh its rows automatically. An optional Jira Cloud source merges issues into the same table, with separate asynchronous requests and an in-memory cache.
 
 ## Hotkeys
 
@@ -22,7 +22,8 @@ Press `4` to toggle the `+agent` / `-agent` filter, `5` to toggle
 `+auto` / `-auto`, and `3` to toggle `+track` / `-track`, in table or ultra
 mode. With neither sign present, the first
 press adds the positive filter. Each later press switches between including
-and excluding that tag, preserving other filters.
+and excluding that tag, preserving other filters. These filters apply to
+Taskwarrior rows; `F` selects the Jira query.
 
 Press `6` in table or ultra mode to cycle source views: Taskwarrior only (`tw`) →
 both → Jira only (`jira`). This uses cached rows; Jira must be enabled.
@@ -60,7 +61,8 @@ modifications, and press `x` to toggle disco mode, which picks a random theme
 on every task change. Press `V` to cycle the completed-task display window
 through off → 1 day → 4h → 1h → off: each setting additionally shows tasks
 completed within that timeframe before now, dimmed grey with a struck-through
-description and a `✓` in the ID column, sorted to the bottom of the list.
+description, sorted to the bottom of the list. Completed Taskwarrior rows
+show `✓`; completed Jira rows keep their issue key.
 The current window shows up in the top status line as `completed: on (1d)`.
 All of these are also listed on the in-app help screen
 (`H`).
@@ -78,9 +80,12 @@ refreshes the task list instead of paging. All long content stays reachable —
 nothing is cut off at the bottom of the screen.
 
 When Jira is enabled, press `F` in table or ultra mode to choose a named Jira
-filter. Type to fuzzy-search names and JQL; use the arrow keys or Ctrl+n/Ctrl+p
+filter from local configuration or the account's saved cloud filters. Type to
+fuzzy-search names and JQL; use the arrow keys or Ctrl+n/Ctrl+p
 to navigate, `Enter` to apply, and `Esc` to cancel. Clearing the query restores
-the full list.
+the full list. Printable `j`, `k`, and `r` enter search text; `Ctrl+r`
+refreshes saved cloud filters. Cloud entries have an origin marker, so duplicate
+names remain distinguishable.
 `(none) all issues` removes the JQL restriction; some sites require a restricted
 filter. This selection lasts for the session and refreshes Jira issues only.
 
@@ -123,6 +128,9 @@ tasksamurai -- -excludetag +includetag
 ### Flags
 
 - `--version`: print the Task Samurai version and exit
+- `--config <path>`: select a TOML config file (overrides `TASKSAMURAI_CONFIG`)
+- `--no-jira`: disable Jira semantic validation, credential loading and requests
+- `--ultra`: start in ultra mode
 - `--browser-cmd <command>`: command used to open URLs (default: firefox on Linux, open on macOS)
 - `--youtube-browser-cmd <command>`: command used to open `youtube.com` / `youtu.be` links with the `o` key (default: `chromium`, so YouTube videos play in a browser better suited for them than the general `--browser-cmd` default). Set it to `""` to route YouTube links through `--browser-cmd` like any other URL.
 - `--first-hotkey <key>`: jump to the first task (default: `0`)
@@ -138,6 +146,163 @@ tasksamurai -- -excludetag +includetag
 
 Hotkeys accept a single character, `tab`, `shift+tab`, or `ctrl+<letter>`;
 reserved command keys cannot be reassigned. An empty value uses the default.
+
+## Jira Cloud
+
+Taskwarrior remains required. Jira is optional and disabled when the default
+config file or its `[jira]` section is absent. Create
+`~/.config/tasksamurai/config.toml` to enable it:
+
+```toml
+[jira]
+site = "https://example.atlassian.net"
+email = "your-atlassian-account@example.com"
+token_file = "~/.jira_api_token"
+enabled = true
+saved_filters = true
+default_filter = "tests"
+default_view = "both" # tw, both, or jira
+max_results = 100
+timeout = "10s"
+
+[[jira.filters]]
+name = "tests"
+jql = "project in (TST, TST2) ORDER BY updated DESC"
+
+[[jira.filters]]
+name = "mine"
+jql = "project in (TST, TST2) AND assignee = currentUser() ORDER BY updated DESC"
+```
+
+Replace the site, account email and project keys for your Jira account. Store
+the complete API token in the referenced file and restrict its permissions
+(`chmod 600 ~/.jira_api_token`); the token is never an inline config setting.
+Only surrounding whitespace is trimmed. Relative token-file paths resolve
+against the config directory, and `~/` expands to your home directory.
+
+Config-path precedence is explicit `--config`, then non-empty
+`TASKSAMURAI_CONFIG`, then the default path. An explicitly selected missing file
+is an error. Filter names must be unique, JQL must be non-empty, and
+`default_filter` must name a local filter; omitting it selects `(none)`. `enabled = false` or `--no-jira`
+skips Jira semantic validation and token reads; TOML syntax, field-type and
+unknown-setting errors still fail startup. Configuration changes require a
+restart. An explicit `space` refresh rereads the token file for token rotation.
+
+Jira rows show keys such as `TST-42` and `TST2-42` in the ID column and the
+source project key in the Project column. The virtual `jira` tag identifies
+these rows. Existing real labels named `jira` are retained separately, so an
+unrelated label edit does not delete them.
+
+### Jira controls
+
+The table below describes Jira controls in table and ultra mode, with exceptions
+noted per key. Detail views also support comments, opening, transitions and field
+edits.
+
+| Key | Jira behavior |
+| --- | --- |
+| `6` | Cycle cached source views: `tw` → `both` → `jira` → `tw` (`--jira-hotkey` changes the key) |
+| `F` | Pick a local or cloud saved filter with fuzzy search; arrows/Ctrl+n/Ctrl+p navigate, Enter applies, Esc cancels, Ctrl+r refreshes cloud filters |
+| `a` | Add a comment; blank comments are refused |
+| `o` | Open the issue in the configured browser, ahead of description URLs or file references |
+| `d` | Transition to an available done-category status |
+| `s` | Start/stop through available in-progress/todo category transitions |
+| `w` / `W` | Set/clear the date-only due date |
+| `r` | Set a random future due date |
+| `p` | Choose H/M/L, written as Jira priority names High/Medium/Low |
+| `t` | Edit labels with `+label` / `-label`; synthetic `jira` is never added as a real label |
+| `e` / `E` | Edit the issue summary inline |
+| `Enter` | Open fresh issue details from table/ultra; edit the highlighted editable field inside details |
+| `i` | Edit the selected table cell or detail field |
+| `space` / `Z` | Explicit refresh / periodic refresh of both sources and saved filters (table/ultra) |
+| `V` | Include recently completed issues using the same completed window as Taskwarrior |
+
+`A`, `D`, `U`, `R`/Ctrl+r, `J`, `T`, and the selected-task `;` prompt are blocked
+on Jira rows, with a reason in the status bar. The global `:` prompt and `+`
+always operate on Taskwarrior, including in Jira-only mode. The picker handles
+Ctrl+r as cloud refresh while it is open; outside it Ctrl+r remains the
+Taskwarrior recurrence action and is blocked on Jira rows.
+
+Transitions are selected from the issue's current available workflow by status
+category, independently of custom status names. Ambiguous choices use a
+stable name/ID order and report the chosen transition. Optional exact-name
+overrides and native JSON-shaped screen defaults can resolve workflow choices:
+
+```toml
+[jira.transitions]
+done = "Close Issue"
+# start = "Begin Work"
+# stop = "Return to Backlog"
+
+[jira.transition_fields]
+resolution = { name = "Done" }
+```
+
+Use names and fields valid for your workflow. Missing required screen fields
+are reported without posting a transition. Writes are never automatically
+retried. After a confirmed field/transition write, one issue GET patches the
+cache; a failed follow-up read is reported separately from a failed write.
+
+### Refresh and details
+
+Taskwarrior rows appear before Jira's first network fetch completes. Jira
+issues refetch at startup, explicit `space`, the configured `Z` interval, and
+filter changes. View cycling, picker reopening and ordinary navigation reuse
+cached rows. Saved filters load on first picker open or refresh, and keep their
+last-good list if a refresh fails. Changing a Jira filter clears the previous
+filter's issue rows immediately; a failed same-filter refresh keeps its cache.
+
+The status token shows source mode, selected Jira filter and the last successful
+issue-list fetch time, for example `[both · jira: tests · 14:32]`. Cloud selections
+show `(cloud)`; hitting `max_results` adds a limit indicator. Errors leave
+Taskwarrior rows available. Reads retry once on throttling/server errors within
+the request timeout.
+
+Opening Jira details fetches fresh fields and the first page of comments,
+updates the cached issue and displays the assignee, issue URL and a `+n more`
+hint when comments are truncated. Jira rows omit comment counts in the list.
+Comments appear after server confirmation. There is no disk cache.
+
+## Development and Jira integration tests
+
+`mage build` builds the binary. `mage test` runs ordinary tests, and
+`mage verify` checks formatting and ignored errors before those tests. These
+commands do not enable Jira integration tests or contact the live site.
+
+The Jira tests have three layers: unit/fixture tests, `httptest` API tests and a
+build-tagged live suite. The live suite needs two distinct dedicated projects:
+
+```bash
+export JIRA_TEST_SITE=https://snonux.atlassian.net
+export JIRA_TEST_EMAIL=your-atlassian-account@example.com
+export JIRA_TEST_TOKEN_FILE=~/.jira_api_token
+export JIRA_TEST_PROJECT=TST
+export JIRA_TEST_SECOND_PROJECT=TST2
+
+mage jiracheck # read-only auth, project and issue-type checks
+JIRA_INTEGRATION=1 JIRA_TEST_UNBOUNDED=1 mage jiratest
+```
+
+`JIRA_TEST_UNBOUNDED=1` enables the optional site-specific 400 probe; omit it
+for a site that permits unrestricted search. `JIRA_TEST_ISSUE_TYPE_ID` can
+select a creatable non-subtask issue type; otherwise the suite discovers one.
+The API test suite still skips live tests without `JIRA_INTEGRATION=1`, even
+when compiled with `-tags integration`.
+
+The suite creates four issues with an exact `ts-integration-<run-id>` summary
+marker across the two projects. Every mutation and cleanup rechecks ownership
+against a fresh issue GET. Queries are bounded to the configured projects and
+run marker. Cleanup deletes only those fixtures; if deletion is forbidden, it
+tries to mark them done and reports the limitation. It does not sweep other
+runs. This leaves resolved, marked fixtures on accounts without delete
+permission; `V` can display recent completed fixtures for manual TUI checks.
+
+On 2026-10-30, both projects were created through the API with user authorization.
+The full live suite passed against them, including different project/issue-key
+mapping, real pagination, comments, transitions and field edits. Delete returned
+403, so the eight fixtures from two verification runs remain marked and done.
+TUI rendering of distinct `TST`/`TST2` keys is also covered by hermetic UI tests.
+See [the design and verification record](docs/jira-support.md) for details.
 
 ## Debugging
 
