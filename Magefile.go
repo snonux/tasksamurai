@@ -50,6 +50,9 @@ func Jiratest() error {
 	if os.Getenv("JIRA_INTEGRATION") != "1" {
 		return fmt.Errorf("set JIRA_INTEGRATION=1 to opt into live Jira tests")
 	}
+	if strings.TrimSpace(os.Getenv("JIRA_TEST_SECOND_PROJECT")) == "" || os.Getenv("JIRA_TEST_SECOND_PROJECT") == os.Getenv("JIRA_TEST_PROJECT") {
+		return fmt.Errorf("JIRA_TEST_SECOND_PROJECT must name a distinct second test project")
+	}
 	if err := jiraPrerequisites(); err != nil {
 		return err
 	}

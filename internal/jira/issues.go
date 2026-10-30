@@ -56,8 +56,12 @@ func (c *Client) FetchIssues(ctx context.Context, jql string) ([]task.Task, erro
 	seen := make(map[string]bool)
 	tokens := make(map[string]bool)
 	token := ""
+	pageSize := c.searchPageSize
+	if pageSize <= 0 {
+		pageSize = 100
+	}
 	for {
-		body := map[string]any{"jql": jql, "fields": mappedFields(), "maxResults": min(100, c.settings.MaxResults-len(tasks))}
+		body := map[string]any{"jql": jql, "fields": mappedFields(), "maxResults": min(pageSize, c.settings.MaxResults-len(tasks))}
 		if token != "" {
 			body["nextPageToken"] = token
 		}

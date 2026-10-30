@@ -30,8 +30,11 @@ type Client struct {
 	settings config.Jira
 	http     *http.Client
 	logger   *slog.Logger
-	mu       sync.RWMutex
-	token    string
+	// The live integration harness lowers this to exercise real pagination
+	// without creating hundreds of disposable issues.
+	searchPageSize int
+	mu             sync.RWMutex
+	token          string
 }
 
 // APIError reports a bounded, credential-redacted Jira diagnostic.
@@ -58,7 +61,7 @@ func New(ctx context.Context, settings config.Jira, httpClient *http.Client) (*C
 	// Disable redirects, including same-origin POST rewrites. The caller's
 	// transport remains injectable, but credentials never follow a Location.
 	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	c := &Client{site: settings.Site, email: settings.Email, settings: settings, http: &copyClient, logger: slog.Default()}
+	c := &Client{site: settings.Site, email: settings.Email, settings: settings, http: &copyClient, logger: slog.Default(), searchPageSize: 100}
 	if err := c.ReloadToken(ctx); err != nil {
 		return nil, err
 	}

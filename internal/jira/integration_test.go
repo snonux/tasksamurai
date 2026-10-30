@@ -16,14 +16,14 @@ import (
 )
 
 // requireIntegration gates all live checks even with the build tag enabled.
-// The full mutation suite is added by task 4y3; no implicit project is allowed.
+// No implicit project is allowed, even when the build tag is enabled.
 func requireIntegration(t *testing.T) (*Client, string) {
 	t.Helper()
 	if os.Getenv("JIRA_INTEGRATION") != "1" {
 		t.Skip("set JIRA_INTEGRATION=1 to opt into live Jira checks")
 	}
 	project := strings.TrimSpace(os.Getenv("JIRA_TEST_PROJECT"))
-	if project == "" {
+	if !validIntegrationProject(project) {
 		t.Fatal("JIRA_TEST_PROJECT is mandatory; use a dedicated test project")
 	}
 	path := os.Getenv("JIRA_TEST_TOKEN_FILE")
@@ -59,27 +59,36 @@ func TestIntegrationPrerequisites(t *testing.T) {
 	if account.AccountID == "" {
 		t.Fatal("authenticated account response has no accountId")
 	}
-	var found struct {
-		Key string `json:"key"`
+	projects := []string{project}
+	if second := os.Getenv("JIRA_TEST_SECOND_PROJECT"); second != "" {
+		if !validIntegrationProject(second) || second == project {
+			t.Fatal("second project must be a distinct valid project key")
+		}
+		projects = append(projects, second)
 	}
-	if err := c.request(ctx, http.MethodGet, "/rest/api/3/project/"+url.PathEscape(project), nil, &found, true); err != nil {
-		t.Fatal(err)
-	}
-	if found.Key != project {
-		t.Fatal("test project response does not match configured project")
-	}
-	types, err := c.IssueTypes(ctx, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	usable := false
-	for _, value := range types {
-		if value.ID != "" && !value.Subtask {
-			usable = true
+	for _, project := range projects {
+		var found struct {
+			Key string `json:"key"`
+		}
+		if err := c.request(ctx, http.MethodGet, "/rest/api/3/project/"+url.PathEscape(project), nil, &found, true); err != nil {
+			t.Fatal(err)
+		}
+		if found.Key != project {
+			t.Fatal("test project response does not match configured project")
+		}
+		types, err := c.IssueTypes(ctx, project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		usable := false
+		for _, value := range types {
+			if value.ID != "" && !value.Subtask {
+				usable = true
+			}
+		}
+		if !usable {
+			t.Fatal("test project has no creatable non-subtask issue type")
 		}
 	}
-	if !usable {
-		t.Fatal("test project has no creatable non-subtask issue type")
-	}
-	t.Log("Read-only prerequisites passed; planned full suite creates uniquely marked issues, searches, comments, transitions, edits and cleans up only this run")
+	t.Log("Read-only prerequisites passed; full suite creates uniquely marked issues, searches, comments, transitions, edits and cleans up only this run")
 }

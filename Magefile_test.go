@@ -50,6 +50,17 @@ func TestJiraPrerequisitesAreExplicit(t *testing.T) {
 	}
 }
 
+func TestJiraLiveSuiteRequiresTwoProjects(t *testing.T) {
+	t.Setenv("JIRA_INTEGRATION", "1")
+	t.Setenv("JIRA_TEST_PROJECT", "TST")
+	for _, second := range []string{"", "TST"} {
+		t.Setenv("JIRA_TEST_SECOND_PROJECT", second)
+		if err := Jiratest(); err == nil || !strings.Contains(err.Error(), "JIRA_TEST_SECOND_PROJECT") {
+			t.Fatalf("unsafe second-project setup accepted: %v", err)
+		}
+	}
+}
+
 func TestInstallBinDirUsesSingleGOPATH(t *testing.T) {
 	goPath := t.TempDir()
 	t.Setenv("GOPATH", goPath)
