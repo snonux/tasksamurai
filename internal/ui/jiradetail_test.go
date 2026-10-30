@@ -269,3 +269,74 @@ func TestJiraCommentCancelsConcurrentDetail(t *testing.T) {
 		t.Fatalf("concurrent read replaced comment: %+v", got)
 	}
 }
+
+func TestJiraRequestsSurviveTaskwarriorContextRecreation(t *testing.T) {
+	for _, operation := range []string{"detail", "comment"} {
+		for _, quit := range []bool{false, true} {
+			name := operation + "/recreate"
+			if quit {
+				name = operation + "/quit"
+			}
+			t.Run(name, func(t *testing.T) {
+				m, source := newJiraDetailFixture(t)
+				m.initTaskContext()
+				oldTaskContext := m.taskContext
+				calls := 0
+				checkContext := func(ctx context.Context) error {
+					t.Helper()
+					calls++
+					if _, ok := ctx.Deadline(); !ok {
+						t.Fatal("Jira request has no deadline")
+					}
+					if quit {
+						if !errors.Is(ctx.Err(), context.Canceled) {
+							t.Fatalf("quit did not cancel Jira request: %v", ctx.Err())
+						}
+					} else if ctx.Err() != nil {
+						t.Fatalf("Taskwarrior gate recreation canceled Jira request: %v", ctx.Err())
+					}
+					return ctx.Err()
+				}
+				source.issue = func(ctx context.Context, _ string) (task.Task, error) {
+					return jiraRows()[0], checkContext(ctx)
+				}
+				source.comments = func(ctx context.Context, _ string) (jira.CommentPage, error) {
+					return jira.CommentPage{}, checkContext(ctx)
+				}
+				source.comment = func(ctx context.Context, _, _ string) (task.Annotation, error) {
+					return task.Annotation{Description: "confirmed"}, checkContext(ctx)
+				}
+				var cmd tea.Cmd
+				if operation == "detail" {
+					_, cmd = m.handleShowTaskDetail()
+				} else {
+					m.annotateAddr = "jira:TST-42"
+					var err error
+					cmd, err = m.scheduleJiraComment("new")
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				m.recreateTaskContext()
+				if !errors.Is(oldTaskContext.Err(), context.Canceled) {
+					t.Fatal("fixture did not cancel old Taskwarrior context")
+				}
+				if quit {
+					m.cancelTaskOperations()
+				}
+				m.blinkEnabled = false
+				drainCmds(t, &m, cmd)
+				wantCalls := 1
+				if operation == "detail" && !quit {
+					wantCalls = 2
+				}
+				if calls != wantCalls {
+					t.Fatalf("Jira calls = %d, want %d", calls, wantCalls)
+				}
+				if !quit && operation == "comment" && len(m.jira.tasks[0].Annotations) != 1 {
+					t.Fatal("comment did not complete after Taskwarrior gate recreation")
+				}
+			})
+		}
+	}
+}

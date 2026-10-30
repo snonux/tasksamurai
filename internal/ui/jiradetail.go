@@ -30,8 +30,9 @@ func (m *Model) jiraContext() (context.Context, context.CancelFunc) {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	m.initTaskContext()
-	return context.WithTimeout(m.taskContext, timeout)
+	// Taskwarrior recreates its gate context when a flight is superseded.
+	// Jira requests have independent cancellation on detail close and quit.
+	return context.WithTimeout(context.Background(), timeout)
 }
 
 // invalidateJiraReads prevents requests begun before a write from replacing it.
