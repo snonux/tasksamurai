@@ -70,13 +70,13 @@ func prepareShellEditCmd(content string) tea.Cmd {
 			return shellEditLaunchMsg{err: err}
 		}
 		if _, err := f.WriteString(content); err != nil {
-			f.Close()
-			os.Remove(f.Name())
+			_ = f.Close()
+			_ = os.Remove(f.Name())
 			return shellEditLaunchMsg{err: err}
 		}
 		name := f.Name()
 		if err := f.Close(); err != nil {
-			os.Remove(name)
+			_ = os.Remove(name)
 			return shellEditLaunchMsg{err: err}
 		}
 		return shellEditLaunchMsg{tempFile: name}
@@ -105,7 +105,8 @@ func launchShellEditorCmd(tempFile string) tea.Cmd {
 // introduced are collapsed to spaces.
 func (m *Model) handleShellEditDone(msg shellEditDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.tempFile != "" {
-		defer os.Remove(msg.tempFile)
+		// Cleanup is best-effort so it cannot mask an editor or read error.
+		defer func() { _ = os.Remove(msg.tempFile) }()
 	}
 	if msg.err != nil {
 		m.showError(fmt.Errorf("opening editor: %w", msg.err))

@@ -67,7 +67,7 @@ func TestPrepareShellEditCmdWritesTempFile(t *testing.T) {
 	if launch.tempFile == "" {
 		t.Fatalf("expected a temp file path")
 	}
-	defer os.Remove(launch.tempFile)
+	defer func() { _ = os.Remove(launch.tempFile) }()
 
 	data, err := os.ReadFile(launch.tempFile)
 	if err != nil {
