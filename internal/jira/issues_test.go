@@ -24,12 +24,12 @@ func TestIssueMapping(t *testing.T) {
 	} {
 		t.Run(tt.category, func(t *testing.T) {
 			var value issue
-			fixture := `{"key":"TST-42","fields":{"summary":"Review 日本語","project":{"key":"TST"},"priority":{"name":"High"},"status":{"name":"Ignore workflow name","statusCategory":{"key":"` + tt.category + `"}},"duedate":"2026-10-29","created":"2026-10-01T10:00:00.000+0200","updated":"2026-10-29T12:30:00.000+0200","resolutiondate":"2026-10-28T10:00:00Z","assignee":{"displayName":"Person"},"labels":["work","jira"]}}`
+			fixture := `{"key":"TST-42","fields":{"summary":"Review 日本語","project":{"key":"TST"},"priority":{"name":"High"},"status":{"name":"Ignore workflow name","statusCategory":{"key":"` + tt.category + `"}},"timespent":5400,"duedate":"2026-10-29","created":"2026-10-01T10:00:00.000+0200","updated":"2026-10-29T12:30:00.000+0200","resolutiondate":"2026-10-28T10:00:00Z","assignee":{"displayName":"Person"},"labels":["work","jira"]}}`
 			if err := json.Unmarshal([]byte(fixture), &value); err != nil {
 				t.Fatal(err)
 			}
 			got := c.mapIssue(value, now)
-			if got.ID != 0 || got.IDText != "TST-42" || got.UUID != "jira:TST-42" || got.Description != "Review 日本語" || got.Project != "TST" || got.Priority != "H" || got.Assignee != "Person" || got.JiraStatus != "Ignore workflow name" || got.Entry != "20261001T080000Z" || got.Due != "20261029T000000Z" || got.Status != tt.status || got.Start != tt.start || got.End != tt.end || strings.Join(got.Tags, ",") != "jira,work" || strings.Join(got.JiraLabels, ",") != "work,jira" || got.Urgency <= 6 {
+			if got.ID != 0 || got.IDText != "TST-42" || got.UUID != "jira:TST-42" || got.Description != "Review 日本語" || got.Project != "TST" || got.Priority != "H" || got.Assignee != "Person" || got.JiraStatus != "Ignore workflow name" || got.JiraTimeSpent != 5400 || got.Entry != "20261001T080000Z" || got.Due != "20261029T000000Z" || got.Status != tt.status || got.Start != tt.start || got.End != tt.end || strings.Join(got.Tags, ",") != "jira,work" || strings.Join(got.JiraLabels, ",") != "work,jira" || got.Urgency <= 6 {
 				t.Fatalf("incorrect mapping: %+v", got)
 			}
 		})

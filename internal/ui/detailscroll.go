@@ -23,7 +23,7 @@ func (m *Model) detailViewSize() (width, height int) {
 	if height <= 0 {
 		height = 20
 	}
-	if m.annotating {
+	if m.annotating || m.worklog.editing {
 		height = max(1, height-1)
 	}
 	return width, height
@@ -240,6 +240,9 @@ func (m *Model) renderDetailScreen() string {
 	if m.annotating {
 		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).
 			Render(m.annotateInput.View()))
+	}
+	if m.worklog.editing {
+		lines = append(lines, m.worklog.input.View())
 	}
 	if m.detailSearching {
 		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).

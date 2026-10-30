@@ -29,6 +29,7 @@ type issue struct {
 		ResolutionDate string   `json:"resolutiondate"`
 		DueDate        string   `json:"duedate"`
 		Labels         []string `json:"labels"`
+		TimeSpent      int64    `json:"timespent"`
 		Project        struct {
 			Key string `json:"key"`
 		} `json:"project"`
@@ -169,7 +170,7 @@ func (c *Client) IssueTypes(ctx context.Context, project string) ([]IssueType, e
 
 func (c *Client) mapIssue(value issue, now time.Time) task.Task {
 	f := value.Fields
-	t := task.Task{IDText: value.Key, UUID: "jira:" + value.Key, Description: f.Summary, Project: f.Project.Key, Status: "pending", JiraStatus: f.Status.Name, Assignee: f.Assignee.DisplayName, Entry: taskDate(f.Created), Priority: mapPriority(f.Priority.Name)}
+	t := task.Task{IDText: value.Key, UUID: "jira:" + value.Key, Description: f.Summary, Project: f.Project.Key, Status: "pending", JiraStatus: f.Status.Name, JiraTimeSpent: f.TimeSpent, Assignee: f.Assignee.DisplayName, Entry: taskDate(f.Created), Priority: mapPriority(f.Priority.Name)}
 	t.JiraLabels = append([]string{}, f.Labels...)
 	t.Tags = []string{"jira"}
 	for _, label := range f.Labels {
@@ -198,7 +199,7 @@ func (c *Client) mapIssue(value issue, now time.Time) task.Task {
 }
 
 func mappedFields() []string {
-	return []string{"summary", "status", "priority", "duedate", "project", "labels", "updated", "created", "assignee", "resolutiondate"}
+	return []string{"summary", "status", "priority", "duedate", "project", "labels", "updated", "created", "assignee", "resolutiondate", "timespent"}
 }
 
 func issuePath(key string) (string, error) {

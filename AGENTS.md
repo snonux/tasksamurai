@@ -60,7 +60,7 @@ gofmt/goimports, and run errcheck. The local full reference, when available, is
 - `internal/task/`: Taskwarrior CLI operations, JSON parsing, sorting and stats.
   `task.Task` also carries optional Jira display/source metadata.
 - `internal/jira/`: bounded, contextual REST requests; mapping, comments/ADF,
-  transitions, field edits and saved filters. Reads may retry once; writes
+  transitions, field edits, worklogs and saved filters. Reads may retry once; writes
   never automatically retry.
 - `internal/ui/table.go`: main `Model`, message dispatch and table rendering.
   `keyhandlers.go` and `keyactions.go` define bindings/actions; `handlers.go`
@@ -97,6 +97,9 @@ epochs distinguish A→B→A selection changes during writes.
   dumps and diagnostics. Token-file reads trim surrounding whitespace only.
 - Preserve real Jira labels separately from the virtual `jira` display tag.
   Priority writes use High/Medium/Low; summaries are strings, comments are ADF.
+- Ctrl+w logs Jira work through the shared serialized write pipeline; never
+  retry worklog creation automatically or adjust remaining estimates implicitly.
+  Keep total logged time in the shared annotation/Logged cell, ultra and details.
 - Map statuses by category `new`/`indeterminate`/`done`, never custom status names.
   Use `resolutiondate`, falling back to `updated`, for completed-window timing.
 

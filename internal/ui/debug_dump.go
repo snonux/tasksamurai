@@ -49,6 +49,7 @@ func (m *Model) writeStateHeader(w io.Writer) {
 // normal-mode dispatch entirely (blinkID, showTaskDetail, showHelp,
 // showUltra checked ahead of everything else in Update).
 func (m *Model) writeModeFlags(w io.Writer) {
+	_, _ = fmt.Fprintf(w, "jiraWorklogEditing=%v\n", m.worklog.editing)
 	_, _ = fmt.Fprintln(w, "-- Mode flags (checked in this order by Update) --")
 	_, _ = fmt.Fprintf(w, "blinkID=%d blinkOn=%v blinkCount=%d blinkEnabled=%v\n", m.blinkID, m.blinkOn, m.blinkCount, m.blinkEnabled)
 	_, _ = fmt.Fprintf(w, "shellOutputVisible=%v shellActive=%v shellCompletionLoad=%v\n", m.shellOutputVisible, m.shellActive, m.shellCompletionLoad)

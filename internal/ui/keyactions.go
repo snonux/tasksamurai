@@ -997,7 +997,10 @@ func (m *Model) handleEnterOrEdit() (tea.Model, tea.Cmd) {
 		m.activateProjectEdit(id, addr, taskStr(func(t *task.Task) string { return t.Project }))
 	case colTags: // Tags
 		m.activateTagsEdit(id, addr)
-	case colAnnotations: // Annotations
+	case colAnnotations: // Annotations or Jira logged work
+		if isJiraTask(tsk) {
+			return m.handleLogJiraWork()
+		}
 		return m.activateAnnotationsEdit(id, addr, tsk)
 	case colDescription: // Description
 		return m.activateDescriptionEdit(id, addr, tsk)

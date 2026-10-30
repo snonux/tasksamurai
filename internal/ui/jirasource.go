@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"time"
 
 	"github.com/snonux/tasksamurai/internal/jira"
 	"github.com/snonux/tasksamurai/internal/task"
@@ -39,3 +40,10 @@ var _ TransitionSource = (*jira.Client)(nil)
 var _ FilterSource = (*jira.Client)(nil)
 
 var _ IssueSource = (*jira.Client)(nil)
+
+// WorklogSource is the optional Jira time logging capability.
+type WorklogSource interface {
+	AddWorklog(context.Context, string, time.Time, int64, string) (jira.Worklog, error)
+}
+
+var _ WorklogSource = (*jira.Client)(nil)

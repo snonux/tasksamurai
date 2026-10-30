@@ -10,7 +10,7 @@ scope. The client create helper serves the gated test harness.
 Jira Cloud is an optional second source merged into the Taskwarrior table and
 ultra view. Taskwarrior remains required. The implementation supports issue and
 comment reads, adding comments, opening issues, workflow transitions, due dates,
-priorities, labels and summaries. The existing ID column shows Jira issue keys;
+priorities, labels, summaries and manual work logging. The existing ID column shows Jira issue keys;
 there is no separate Jira table or new source column.
 
 One TOML file configures one Jira site. `github.com/BurntSushi/toml` is the only
@@ -92,6 +92,7 @@ rereading through `ReloadToken`.
 | Transitions | GET `/issue/{key}/transitions?expand=transitions.fields`; POST uses a string transition ID and native `fields` |
 | Field edits | One PUT `/issue/{key}` for summary, labels, priority or due date |
 | Saved filters | GET `/filter/search?expand=jql` with `startAt` pagination; missing/inaccessible JQL is omitted |
+| Work logging | POST `/issue/{key}/worklog?adjustEstimate=leave`, start timestamp, positive whole `timeSpentSeconds` and optional ADF comment; requires confirmed worklog ID/duration |
 | Test issue creation | POST `/issue` with project, discovered issue-type ID and a **plain string** summary |
 
 Search requests include summary, status, priority, duedate, project, labels,
@@ -134,6 +135,7 @@ options. Existing `New`/`NewWithTaskwarrior` calls remain valid.
 | `Priority` | Highest/High/H → H, Lowest/Low/L → L, otherwise M |
 | `Tags` | Virtual `jira` tag plus source labels; normal search indexes these |
 | `JiraLabels` | Separate raw label metadata, excluded from Taskwarrior JSON, preserving a real label named `jira` during unrelated edits |
+| `JiraTimeSpent` | Total logged work from `timespent`, shown in Logged/ultra/details, excluded from Taskwarrior JSON |
 | `Assignee` / `JiraStatus` | Display-only assignee and workflow status name, distinct from mapped task status |
 | `Annotations` | Lazy first comment page, plus confirmed newly posted comments |
 | `Urgency` | Display score from priority and due date; existing sorting remains overdue/start/priority/due/tags/ID |
@@ -168,7 +170,9 @@ rows. Same-filter failures retain cache; a new filter clears the old rows.
 
 Opening Jira details fetches fresh fields and the first comment page, then
 patches the cache. Assignee, URL and a `+n more` comment hint appear in detail.
-Jira list rows omit annotation counts. Comment success appends the server-created
+Jira list rows show total logged work instead of annotation counts. Jira-only
+column header is Logged; mixed view uses Ann / Logged and TW-only uses
+Annotations. Expanded cells and ultra status text use the same duration format. Comment success appends the server-created
 annotation/date; field/transition success refreshes just the affected issue.
 Cached comments survive a fields-only GET. There is no disk cache.
 
@@ -226,6 +230,7 @@ rejects Jira addresses even though `d` is a supported Jira operation.
 | Control | Implemented Jira behavior |
 | --- | --- |
 | `a`, `o` | Add comment / open issue |
+| Ctrl+w | Manual worklog duration plus optional semicolon-separated note, from table/ultra/detail; never changes estimates |
 | `d` | Available done-category transition; completed issues no-op politely |
 | `s` | Available indeterminate/new transition for start/stop |
 | `w`, `W`, `r` | Set, clear or randomize due date |
@@ -290,7 +295,8 @@ Both projects must be distinct and explicit for the mutation suite. Optional
 metadata is used, preferring Task when available. `jiracheck` is read-only and
 can check one project, or both when the second is set.
 
-Each run creates four fixtures across both projects with an exact
+The lifecycle test creates four fixtures across both projects; the worklog
+test separately creates one per project. Fixtures use an exact
 `ts-integration-<unix-nano>` summary prefix. Queries restrict project and run
 marker. Every mutation/delete re-fetches and validates project, key, UUID and
 exact marker. `t.Cleanup` deletes only its registered fixtures; 403 triggers a
@@ -351,6 +357,15 @@ returned 404. The authenticated `/myself` probe passed, followed by the full
 rerun. Live DELETE returned 403. All eight marked fixtures from the two runs
 were independently read back as done in their original projects through the
 permitted cleanup fallback. No unrelated issue was mutated or deleted.
+
+Manual time tracking was subsequently verified with the real worklog API in
+both projects: TST-5 and TST2-5 each received one confirmed 60-second worklog,
+including Unicode note readback and mapped aggregate time. The focused live
+test passed in 8.95s. Fresh GETs confirmed the exact run marker, done status and
+60-second total after the DELETE-403 cleanup fallback. These two additional
+fixtures remain resolved; the original eight fixtures were not touched.
+HTTP/UI tests also verify logged totals in the normal, ultra and detail views,
+validation, cancellation, permission/server errors and once-only submission.
 
 Required fresh-context task reviews found and resolved selection, editor
 visibility and filter-lifetime races. Test-only refinements include an exact

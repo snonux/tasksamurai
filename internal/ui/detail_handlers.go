@@ -113,6 +113,8 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.handleEditTask()
 			}
 		}
+	case "ctrl+w":
+		return m.handleLogJiraWork()
 	case "o":
 		return m.handleOpenURL()
 	case "d":

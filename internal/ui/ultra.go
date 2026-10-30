@@ -367,6 +367,8 @@ func (m *Model) ultraInputOverlay() string {
 	switch {
 	case m.jira.picker.open:
 		return m.jiraFilterPickerView()
+	case m.worklog.editing:
+		return m.worklog.input.View()
 	case m.annotating:
 		return m.annotateInput.View()
 	case m.dueEditing:
@@ -575,6 +577,9 @@ func (m *Model) ultraStatusText(t task.Task) string {
 	if tags := taskDisplayTags(t); len(tags) > 0 || !isJiraTask(&t) {
 		parts = append(parts, "tags: "+ultraOrDash(strings.Join(tags, " ")))
 	}
+	if isJiraTask(&t) {
+		parts = append(parts, "logged: "+formatWorkTime(t.JiraTimeSpent))
+	}
 	return strings.Join(parts, " | ")
 }
 
@@ -705,6 +710,9 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 	if len(taskDisplayTags(t)) > 0 || !isJiraTask(&t) {
 		plainParts = append(plainParts, "tags: "+tags)
 	}
+	if isJiraTask(&t) {
+		plainParts = append(plainParts, "logged: "+formatWorkTime(t.JiraTimeSpent))
+	}
 	line := strings.Join(plainParts, " | ")
 
 	// Fall back to whole-line rendering when the regex spans a separator or a
@@ -768,6 +776,9 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 	}
 	if len(taskDisplayTags(t)) > 0 || !isJiraTask(&t) {
 		parts = append(parts, m.ultraKeyValue(re, "tags", tags, bg))
+	}
+	if isJiraTask(&t) {
+		parts = append(parts, m.ultraKeyValue(re, "logged", formatWorkTime(t.JiraTimeSpent), bg))
 	}
 	return strings.Join(parts, sep)
 }

@@ -218,6 +218,7 @@ type shellState struct {
 // Each editing mode (annotate, desc, tags, …) is mutually exclusive;
 // clearEditingModes resets them all before activating a new one.
 type editState struct {
+	worklog    jiraWorklogEditor
 	annotating bool
 	// annotateID keys blink targeting and detail-view highlighting; the
 	// parallel annotateAddr is what mutations send to the task CLI (UUID
@@ -549,6 +550,8 @@ func isNilTaskwarrior(tw task.Taskwarrior) bool {
 
 // clearEditingModes ensures only one editing mode is active at a time
 func (m *Model) clearEditingModes() {
+	m.worklog.editing = false
+	m.worklog.input.Blur()
 	m.annotating = false
 	m.descEditing = false
 	m.tagsEditing = false
@@ -871,6 +874,14 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
 			}
 		}
+		if isJiraTask(&tsk) {
+			if m.searchRegex.MatchString(formatWorkTime(tsk.JiraTimeSpent)) {
+				if c := m.logicalToDisplay(colAnnotations); c >= 0 {
+					m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+				}
+			}
+			continue
+		}
 		for _, a := range tsk.Annotations {
 			if m.searchRegex.MatchString(a.Description) {
 				if c := m.logicalToDisplay(colAnnotations); c >= 0 {
@@ -948,6 +959,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyPressMsg:
+		if m.worklog.editing {
+			return m.handleJiraWorklogInput(msg)
+		}
 		if m.jira.picker.open {
 			return m.handleJiraFilterPickerKey(msg)
 		}
@@ -1003,6 +1017,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Otherwise handle normal mode
 		return m.handleNormalMode(msg)
+	}
+
+	if m.worklog.editing {
+		var cmd tea.Cmd
+		m.worklog.input, cmd = m.worklog.input.Update(msg)
+		return m, cmd
 	}
 
 	// Default case - pass through to appropriate component
@@ -1158,7 +1178,7 @@ func (m *Model) clearRowBlink() {
 // search, ultra search, or any inline field editor). Auto-refresh reloads
 // are skipped while this is true so the reload never clobbers user input.
 func (m *Model) anyInputActive() bool {
-	return m.annotating || m.descEditing || m.tagsEditing || m.dueEditing ||
+	return m.worklog.editing || m.annotating || m.descEditing || m.tagsEditing || m.dueEditing ||
 		m.recurEditing || m.projEditing || m.filterEditing || m.jira.picker.open || m.addingTask ||
 		m.prioritySelecting || m.searching || m.shellActive ||
 		m.shellOutputVisible || m.detailSearching || m.ultraSearching ||
@@ -1222,6 +1242,8 @@ func (m *Model) appendInlineInputOverlay(view string) string {
 	switch {
 	case m.jira.picker.open:
 		overlay = m.jiraFilterPickerView()
+	case m.worklog.editing:
+		overlay = m.worklog.input.View()
 	case m.annotating:
 		overlay = m.annotateInput.View()
 	case m.dueEditing:
@@ -1359,6 +1381,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "D", Desc: "delete task/recurring series"},
 				{Key: "U", Desc: "undo last done/delete"},
 				{Key: "s", Desc: "start/stop task"},
+				{Key: "ctrl+w", Desc: "log work on Jira issue"},
 			},
 		},
 		{
@@ -1631,7 +1654,10 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	tagStr := m.highlightCell(getStyle(colTags), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
-	if n := len(anns); n > 0 && !isJiraTask(&t) {
+	if isJiraTask(&t) {
+		annCount = formatWorkTime(t.JiraTimeSpent)
+		annRaw = annCount
+	} else if n := len(anns); n > 0 {
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
 	annStr := m.highlightCellMatch(getStyle(colAnnotations), re, annRaw, annCount)
@@ -1690,6 +1716,10 @@ func (m *Model) expandedCellView() string {
 	case colTags:
 		val = strings.Join(taskDisplayTags(t), " ")
 	case colAnnotations:
+		if isJiraTask(&t) {
+			val = formatWorkTime(t.JiraTimeSpent)
+			break
+		}
 		var anns []string
 		for _, a := range t.Annotations {
 			anns = append(anns, a.Description)
@@ -1745,7 +1775,7 @@ func (m *Model) updateTableHeight() {
 	if m.cellExpanded {
 		h--
 	}
-	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask || m.shellActive {
+	if m.worklog.editing || m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask || m.shellActive {
 		h--
 	}
 	if m.jira.picker.open {
@@ -1787,8 +1817,11 @@ func (m *Model) computeColumnWidths() {
 		if l := ansi.StringWidth(tags); l > maxTags {
 			maxTags = l
 		}
-		ann := len(t.Annotations)
-		if l := ansi.StringWidth(strconv.FormatInt(int64(ann), 16)); l > maxAnn {
+		annText := strconv.FormatInt(int64(len(t.Annotations)), 16)
+		if isJiraTask(&t) {
+			annText = formatWorkTime(t.JiraTimeSpent)
+		}
+		if l := ansi.StringWidth(annText); l > maxAnn {
 			maxAnn = l
 		}
 	}
@@ -1859,6 +1892,10 @@ func (m *Model) columnSpec(logical int) (title string, width int) {
 	case colTags:
 		return "Tags", m.tagsWidth
 	case colAnnotations:
+		if m.jira.source != nil && m.jira.view != "tw" {
+			title = m.sourceColumnTitle("Ann", "Logged")
+			return title, max(m.annWidth, ansi.StringWidth(title))
+		}
 		return "Annotations", m.annWidth
 	case colDescription:
 		return "Description", m.descWidth

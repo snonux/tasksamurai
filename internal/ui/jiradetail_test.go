@@ -57,8 +57,8 @@ func TestJiraFreshDetailBothViews(t *testing.T) {
 			if issueCalls != 1 || commentCalls != 1 || source.calls.Load() != 1 || m.jira.tasks[0].Description != "Fresh summary" || len(m.jira.tasks[0].Annotations) != 1 {
 				t.Fatal("fresh detail did not patch cache with exactly per-issue reads")
 			}
-			if cell := ansi.Strip(m.tbl.Rows()[0][m.logicalToDisplay(colAnnotations)]); strings.TrimSpace(cell) != "" {
-				t.Fatalf("Jira list count %q", cell)
+			if cell := ansi.Strip(m.tbl.Rows()[0][m.logicalToDisplay(colAnnotations)]); strings.TrimSpace(cell) != "0m" {
+				t.Fatalf("Jira logged time %q", cell)
 			}
 			_, _ = m.Update(jiraKeyPress("esc"))
 			_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})

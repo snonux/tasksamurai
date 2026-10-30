@@ -40,6 +40,7 @@ type keyBinding struct {
 }
 
 var sharedKeyBindings = []keyBinding{
+	{keys: []string{"ctrl+w"}, modes: keyBindingAll, desc: "log work on Jira issue", action: modelKeyAction((*Model).handleLogJiraWork)},
 	{keys: []string{"H"}, modes: keyBindingAll, desc: "toggle help", action: modelKeyAction((*Model).handleToggleHelp)},
 	{keys: []string{"q"}, modes: keyBindingAll, desc: "quit or exit current view", action: modelKeyAction((*Model).handleQuitKey)},
 	{keys: []string{"esc"}, modes: keyBindingAll, desc: "close help/input or cancel", action: modelKeyAction((*Model).handleEscapeKey)},

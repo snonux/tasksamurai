@@ -347,8 +347,8 @@ func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
 }
 
 func jiraKeyPress(key string) tea.KeyPressMsg {
-	if key == "ctrl+r" {
-		return tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
+	if key == "ctrl+r" || key == "ctrl+w" {
+		return tea.KeyPressMsg{Code: []rune(key)[len([]rune(key))-1], Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: []rune(key)[0], Text: key}
 }

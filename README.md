@@ -206,6 +206,7 @@ edits.
 | `6` | Cycle cached source views: `tw` → `both` → `jira` → `tw` (`--jira-hotkey` changes the key) |
 | `F` | Pick a local or cloud saved filter with fuzzy search; arrows/Ctrl+n/Ctrl+p navigate, Enter applies, Esc cancels, Ctrl+r refreshes cloud filters |
 | `a` | Add a comment; blank comments are refused |
+| Ctrl+w | Log work with a duration and optional note; Enter submits, Esc cancels |
 | `o` | Open the issue in the configured browser, ahead of description URLs or file references |
 | `d` | Transition to an available done-category status |
 | `s` | Start/stop through available in-progress/todo category transitions |
@@ -245,6 +246,32 @@ are reported without posting a transition. Writes are never automatically
 retried. After a confirmed field/transition write, one issue GET patches the
 cache; a failed follow-up read is reported separately from a failed write.
 
+### Jira time tracking
+
+Press **Ctrl+w** on a Jira issue in table, ultra or detail view. Enter a duration
+using hours, minutes or seconds, optionally followed by a semicolon and note:
+
+```text
+1h 30m; Implemented the API client
+45m
+```
+
+Enter logs the work; Esc cancels. Durations must be positive whole seconds
+(`1.5h` is accepted; days/weeks and bare numbers are not). The start time is
+calculated as the current time minus the entered duration. Notes are saved as
+ADF worklog comments. The remaining estimate stays unchanged.
+
+Normal Jira view shows **Logged** in place of the unused annotation count
+(mixed-view header: **Ann / Logged**). Select that cell and press `i` to log
+more work. Ultra view shows `logged: 1h 30m`, and issue details show **Time spent**.
+These values are the issue’s total logged work reported by Jira, across all
+authors, and refresh after a successful submission or an explicit refresh.
+Your Jira site must have time tracking enabled and your account needs the
+Work on issues permission. Worklog writes are never automatically retried.
+If a response is ambiguous or the follow-up refresh fails, check Jira before
+submitting again. `s` continues to change workflow status; it does not start a
+timer or log work automatically.
+
 ### Refresh and details
 
 Taskwarrior rows appear before Jira's first network fetch completes. Jira
@@ -262,7 +289,7 @@ the request timeout.
 
 Opening Jira details fetches fresh fields and the first page of comments,
 updates the cached issue and displays the assignee, issue URL and a `+n more`
-hint when comments are truncated. Jira rows omit comment counts in the list.
+hint when comments are truncated. Jira rows show logged time instead of comment counts in the list.
 Comments appear after server confirmation. There is no disk cache.
 
 ## Development and Jira integration tests
@@ -272,7 +299,8 @@ Comments appear after server confirmation. There is no disk cache.
 commands do not enable Jira integration tests or contact the live site.
 
 The Jira tests have three layers: unit/fixture tests, `httptest` API tests and a
-build-tagged live suite. The live suite needs two distinct dedicated projects:
+build-tagged live suite. The live suite needs two distinct dedicated projects and permission to create
+issues, log work, edit fields and perform the tested workflow transitions:
 
 ```bash
 export JIRA_TEST_SITE=https://snonux.atlassian.net
@@ -291,8 +319,9 @@ select a creatable non-subtask issue type; otherwise the suite discovers one.
 The API test suite still skips live tests without `JIRA_INTEGRATION=1`, even
 when compiled with `-tags integration`.
 
-The suite creates four issues with an exact `ts-integration-<run-id>` summary
-marker across the two projects. Every mutation and cleanup rechecks ownership
+The lifecycle test creates four issues across the two projects; the worklog
+test creates one additional issue per project. Every fixture has an exact
+`ts-integration-<run-id>` summary marker. Every mutation and cleanup rechecks ownership
 against a fresh issue GET. Queries are bounded to the configured projects and
 run marker. Cleanup deletes only those fixtures; if deletion is forbidden, it
 tries to mark them done and reports the limitation. It does not sweep other
@@ -302,7 +331,9 @@ permission; `V` can display recent completed fixtures for manual TUI checks.
 On 2026-10-30, both projects were created through the API with user authorization.
 The full live suite passed against them, including different project/issue-key
 mapping, real pagination, comments, transitions and field edits. Delete returned
-403, so the eight fixtures from two verification runs remain marked and done.
+403, so the eight fixtures from those two runs remain marked and done. A later
+focused worklog run also passed in both projects; its two marked fixtures remain
+resolved with 60 seconds logged each.
 TUI rendering of distinct `TST`/`TST2` keys is also covered by hermetic UI tests.
 See [the design and verification record](docs/jira-support.md) for details.
 

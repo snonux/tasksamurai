@@ -21,6 +21,8 @@ type Task struct {
 	Tags        []string `json:"tags"`
 	// JiraStatus is the workflow status name, separate from the mapped task status.
 	JiraStatus string `json:"-"`
+	// JiraTimeSpent is the total logged work in seconds.
+	JiraTimeSpent int64 `json:"-"`
 	// JiraLabels preserves source labels separately from the virtual jira tag.
 	JiraLabels  []string     `json:"-"`
 	Status      string       `json:"status"`

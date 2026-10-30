@@ -68,7 +68,7 @@ func TestSearchAuthPaginationAndCap(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
-		if body.JQL != "project = TST" || !reflect.DeepEqual(body.Fields, []string{"summary", "status", "priority", "duedate", "project", "labels", "updated", "created", "assignee", "resolutiondate"}) {
+		if body.JQL != "project = TST" || !reflect.DeepEqual(body.Fields, []string{"summary", "status", "priority", "duedate", "project", "labels", "updated", "created", "assignee", "resolutiondate", "timespent"}) {
 			t.Errorf("unexpected query/fields: %+v", body)
 		}
 		if n == 1 {

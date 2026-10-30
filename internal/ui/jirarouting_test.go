@@ -342,8 +342,8 @@ func TestRoutingAnnotationsColumnBySource(t *testing.T) {
 			t.Fatal("column activation invoked mutation")
 		}
 		if jiraRow {
-			if m.anyInputActive() || m.statusMsg != "comments can't be replaced wholesale — use a to add" {
-				t.Fatal("Jira annotation replacement not blocked")
+			if m.anyInputActive() || m.statusMsg != "Jira work logging is unavailable" {
+				t.Fatal("missing worklog capability not reported")
 			}
 		} else if !m.annotating || !m.replaceAnnotations {
 			t.Fatal("TW annotation replacement changed")
