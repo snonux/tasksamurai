@@ -1245,6 +1245,9 @@ func (m *Model) ultraPrepareSelectedTask() (int, bool) {
 }
 
 func (m *Model) handleUltraEditTask() (tea.Model, tea.Cmd) {
+	if isJiraTask(m.getTaskForOpenURL()) {
+		return m.handleEditTask()
+	}
 	if m.blockJiraAction("e") {
 		return m, nil
 	}

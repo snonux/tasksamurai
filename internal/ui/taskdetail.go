@@ -268,6 +268,11 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 	}
 	lines = append(lines, ls.Render("Description:"))
 
+	if m.descEditing && m.descAddr == t.UUID {
+		lines = append(lines, m.descInput.View())
+		fieldEndLines[cf] = len(lines) - 1
+		return lines
+	}
 	if m.detailDescEditing {
 		lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Italic(true).
 			Render("  [Editing in external editor...]"))
@@ -346,7 +351,7 @@ func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, desc
 func (m *Model) renderDetailFooter(lines []string) []string {
 	lines = append(lines, "", "")
 	ist := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Italic(true)
-	if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.detailDescEditing {
+	if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.descEditing || m.detailDescEditing {
 		lines = append(lines, ist.Render("Editing mode - Follow on-screen prompts"))
 	} else {
 		lines = append(lines, ist.Render("Press ESC or q to return to table view"))

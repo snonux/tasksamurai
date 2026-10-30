@@ -41,10 +41,10 @@ var jiraControlPolicy = map[string]controlPolicy{
 	";":     {routeBlocked, "task commands don't work on Jira issues"},
 	"d":     {route: routeJira},
 	"s":     {route: routeJira},
-	"w":     {routeBlocked, "not yet — Jira write support for due dates is planned"},
-	"p":     {routeBlocked, "not yet — Jira write support for priority is planned"},
-	"t":     {routeBlocked, "not yet — Jira write support for labels is planned"},
-	"e":     {routeBlocked, "not yet — Jira write support for summary is planned"},
+	"w":     {route: routeJira},
+	"p":     {route: routeJira},
+	"t":     {route: routeJira},
+	"e":     {route: routeJira},
 }
 
 // Aliases share the canonical control's policy and reason. In particular E

@@ -12,13 +12,15 @@ type Annotation struct {
 }
 
 type Task struct {
-	ID          int          `json:"id"`
-	IDText      string       `json:"id_text,omitempty"`
-	Assignee    string       `json:"assignee,omitempty"`
-	UUID        string       `json:"uuid"`
-	Description string       `json:"description"`
-	Project     string       `json:"project"`
-	Tags        []string     `json:"tags"`
+	ID          int      `json:"id"`
+	IDText      string   `json:"id_text,omitempty"`
+	Assignee    string   `json:"assignee,omitempty"`
+	UUID        string   `json:"uuid"`
+	Description string   `json:"description"`
+	Project     string   `json:"project"`
+	Tags        []string `json:"tags"`
+	// JiraLabels preserves source labels separately from the virtual jira tag.
+	JiraLabels  []string     `json:"-"`
 	Status      string       `json:"status"`
 	Start       string       `json:"start"`
 	Entry       string       `json:"entry"`

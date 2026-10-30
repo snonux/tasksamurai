@@ -27,6 +27,13 @@ type TransitionSource interface {
 	DoTransition(context.Context, string, string, map[string]any) error
 }
 
+// FieldSource is the optional Jira issue-field editing capability.
+type FieldSource interface {
+	SetField(context.Context, string, string, any) error
+}
+
+var _ FieldSource = (*jira.Client)(nil)
+
 var _ TransitionSource = (*jira.Client)(nil)
 
 var _ FilterSource = (*jira.Client)(nil)

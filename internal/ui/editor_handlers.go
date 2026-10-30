@@ -52,6 +52,12 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 		if m.blockJiraAddress(addr, "e") {
 			return m, nil
 		}
+		if isJiraTask(t) {
+			if err := validateDescription(newDesc); err != nil {
+				return m, m.showErrorTimed(err)
+			}
+			return m, m.jiraFieldCommand(addr, "summary", newDesc)
+		}
 		if m.taskFlightBlocks() {
 			return m, m.showStatusTimed("Busy: description not saved")
 		}

@@ -113,6 +113,9 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if err := validateDescription(value); err != nil {
 			return nil, err
 		}
+		if strings.HasPrefix(m.descAddr, "jira:") {
+			return m.scheduleJiraField(m.descAddr, "summary", value)
+		}
 		if m.taskFlightBlocks() {
 			return nil, m.busyCommitErr()
 		}
@@ -164,6 +167,13 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		if strings.HasPrefix(m.tagsAddr, "jira:") {
+			labels, err := m.jiraLabels(m.tagsAddr, adds, removes)
+			if err != nil {
+				return nil, err
+			}
+			return m.scheduleJiraField(m.tagsAddr, "labels", labels)
+		}
 		if m.taskFlightBlocks() {
 			return nil, m.busyCommitErr()
 		}
@@ -200,6 +210,15 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleDueEditMode handles due date editing
 func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && strings.HasPrefix(m.dueAddr, "jira:") {
+		cmd, err := m.scheduleJiraField(m.dueAddr, "duedate", m.dueDate.Format("2006-01-02"))
+		if err != nil {
+			return m, m.showErrorTimed(err)
+		}
+		m.dueEditing = false
+		m.updateTableHeight()
+		return m, cmd
+	}
 	if msg.String() == "enter" && m.blockJiraAddress(m.dueAddr, "w") {
 		return m, nil
 	}
@@ -335,9 +354,22 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "enter":
-		priority := priorityOptions[m.priorityIndex]
+		if m.priorityIndex < 0 || m.priorityIndex >= len(m.priorityChoices()) {
+			return m, m.showErrorTimed(fmt.Errorf("select a valid priority"))
+		}
+		priority := m.priorityChoices()[m.priorityIndex]
 		if err := validatePriority(priority); err != nil {
 			return m, m.showErrorTimed(err)
+		}
+		if strings.HasPrefix(m.priorityAddr, "jira:") {
+			name := map[string]string{"H": "High", "M": "Medium", "L": "Low"}[priority]
+			cmd, err := m.scheduleJiraField(m.priorityAddr, "priority", map[string]string{"name": name})
+			if err != nil {
+				return m, m.showErrorTimed(err)
+			}
+			m.prioritySelecting = false
+			m.updateTableHeight()
+			return m, cmd
 		}
 		if m.taskFlightBlocks() {
 			_ = m.rejectIfBusy()
@@ -368,9 +400,9 @@ func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "h", "left":
-		m.priorityIndex = (m.priorityIndex + len(priorityOptions) - 1) % len(priorityOptions)
+		m.priorityIndex = (m.priorityIndex + len(m.priorityChoices()) - 1) % len(m.priorityChoices())
 	case "l", "right":
-		m.priorityIndex = (m.priorityIndex + 1) % len(priorityOptions)
+		m.priorityIndex = (m.priorityIndex + 1) % len(m.priorityChoices())
 	}
 	return m, nil
 }

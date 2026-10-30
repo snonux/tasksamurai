@@ -476,7 +476,8 @@ func prepareDescriptionTempFile(description string, newTempFile func() (descript
 // (taskAddress) — the UUID, so the editor opens the intended task even if
 // Taskwarrior renumbered IDs since the in-memory list was loaded.
 func (m *Model) editCmd(addr string) tea.Cmd {
-	if m.blockJiraAddress(addr, "e") {
+	if strings.HasPrefix(addr, "jira:") {
+		m.statusMsg = "Jira summaries use the inline editor"
 		return nil
 	}
 	c := m.taskwarriorClient().EditCmd(addr)
@@ -964,7 +965,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if we're in detail view
 		if m.showTaskDetail {
 			// If we're editing in detail view, let editing modes handle it
-			if m.annotating || m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.projEditing {
+			if m.annotating || m.descEditing || m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.projEditing {
 				if handled, model, cmd := m.handleEditingModes(msg); handled {
 					return model, cmd
 				}
@@ -1521,7 +1522,7 @@ func (m *Model) dueView(showLabel bool) string {
 
 func (m *Model) priorityView(showLabel bool) string {
 	var parts []string
-	for i, p := range priorityOptions {
+	for i, p := range m.priorityChoices() {
 		label := p
 		if label == "" {
 			label = "none"

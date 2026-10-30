@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -34,6 +35,15 @@ func (f *routingTaskwarrior) DoneContext(_ context.Context, addr string) error {
 }
 func (f *routingTaskwarrior) SetDueDateContext(_ context.Context, addr, _ string) error {
 	return f.record("due", addr)
+}
+func (f *routingTaskwarrior) SetDescriptionContext(_ context.Context, addr, _ string) error {
+	return f.record("summary", addr)
+}
+func (f *routingTaskwarrior) SetPriorityContext(_ context.Context, addr, _ string) error {
+	return f.record("priority", addr)
+}
+func (f *routingTaskwarrior) AddTagsContext(_ context.Context, addr string, _ []string) error {
+	return f.record("add tags", addr)
 }
 func (f *routingTaskwarrior) SetProjectContext(_ context.Context, addr, _ string) error {
 	return f.record("project", addr)
@@ -145,12 +155,12 @@ func TestRoutingFieldControlsBySource(t *testing.T) {
 		col, field    int
 		input, reason string
 	}{
-		{colPri, fieldPriority, "priority", "not yet — Jira write support for priority is planned"},
-		{colDue, fieldDue, "due", "not yet — Jira write support for due dates is planned"},
+		{colPri, fieldPriority, "priority", ""},
+		{colDue, fieldDue, "due", ""},
 		{colProject, fieldProject, "project", "moving Jira issues not supported (yet)"},
-		{colTags, fieldTags, "tags", "not yet — Jira write support for labels is planned"},
+		{colTags, fieldTags, "tags", ""},
 		{colRecur, fieldEntry + 1, "recurrence", "Jira issues have no recurrence"},
-		{colDescription, fieldEntry + 2, "description", "not yet — Jira write support for summary is planned"},
+		{colDescription, fieldEntry + 2, "description", ""},
 	}
 	for _, jiraRow := range []bool{false, true} {
 		for _, mode := range []string{"column", "detail"} {
@@ -169,15 +179,15 @@ func TestRoutingFieldControlsBySource(t *testing.T) {
 							m.detailFieldIndex = tc.field
 						}
 						_, cmd := m.Update(routingKey(key))
-						if jiraRow {
+						if jiraRow && tc.reason != "" {
 							if cmd != nil || m.anyInputActive() || m.statusMsg != tc.reason {
 								t.Fatalf("Jira editor escaped guard: cmd=%v input=%v status=%q", cmd != nil, m.anyInputActive(), m.statusMsg)
 							}
 						} else if tc.input == "description" {
-							if mode == "detail" && (cmd == nil || !m.detailDescEditing) {
+							if mode == "detail" && !jiraRow && (cmd == nil || !m.detailDescEditing) {
 								t.Fatal("TW detail editor did not open")
 							}
-							if mode == "column" && !m.descEditing {
+							if (mode == "column" || jiraRow) && !m.descEditing {
 								t.Fatal("TW inline editor did not open")
 							}
 						} else if got := routingInput(m); got != tc.input {
@@ -199,10 +209,10 @@ func TestRoutingCommitBoundariesRejectJira(t *testing.T) {
 		setup        func(*Model)
 		handler      func(*Model, tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	}{
-		{"summary", "not yet — Jira write support for summary is planned", func(m *Model) { m.descAddr = "jira:TST-42"; m.descEditing = true; m.descInput.SetValue("changed") }, (*Model).handleDescriptionMode},
-		{"labels", "not yet — Jira write support for labels is planned", func(m *Model) { m.tagsAddr = "jira:TST-42"; m.tagsEditing = true; m.tagsInput.SetValue("changed") }, (*Model).handleTagsMode},
-		{"due", "not yet — Jira write support for due dates is planned", func(m *Model) { m.dueAddr = "jira:TST-42"; m.dueEditing = true }, (*Model).handleDueEditMode},
-		{"priority", "not yet — Jira write support for priority is planned", func(m *Model) { m.priorityAddr = "jira:TST-42"; m.prioritySelecting = true }, (*Model).handlePriorityMode},
+		{"summary", "Error: Jira field edits are unavailable", func(m *Model) { m.descAddr = "jira:TST-42"; m.descEditing = true; m.descInput.SetValue("changed") }, (*Model).handleDescriptionMode},
+		{"labels", "Error: Jira field edits are unavailable", func(m *Model) { m.tagsAddr = "jira:TST-42"; m.tagsEditing = true; m.tagsInput.SetValue("changed") }, (*Model).handleTagsMode},
+		{"due", "Error: Jira field edits are unavailable", func(m *Model) { m.dueAddr = "jira:TST-42"; m.dueEditing = true; m.dueDate = time.Now() }, (*Model).handleDueEditMode},
+		{"priority", "Error: Jira field edits are unavailable", func(m *Model) { m.priorityAddr = "jira:TST-42"; m.prioritySelecting = true }, (*Model).handlePriorityMode},
 		{"project", "moving Jira issues not supported (yet)", func(m *Model) { m.projAddr = "jira:TST-42"; m.projEditing = true }, (*Model).handleProjectMode},
 		{"recurrence", "Jira issues have no recurrence", func(m *Model) { m.recurAddr = "jira:TST-42"; m.recurEditing = true }, (*Model).handleRecurrenceMode},
 	}
@@ -210,8 +220,8 @@ func TestRoutingCommitBoundariesRejectJira(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, tw := routingModel(t, true)
 			tc.setup(&m)
-			_, cmd := tc.handler(&m, routingKey("enter"))
-			if cmd != nil || m.taskFlightActive() || m.statusMsg != tc.reason || len(tw.calls) != 0 {
+			_, _ = tc.handler(&m, routingKey("enter"))
+			if m.taskFlightActive() || m.statusMsg != tc.reason || len(tw.calls) != 0 {
 				t.Fatalf("commit escaped guard: calls=%v status=%s", tw.calls, m.statusMsg)
 			}
 		})
@@ -346,8 +356,7 @@ func TestRoutingDirectHandlersAndEditorCallback(t *testing.T) {
 		key, reason string
 		handler     func(*Model) (tea.Model, tea.Cmd)
 	}{
-		{"E", "not yet — Jira write support for summary is planned", (*Model).handleEditTask},
-		{"r", "not yet — Jira write support for due dates is planned", (*Model).handleRandomDueDate},
+		{"r", "Error: Jira field edits are unavailable", (*Model).handleRandomDueDate},
 		{";", "task commands don't work on Jira issues", (*Model).handleShellPromptForSelectedTask},
 		{"s", "Jira transitions are unavailable", (*Model).handleUltraToggleStart},
 		{"d", "Jira transitions are unavailable", (*Model).handleDetailMarkDone},
@@ -372,7 +381,7 @@ func TestRoutingDirectHandlersAndEditorCallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, cmd := m.handleDescEditDone(descEditDoneMsg{tempFile: path})
-	if cmd != nil || m.taskFlightActive() || len(tw.calls) != 0 || m.statusMsg != "not yet — Jira write support for summary is planned" {
+	if cmd != nil || m.taskFlightActive() || len(tw.calls) != 0 || m.statusMsg != "Error: Jira field edits are unavailable" {
 		t.Fatal("stale external editor completion entered TW mutation")
 	}
 }
@@ -411,5 +420,35 @@ func TestRoutingEnterOpensDetailBySource(t *testing.T) {
 		if !m.showTaskDetail || m.anyInputActive() || len(tw.calls) != 0 {
 			t.Fatal("Enter failed to open read-only detail")
 		}
+	}
+}
+
+func TestRoutingTaskwarriorFieldCommitsRemainNative(t *testing.T) {
+	for _, tc := range []struct {
+		field  string
+		setup  func(*Model)
+		commit func(*Model, tea.KeyPressMsg) (tea.Model, tea.Cmd)
+		calls  []string
+	}{
+		{"summary", func(m *Model) {
+			_, _ = m.activateDescriptionEdit(1, "tw-1", &m.tasks[0])
+			m.descInput.SetValue("changed")
+		}, (*Model).handleDescriptionMode, []string{"summary:tw-1"}},
+		{"due", func(m *Model) { m.activateDueEdit(1, "tw-1", "") }, (*Model).handleDueEditMode, []string{"due:tw-1"}},
+		{"priority unset", func(m *Model) { m.activatePriorityEdit(1, "tw-1", "") }, (*Model).handlePriorityMode, []string{"priority:tw-1"}},
+		{"tags", func(m *Model) { m.activateTagsEdit(1, "tw-1"); m.tagsInput.SetValue("+new -old") }, (*Model).handleTagsMode, []string{"add tags:tw-1", "remove tags:tw-1"}},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			m, tw := routingModel(t, false)
+			tc.setup(&m)
+			_, cmd := tc.commit(&m, routingKey("enter"))
+			drainCmds(t, &m, cmd)
+			if !reflect.DeepEqual(tw.calls, tc.calls) {
+				t.Fatalf("TW calls %v want %v", tw.calls, tc.calls)
+			}
+			if m.jira.mutating {
+				t.Fatal("TW field edit scheduled Jira write")
+			}
+		})
 	}
 }

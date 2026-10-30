@@ -266,6 +266,7 @@ func cloneTasks(tasks []task.Task) []task.Task {
 	copyTasks := append([]task.Task(nil), tasks...)
 	for i := range copyTasks {
 		copyTasks[i].Tags = append([]string(nil), copyTasks[i].Tags...)
+		copyTasks[i].JiraLabels = append([]string(nil), copyTasks[i].JiraLabels...)
 		copyTasks[i].Annotations = append([]task.Annotation(nil), copyTasks[i].Annotations...)
 	}
 	return copyTasks

@@ -307,17 +307,10 @@ func TestJiraProjectsRenderDistinctKeys(t *testing.T) {
 
 func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
 	cases := []struct{ key, reason string }{
-		{"e", "not yet — Jira write support for summary is planned"},
-		{"E", "not yet — Jira write support for summary is planned"},
 		{"s", "Jira transitions are unavailable"},
 		{"d", "Jira transitions are unavailable"},
 		{"D", "Jira issues can't be deleted from here"},
 		{"U", "no undo for Jira issues"},
-		{"w", "not yet — Jira write support for due dates is planned"},
-		{"W", "not yet — Jira write support for due dates is planned"},
-		{"r", "not yet — Jira write support for due dates is planned"},
-		{"p", "not yet — Jira write support for priority is planned"},
-		{"t", "not yet — Jira write support for labels is planned"},
 		{"A", "comments can't be replaced wholesale — use a to add"},
 		{"J", "moving Jira issues not supported (yet)"},
 		{"T", "moving Jira issues not supported (yet)"},
@@ -364,7 +357,7 @@ func TestJiraFieldEditorsAndDeleteBoundaryAreGuarded(t *testing.T) {
 	source := &fakeJiraSource{fetch: func(context.Context, string) ([]task.Task, error) { return jiraRows(), nil }}
 	m := newJiraTestModel(t, &fakeTaskwarrior{}, source)
 	drainCmds(t, &m, m.Init())
-	for _, col := range []int{colPri, colDue, colRecur, colProject, colTags, colAnnotations, colDescription} {
+	for _, col := range []int{colRecur, colProject, colAnnotations} {
 		m.tbl.SetColumnCursor(m.logicalToDisplay(col))
 		_, cmd := m.handleEnterOrEdit()
 		if cmd != nil || m.anyInputActive() {
@@ -373,7 +366,7 @@ func TestJiraFieldEditorsAndDeleteBoundaryAreGuarded(t *testing.T) {
 	}
 	m.showTaskDetail = true
 	m.setCurrentTaskDetail(&m.tasks[0])
-	for _, field := range []int{fieldPriority, fieldTags, fieldDue, fieldProject, fieldEntry + 1} {
+	for _, field := range []int{fieldProject} {
 		m.detailFieldIndex = field
 		_, cmd := m.handleDetailFieldEdit()
 		if cmd != nil || m.anyInputActive() {

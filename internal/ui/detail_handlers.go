@@ -96,6 +96,23 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.handleAnnotate(msg.String() == "A")
 		}
 		return m, nil
+	case "w", "W", "r", "p", "t", "e", "E":
+		if isJiraTask(m.currentDetailTask()) {
+			switch msg.String() {
+			case "w":
+				return m.handleSetDueDate()
+			case "W":
+				return m.handleRemoveDueDate()
+			case "r":
+				return m.handleRandomDueDate()
+			case "p":
+				return m.handleSetPriority()
+			case "t":
+				return m.handleEditTags()
+			default:
+				return m.handleEditTask()
+			}
+		}
 	case "o":
 		return m.handleOpenURL()
 	case "d":
@@ -249,6 +266,9 @@ func (m *Model) handleDetailDynamicFields(id int, addr string, t *task.Task) (te
 		if m.blockJiraAddress(addr, "e") {
 			return m, nil
 		}
+		if isJiraTask(t) {
+			return m.activateDescriptionEdit(id, addr, t)
+		}
 		// Launch external editor for description editing.
 		m.detailDescEditing = true
 		return m, editDescriptionCmd(t.Description)
@@ -277,6 +297,9 @@ func (m *Model) activatePriorityEdit(id int, addr, currentPriority string) {
 		m.priorityIndex = 2
 	default:
 		m.priorityIndex = 3
+		if strings.HasPrefix(addr, "jira:") {
+			m.priorityIndex = 1
+		}
 	}
 	m.updateTableHeight()
 }

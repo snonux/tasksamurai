@@ -18,6 +18,9 @@ import (
 )
 
 func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		return m.activateDescriptionEdit(t.ID, t.UUID, t)
+	}
 	if m.blockJiraAction("e") {
 		return m, nil
 	}
@@ -374,6 +377,10 @@ func undoStatus(action undoAction) string {
 }
 
 func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		m.activateDueEdit(t.ID, t.UUID, t.Due)
+		return m, nil
+	}
 	if m.blockJiraAction("w") {
 		return m, nil
 	}
@@ -393,6 +400,9 @@ func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		return m, m.jiraFieldCommand(t.UUID, "duedate", nil)
+	}
 	if m.blockJiraAction("W") {
 		return m, nil
 	}
@@ -415,6 +425,10 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		due := time.Now().AddDate(0, 0, rand.Intn(31)+7).Format("2006-01-02")
+		return m, m.jiraFieldCommand(t.UUID, "duedate", due)
+	}
 	if m.blockJiraAction("r") {
 		return m, nil
 	}
@@ -499,6 +513,10 @@ func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (te
 }
 
 func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		m.activatePriorityEdit(t.ID, t.UUID, t.Priority)
+		return m, nil
+	}
 	if m.blockJiraAction("p") {
 		return m, nil
 	}
@@ -574,6 +592,10 @@ func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		m.activateTagsEdit(t.ID, t.UUID)
+		return m, nil
+	}
 	if m.blockJiraAction("t") {
 		return m, nil
 	}

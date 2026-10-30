@@ -12,6 +12,7 @@ import (
 )
 
 type jiraMutationDoneMsg struct {
+	detailField               int
 	gen                       int
 	filterEpoch               int
 	uuid, filterID, jql, note string
@@ -87,7 +88,7 @@ func (m *Model) scheduleJiraMutation(uuid string, op func(context.Context) (stri
 	return func() tea.Msg {
 		defer cancel()
 		note, err := op(ctx)
-		msg := jiraMutationDoneMsg{gen: gen, uuid: uuid, filterID: filterID, jql: jql, filterEpoch: filterEpoch, note: note, err: err}
+		msg := jiraMutationDoneMsg{gen: gen, uuid: uuid, filterID: filterID, jql: jql, filterEpoch: filterEpoch, note: note, err: err, detailField: fieldStatus}
 		if err != nil {
 			return msg
 		}
@@ -133,7 +134,7 @@ func (m *Model) handleJiraMutationDone(msg jiraMutationDoneMsg) (tea.Model, tea.
 	m.rebuildJiraRows()
 	m.statusMsg = msg.note
 	if m.showTaskDetail && m.currentTaskDetailUUID == msg.uuid {
-		return m, m.startDetailBlink(fieldStatus)
+		return m, m.startDetailBlink(msg.detailField)
 	}
 	if t := m.taskByUUID(msg.uuid); t != nil {
 		return m, m.startBlink(t.ID, false)
