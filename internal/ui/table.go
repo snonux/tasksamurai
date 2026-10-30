@@ -850,12 +850,17 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
 			}
 		}
-		if m.searchRegex.MatchString(tsk.Project) {
+		if m.searchRegex.MatchString(taskDisplayRecur(tsk)) {
+			if c := m.logicalToDisplay(colRecur); c >= 0 {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+			}
+		}
+		if m.searchRegex.MatchString(taskDisplayProject(tsk)) {
 			if c := m.logicalToDisplay(colProject); c >= 0 {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
 			}
 		}
-		tags := strings.Join(tsk.Tags, " ")
+		tags := strings.Join(taskDisplayTags(tsk), " ")
 		if m.searchRegex.MatchString(tags) {
 			if c := m.logicalToDisplay(colTags); c >= 0 {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
@@ -1587,7 +1592,7 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 
 	tags := strings.Join(taskDisplayTags(t), " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
-	recur := t.Recur
+	recur := taskDisplayRecur(t)
 
 	var anns []string
 	for _, a := range t.Annotations {
@@ -1679,7 +1684,7 @@ func (m *Model) expandedCellView() string {
 	case colDue:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case colRecur:
-		val = t.Recur
+		val = taskDisplayRecur(t)
 	case colProject:
 		val = taskDisplayProject(t)
 	case colTags:
@@ -1772,7 +1777,7 @@ func (m *Model) computeColumnWidths() {
 		if l := ansi.StringWidth(due); l > maxDue {
 			maxDue = l
 		}
-		if l := ansi.StringWidth(t.Recur); l > maxRecur {
+		if l := ansi.StringWidth(taskDisplayRecur(t)); l > maxRecur {
 			maxRecur = l
 		}
 		if l := ansi.StringWidth(taskDisplayProject(t)); l > maxProj {
@@ -1840,9 +1845,17 @@ func (m *Model) columnSpec(logical int) (title string, width int) {
 	case colDue:
 		return "Due", m.dueWidth
 	case colRecur:
-		return "Recur", m.recurWidth
+		title = m.sourceColumnTitle("Recur", "Assignee")
+		if m.jira.source == nil || m.jira.view == "tw" {
+			return title, m.recurWidth
+		}
+		return title, max(m.recurWidth, ansi.StringWidth(title))
 	case colProject:
-		return "Project", m.projWidth
+		title = m.sourceColumnTitle("Project", "Status")
+		if m.jira.source == nil || m.jira.view == "tw" {
+			return title, m.projWidth
+		}
+		return title, max(m.projWidth, ansi.StringWidth(title))
 	case colTags:
 		return "Tags", m.tagsWidth
 	case colAnnotations:

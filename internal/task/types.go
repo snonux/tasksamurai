@@ -19,6 +19,8 @@ type Task struct {
 	Description string   `json:"description"`
 	Project     string   `json:"project"`
 	Tags        []string `json:"tags"`
+	// JiraStatus is the workflow status name, separate from the mapped task status.
+	JiraStatus string `json:"-"`
 	// JiraLabels preserves source labels separately from the virtual jira tag.
 	JiraLabels  []string     `json:"-"`
 	Status      string       `json:"status"`

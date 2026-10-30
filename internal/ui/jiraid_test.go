@@ -138,3 +138,59 @@ func TestJiraDisplayOmitsRedundantMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestJiraStatusAndAssigneeColumns(t *testing.T) {
+	m := newJiraTestModel(t, &fakeTaskwarrior{}, &fakeJiraSource{})
+	jiraTask := task.Task{UUID: "jira:FOO-123", IDText: "FOO-123", Status: "pending", JiraStatus: "In Review", Assignee: "Paul", Project: "FOO"}
+	twTask := task.Task{ID: 1, UUID: "tw-1", Status: "pending", Project: "home", Recur: "weekly"}
+	for _, tc := range []struct {
+		view, projectHeader, recurHeader string
+	}{
+		{"tw", "Project", "Recur"},
+		{"both", "Project / Status", "Recur / Assignee"},
+		{"jira", "Status", "Assignee"},
+	} {
+		t.Run(tc.view, func(t *testing.T) {
+			m.jira.view = tc.view
+			for col, want := range map[int]string{colProject: tc.projectHeader, colRecur: tc.recurHeader} {
+				title, width := m.columnSpec(col)
+				if title != want || (tc.view != "tw" && width < ansi.StringWidth(want)) {
+					t.Fatalf("column %d: %q, width %d", col, title, width)
+				}
+			}
+			for _, value := range []task.Task{jiraTask, twTask} {
+				row := m.taskToRowSearch(value, nil, m.tblStyles, -1)
+				project, recur := "home", "weekly"
+				if isJiraTask(&value) {
+					project, recur = "In Review", "Paul"
+				}
+				for col, want := range map[int]string{colProject: project, colRecur: recur} {
+					if got := strings.TrimSpace(ansi.Strip(row[m.logicalToDisplay(col)])); got != want {
+						t.Fatalf("column %d = %q, want %q", col, got, want)
+					}
+				}
+			}
+		})
+	}
+	m.tasks = []task.Task{jiraTask}
+	m.tbl.SetRows(m.buildTaskRows(m.tasks))
+	m.tbl.SetCursor(0)
+	for query, col := range map[string]int{"In Review": colProject, "Paul": colRecur} {
+		m.searchRegex = regexp.MustCompile(query)
+		m.buildTaskRows(m.tasks)
+		if len(m.searchMatches) != 1 || m.searchMatches[0].col != m.logicalToDisplay(col) {
+			t.Fatalf("search %q: %+v", query, m.searchMatches)
+		}
+		m.tbl.SetColumnCursor(m.logicalToDisplay(col))
+		if got := ansi.Strip(m.expandedCellView()); !strings.Contains(got, query) {
+			t.Fatalf("expanded cell lost %q: %s", query, got)
+		}
+	}
+	jiraTask.Assignee = ""
+	if got := taskDisplayRecur(jiraTask); got != "Unassigned" {
+		t.Fatalf("missing assignee: %q", got)
+	}
+	if jiraTask.Project != "FOO" || jiraTask.Status != "pending" || jiraTask.Recur != "" {
+		t.Fatal("display changed source fields")
+	}
+}

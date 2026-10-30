@@ -189,8 +189,10 @@ unknown-setting errors still fail startup. Configuration changes require a
 restart. An explicit `space` refresh rereads the token file for token rotation.
 
 Jira rows show keys such as `TST-42` and `TST2-42` in the ID column. The list
-omits the redundant project value and synthetic `jira` tag; real Jira labels
-remain visible. Project metadata and the source tag remain available internally
+uses the Project column for workflow status and Recur for assignee, with headers
+`Project / Status` and `Recur / Assignee` in mixed view (`Status` and `Assignee`
+in Jira-only view). Unassigned issues show `Unassigned`. The synthetic `jira`
+tag is hidden; real Jira labels remain visible. Project metadata and the source tag remain available internally
 for filtering. Existing real labels named `jira` are retained separately.
 
 ### Jira controls

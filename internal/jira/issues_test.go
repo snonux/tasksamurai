@@ -29,7 +29,7 @@ func TestIssueMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := c.mapIssue(value, now)
-			if got.ID != 0 || got.IDText != "TST-42" || got.UUID != "jira:TST-42" || got.Description != "Review 日本語" || got.Project != "TST" || got.Priority != "H" || got.Assignee != "Person" || got.Entry != "20261001T080000Z" || got.Due != "20261029T000000Z" || got.Status != tt.status || got.Start != tt.start || got.End != tt.end || strings.Join(got.Tags, ",") != "jira,work" || strings.Join(got.JiraLabels, ",") != "work,jira" || got.Urgency <= 6 {
+			if got.ID != 0 || got.IDText != "TST-42" || got.UUID != "jira:TST-42" || got.Description != "Review 日本語" || got.Project != "TST" || got.Priority != "H" || got.Assignee != "Person" || got.JiraStatus != "Ignore workflow name" || got.Entry != "20261001T080000Z" || got.Due != "20261029T000000Z" || got.Status != tt.status || got.Start != tt.start || got.End != tt.end || strings.Join(got.Tags, ",") != "jira,work" || strings.Join(got.JiraLabels, ",") != "work,jira" || got.Urgency <= 6 {
 				t.Fatalf("incorrect mapping: %+v", got)
 			}
 		})

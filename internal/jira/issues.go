@@ -39,6 +39,7 @@ type issue struct {
 			DisplayName string `json:"displayName"`
 		} `json:"assignee"`
 		Status struct {
+			Name     string `json:"name"`
 			Category struct {
 				Key string `json:"key"`
 			} `json:"statusCategory"`
@@ -168,7 +169,7 @@ func (c *Client) IssueTypes(ctx context.Context, project string) ([]IssueType, e
 
 func (c *Client) mapIssue(value issue, now time.Time) task.Task {
 	f := value.Fields
-	t := task.Task{IDText: value.Key, UUID: "jira:" + value.Key, Description: f.Summary, Project: f.Project.Key, Status: "pending", Assignee: f.Assignee.DisplayName, Entry: taskDate(f.Created), Priority: mapPriority(f.Priority.Name)}
+	t := task.Task{IDText: value.Key, UUID: "jira:" + value.Key, Description: f.Summary, Project: f.Project.Key, Status: "pending", JiraStatus: f.Status.Name, Assignee: f.Assignee.DisplayName, Entry: taskDate(f.Created), Priority: mapPriority(f.Priority.Name)}
 	t.JiraLabels = append([]string{}, f.Labels...)
 	t.Tags = []string{"jira"}
 	for _, label := range f.Labels {

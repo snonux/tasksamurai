@@ -134,7 +134,7 @@ options. Existing `New`/`NewWithTaskwarrior` calls remain valid.
 | `Priority` | Highest/High/H → H, Lowest/Low/L → L, otherwise M |
 | `Tags` | Virtual `jira` tag plus source labels; normal search indexes these |
 | `JiraLabels` | Separate raw label metadata, excluded from Taskwarrior JSON, preserving a real label named `jira` during unrelated edits |
-| `Assignee` | Display-only assignee name in details |
+| `Assignee` / `JiraStatus` | Display-only assignee and workflow status name, distinct from mapped task status |
 | `Annotations` | Lazy first comment page, plus confirmed newly posted comments |
 | `Urgency` | Display score from priority and due date; existing sorting remains overdue/start/priority/due/tags/ID |
 
@@ -258,8 +258,11 @@ Config parsing/defaults/validation/path precedence/token handling; mapping and
 source labels; literal control outcomes and actual TW UUID calls; shared-field
 editors; CJK/long keys; table/ultra/detail rendering; cancellation, stale reads,
 filter epochs, token reload failure and active-view selection. Distinct TST/TST2 issue-key cells are asserted in hermetic UI rendering tests.
-Jira list rows omit redundant project values and synthetic source tags; real
-labels remain visible, while source metadata is retained for filtering.
+Jira list rows replace redundant project values with the workflow status name
+and reuse Recur for assignee (`Unassigned` when empty). Mixed-view headers are
+Project / Status and Recur / Assignee; Jira-only headers are Status and Assignee.
+Synthetic source tags are hidden; real labels remain visible. Source project,
+category-based task status and recurrence metadata remain unchanged.
 
 ### 7.2 httptest
 
