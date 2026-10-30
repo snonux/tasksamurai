@@ -227,6 +227,12 @@ func (m *Model) renderDetailScreen() string {
 			m.scrollDetailToLine(m.detailSearchMatchLine[0])
 		}
 	}
+	// Editors live in their field rows. Fresh offsets reflect changes such as
+	// replacing a long summary with its single-line input; keep that row visible
+	// even if a hotkey opened it while the viewport was elsewhere.
+	if field, ok := m.activeDetailEditorField(); ok {
+		m.scrollDetailToField(field)
+	}
 	lines := []string{m.detailViewport.View()}
 	if footer := m.detailScrollFooter(); footer != "" {
 		lines = append(lines, footer)
@@ -247,4 +253,27 @@ func (m *Model) renderDetailScreen() string {
 			Padding(0, 2).Render(msg))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// activeDetailEditorField identifies the field containing the active input.
+func (m *Model) activeDetailEditorField() (int, bool) {
+	t := m.currentDetailTask()
+	if t == nil {
+		return 0, false
+	}
+	switch {
+	case m.descEditing && m.descAddr == taskAddress(*t):
+		return m.detailDescriptionFieldIndex(), true
+	case m.prioritySelecting && m.priorityID == t.ID:
+		return fieldPriority, true
+	case m.tagsEditing && m.tagsID == t.ID:
+		return fieldTags, true
+	case m.dueEditing && m.dueID == t.ID:
+		return fieldDue, true
+	case m.projEditing && m.projID == t.ID:
+		return fieldProject, true
+	case m.recurEditing && m.recurID == t.ID:
+		return fieldRecur, true
+	}
+	return 0, false
 }
