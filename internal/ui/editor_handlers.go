@@ -49,6 +49,9 @@ func (m *Model) handleDescEditDone(msg descEditDoneMsg) (tea.Model, tea.Cmd) {
 	t := m.currentDetailTask()
 	if t != nil {
 		addr := taskAddress(*t)
+		if m.blockJiraAddress(addr, "e") {
+			return m, nil
+		}
 		if m.taskFlightBlocks() {
 			return m, m.showStatusTimed("Busy: description not saved")
 		}

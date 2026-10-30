@@ -2,34 +2,70 @@ package ui
 
 import "strings"
 
-// jiraBlockedReason is the baseline policy installed before Jira rows enter
-// the table. Feature tasks replace planned controls with Jira implementations.
-func jiraBlockedReason(key string) string {
-	switch key {
-	case "A":
-		return "comments can't be replaced wholesale — use a to add"
-	case "D":
-		return "Jira issues can't be deleted from here"
-	case "U":
-		return "no undo for Jira issues"
-	case "R", "ctrl+r":
-		return "Jira issues have no recurrence"
-	case "J", "T":
-		return "moving Jira issues not supported (yet)"
-	case ";":
-		return "task commands don't work on Jira issues"
-	case "d", "s":
-		return "not yet — Jira write support for transitions is planned"
-	case "w", "W", "r":
-		return "not yet — Jira write support for due dates is planned"
-	case "p":
-		return "not yet — Jira write support for priority is planned"
-	case "t":
-		return "not yet — Jira write support for labels is planned"
-	case "e", "E":
-		return "not yet — Jira write support for summary is planned"
+// controlRoute describes how a control acts on its target. Field controls
+// delegate to the selected column/detail field; activation helpers check that
+// field's control again before opening any editor.
+type controlRoute uint8
+
+const (
+	routeGlobal controlRoute = iota
+	routeTaskwarrior
+	routeJira
+	routeBlocked
+	routeField
+)
+
+type controlPolicy struct {
+	route  controlRoute
+	reason string
+}
+
+// jiraControlPolicy is the source-specific dispatch policy. Navigation and
+// presentation controls are global by default. Keep row operations explicit:
+// Phase-2 implementations replace their planned block here and route the
+// corresponding activation/commit boundaries to Jira too. Merely allowing a
+// control here must never send Jira addresses through a TW-only commit,
+// description-editor callback or delayed-done pipeline.
+var jiraControlPolicy = map[string]controlPolicy{
+	"a":     {route: routeJira},
+	"o":     {route: routeJira},
+	"i":     {route: routeField},
+	"enter": {route: routeField},
+	":":     {route: routeGlobal},
+	"+":     {route: routeGlobal},
+	"A":     {routeBlocked, "comments can't be replaced wholesale — use a to add"},
+	"D":     {routeBlocked, "Jira issues can't be deleted from here"},
+	"U":     {routeBlocked, "no undo for Jira issues"},
+	"R":     {routeBlocked, "Jira issues have no recurrence"},
+	"J":     {routeBlocked, "moving Jira issues not supported (yet)"},
+	";":     {routeBlocked, "task commands don't work on Jira issues"},
+	"d":     {routeBlocked, "not yet — Jira write support for transitions is planned"},
+	"s":     {routeBlocked, "not yet — Jira write support for transitions is planned"},
+	"w":     {routeBlocked, "not yet — Jira write support for due dates is planned"},
+	"p":     {routeBlocked, "not yet — Jira write support for priority is planned"},
+	"t":     {routeBlocked, "not yet — Jira write support for labels is planned"},
+	"e":     {routeBlocked, "not yet — Jira write support for summary is planned"},
+}
+
+// Aliases share the canonical control's policy and reason. In particular E
+// must never fall through to the external Taskwarrior editor on a Jira row.
+var controlAliases = map[string]string{
+	"E": "e", "r": "w", "W": "w", "ctrl+r": "R", "T": "J",
+}
+
+func routeControl(addr, key string) controlPolicy {
+	if canonical, ok := controlAliases[key]; ok {
+		key = canonical
 	}
-	return ""
+	policy := jiraControlPolicy[key]
+	if !strings.HasPrefix(addr, "jira:") && (policy.route == routeJira || policy.route == routeBlocked) {
+		return controlPolicy{route: routeTaskwarrior}
+	}
+	return policy
+}
+
+func jiraBlockedReason(key string) string {
+	return routeControl("jira:", key).reason
 }
 
 func (m *Model) blockJiraAction(key string) bool {
@@ -41,11 +77,8 @@ func (m *Model) blockJiraAction(key string) bool {
 }
 
 func (m *Model) blockJiraAddress(addr, key string) bool {
-	if !strings.HasPrefix(addr, "jira:") {
-		return false
-	}
-	if reason := jiraBlockedReason(key); reason != "" {
-		m.statusMsg = reason
+	if policy := routeControl(addr, key); policy.route == routeBlocked {
+		m.statusMsg = policy.reason
 		return true
 	}
 	return false

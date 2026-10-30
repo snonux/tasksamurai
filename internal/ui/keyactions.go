@@ -108,7 +108,7 @@ func (m *Model) handleOpenURL() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if isJiraTask(task) {
+	if routeControl(task.UUID, "o").route == routeJira {
 		if url := m.jiraIssueURL(task); url != "" {
 			return m, openURLCmd(m.browserForURL(url), url, task.ID)
 		}
@@ -466,6 +466,9 @@ func (m *Model) handleSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (tea.Model, tea.Cmd) {
+	if m.blockJiraAddress(tsk.UUID, "ctrl+r") {
+		return m, nil
+	}
 	if !isRecurringTask(tsk) {
 		m.statusMsg = "Selected task is not recurring; use R to edit this task"
 		return m, nil
@@ -526,7 +529,7 @@ func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
 	m.annotating = true
 	m.replaceAnnotations = replace
 	m.annotateInput.Prompt = "annotation: "
-	if isJiraTask(tsk) {
+	if routeControl(tsk.UUID, key).route == routeJira {
 		m.annotateInput.Prompt = "comment: "
 	}
 	m.annotateInput.SetValue("")

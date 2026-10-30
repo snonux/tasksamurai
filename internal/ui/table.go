@@ -619,6 +619,9 @@ func (m *Model) blinkDoneAddress(id int) string {
 }
 
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
+	if markDone && m.blockJiraAddress(m.taskAddressByID(id), "d") {
+		return nil
+	}
 	m.blinkID = id
 	// Capture the CLI address now: Taskwarrior renumbers pending IDs whenever
 	// the working set changes, so by the time the blink ends (or a reload in

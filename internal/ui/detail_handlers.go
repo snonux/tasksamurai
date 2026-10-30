@@ -228,9 +228,6 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 // handleDetailDynamicFields handles editing activation for the task fields
 // whose index depends on whether the optional Recur field is present.
 func (m *Model) handleDetailDynamicFields(id int, addr string, t *task.Task) (tea.Model, tea.Cmd) {
-	if m.blockJiraAddress(addr, "e") {
-		return m, nil
-	}
 	// fieldEntry is 8; the next slot is 9, which holds Recur when present.
 	fieldPos := fieldEntry + 1
 	if t.Recur != "" {
@@ -241,6 +238,9 @@ func (m *Model) handleDetailDynamicFields(id int, addr string, t *task.Task) (te
 		fieldPos++
 	}
 	if m.detailFieldIndex == fieldPos {
+		if m.blockJiraAddress(addr, "e") {
+			return m, nil
+		}
 		// Launch external editor for description editing.
 		m.detailDescEditing = true
 		return m, editDescriptionCmd(t.Description)

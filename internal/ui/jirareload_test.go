@@ -306,9 +306,28 @@ func TestJiraProjectsRenderDistinctKeys(t *testing.T) {
 }
 
 func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
-	keys := []string{"e", "E", "s", "d", "D", "U", "w", "W", "r", "p", "t", "A", "J", "T", "R", "ctrl+r", ";"}
+	cases := []struct{ key, reason string }{
+		{"e", "not yet — Jira write support for summary is planned"},
+		{"E", "not yet — Jira write support for summary is planned"},
+		{"s", "not yet — Jira write support for transitions is planned"},
+		{"d", "not yet — Jira write support for transitions is planned"},
+		{"D", "Jira issues can't be deleted from here"},
+		{"U", "no undo for Jira issues"},
+		{"w", "not yet — Jira write support for due dates is planned"},
+		{"W", "not yet — Jira write support for due dates is planned"},
+		{"r", "not yet — Jira write support for due dates is planned"},
+		{"p", "not yet — Jira write support for priority is planned"},
+		{"t", "not yet — Jira write support for labels is planned"},
+		{"A", "comments can't be replaced wholesale — use a to add"},
+		{"J", "moving Jira issues not supported (yet)"},
+		{"T", "moving Jira issues not supported (yet)"},
+		{"R", "Jira issues have no recurrence"},
+		{"ctrl+r", "Jira issues have no recurrence"},
+		{";", "task commands don't work on Jira issues"},
+	}
 	for _, mode := range []string{"table", "ultra", "detail"} {
-		for _, key := range keys {
+		for _, tc := range cases {
+			key := tc.key
 			t.Run(mode+"/"+key, func(t *testing.T) {
 				source := &fakeJiraSource{fetch: func(context.Context, string) ([]task.Task, error) { return jiraRows(), nil }}
 				m := newJiraTestModel(t, &fakeTaskwarrior{}, source)
@@ -321,8 +340,12 @@ func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
 					m.showTaskDetail = true
 					m.setCurrentTaskDetail(&m.tasks[0])
 				}
+				m.pushUndoAction("done", []undoRestore{{uuid: "tw-pending-undo", status: "pending"}})
 				_, cmd := m.Update(jiraKeyPress(key))
-				if cmd != nil || m.anyInputActive() || m.taskFlightActive() || m.blinkID != 0 || m.statusMsg != jiraBlockedReason(key) {
+				if len(m.undoStack) != 1 {
+					t.Fatal("blocked Jira action consumed TW undo")
+				}
+				if cmd != nil || m.anyInputActive() || m.taskFlightActive() || m.blinkID != 0 || m.statusMsg != tc.reason {
 					t.Fatalf("mutation escaped guard key=%s mode=%s status=%s", key, mode, m.statusMsg)
 				}
 			})

@@ -111,6 +111,9 @@ func (m *Model) busyCommitErr() error {
 // doneOp marks addr done.
 func doneOp(addr string) mutateOp {
 	return func(ctx context.Context, tw task.Taskwarrior) error {
+		if policy := routeControl(addr, "d"); policy.route == routeBlocked {
+			return fmt.Errorf("%s", policy.reason)
+		}
 		return tw.DoneContext(ctx, addr)
 	}
 }

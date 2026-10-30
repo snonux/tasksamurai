@@ -55,7 +55,15 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if !m.replaceAnnotations && strings.TrimSpace(value) == "" {
 			return nil, fmt.Errorf("annotation cannot be empty")
 		}
-		if strings.HasPrefix(m.annotateAddr, "jira:") {
+		key := "a"
+		if m.replaceAnnotations {
+			key = "A"
+		}
+		policy := routeControl(m.annotateAddr, key)
+		if policy.route == routeBlocked {
+			return nil, fmt.Errorf("%s", policy.reason)
+		}
+		if policy.route == routeJira {
 			return m.scheduleJiraComment(value)
 		}
 		if m.taskFlightBlocks() {
@@ -94,6 +102,9 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleDescriptionMode handles keyboard input when editing description
 func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.descAddr, "e") {
+		return m, nil
+	}
 	onExit := func() {
 		m.descEditing = false
 	}
@@ -124,6 +135,9 @@ func (m *Model) handleDescriptionMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 // handleTagsMode handles keyboard input when editing tags
 func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.tagsAddr, "t") {
+		return m, nil
+	}
 	onExit := func() {
 		m.tagsEditing = false
 	}
@@ -186,6 +200,9 @@ func (m *Model) handleTagsMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleDueEditMode handles due date editing
 func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.dueAddr, "w") {
+		return m, nil
+	}
 	switch msg.String() {
 	case "enter":
 		if m.taskFlightBlocks() {
@@ -233,6 +250,9 @@ func (m *Model) handleDueEditMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleRecurrenceMode handles recurrence editing
 func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.recurAddr, "R") {
+		return m, nil
+	}
 	onExit := func() {
 		m.recurEditing = false
 		m.recurSeries = false
@@ -276,6 +296,9 @@ func (m *Model) handleRecurrenceMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleProjectMode handles project editing
 func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.projAddr, "J") {
+		return m, nil
+	}
 	onExit := func() {
 		m.projEditing = false
 	}
@@ -307,6 +330,9 @@ func (m *Model) handleProjectMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handlePriorityMode handles priority selection
 func (m *Model) handlePriorityMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" && m.blockJiraAddress(m.priorityAddr, "p") {
+		return m, nil
+	}
 	switch msg.String() {
 	case "enter":
 		priority := priorityOptions[m.priorityIndex]

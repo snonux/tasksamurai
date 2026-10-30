@@ -116,6 +116,9 @@ func (m *Model) scheduleDeleteSeries(tsk task.Task) tea.Cmd {
 // scheduleUndoAction arms a mutating flight for the top undo entry without
 // popping the stack until a successful DoneMsg.
 func (m *Model) scheduleUndoAction() tea.Cmd {
+	if m.blockJiraAction("U") {
+		return nil
+	}
 	if len(m.undoStack) == 0 {
 		return nil
 	}
