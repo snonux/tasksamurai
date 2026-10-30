@@ -13,6 +13,8 @@ type Annotation struct {
 
 type Task struct {
 	ID          int          `json:"id"`
+	IDText      string       `json:"id_text,omitempty"`
+	Assignee    string       `json:"assignee,omitempty"`
 	UUID        string       `json:"uuid"`
 	Description string       `json:"description"`
 	Project     string       `json:"project"`

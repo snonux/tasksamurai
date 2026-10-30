@@ -45,6 +45,25 @@ func Test() error {
 	return runTests()
 }
 
+// Jiratest runs the explicitly opted-in live Jira integration tests.
+func Jiratest() error {
+	if os.Getenv("JIRA_INTEGRATION") != "1" {
+		return fmt.Errorf("set JIRA_INTEGRATION=1 to opt into live Jira tests")
+	}
+	if err := jiraPrerequisites(); err != nil {
+		return err
+	}
+	return sh.RunV("go", "test", "-tags", "integration", "-count=1", "-v", "./internal/jira/...")
+}
+
+// Jiracheck checks live Jira prerequisites without creating or modifying issues.
+func Jiracheck() error {
+	if err := jiraPrerequisites(); err != nil {
+		return err
+	}
+	return sh.RunWithV(map[string]string{"JIRA_INTEGRATION": "1"}, "go", "test", "-tags", "integration", "-count=1", "-v", "./internal/jira/...", "-run", "^TestIntegrationPrerequisites$")
+}
+
 // Verify runs formatting and static checks before tests.
 func Verify() error {
 	fmt.Println("Checking gofmt...")
@@ -120,6 +139,33 @@ func runTests() error {
 	}
 	if err := sh.RunV("go", "test", "-tags", "mage", "."); err != nil {
 		return fmt.Errorf("test Magefile: %w", err)
+	}
+	return nil
+}
+
+func jiraPrerequisites() error {
+	for _, name := range []string{"JIRA_TEST_SITE", "JIRA_TEST_EMAIL", "JIRA_TEST_PROJECT"} {
+		if strings.TrimSpace(os.Getenv(name)) == "" {
+			return fmt.Errorf("%s must be set for Jira integration checks", name)
+		}
+	}
+	path := os.Getenv("JIRA_TEST_TOKEN_FILE")
+	if path == "" {
+		path = "~/.jira_api_token"
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve token home: %w", err)
+		}
+		path = filepath.Join(home, path[2:])
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read Jira token file: %w", err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return fmt.Errorf("Jira token file is empty")
 	}
 	return nil
 }
