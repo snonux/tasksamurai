@@ -421,10 +421,12 @@ func (m *Model) taskByUUID(uuid string) *task.Task {
 	return nil
 }
 
-// taskIDLabel returns the display form of a task ID: the numeric ID for
-// pending tasks, and a check mark for completed tasks, whose synthetic display
-// ID would otherwise leak into the detail view.
+// taskIDLabel prefers an external issue key, otherwise the numeric pending ID
+// or a completed Taskwarrior check mark, hiding synthetic display IDs.
 func (m *Model) taskIDLabel(t *task.Task) string {
+	if t.IDText != "" {
+		return t.IDText
+	}
 	if t.Status == "completed" {
 		return "✓"
 	}

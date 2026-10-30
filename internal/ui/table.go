@@ -786,6 +786,11 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 		if m.searchRegex == nil {
 			continue
 		}
+		if tsk.IDText != "" && m.searchRegex.MatchString(tsk.IDText) {
+			if c := m.logicalToDisplay(colID); c >= 0 {
+				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
+			}
+		}
 		if m.searchRegex.MatchString(tsk.Project) {
 			if c := m.logicalToDisplay(colProject); c >= 0 {
 				m.searchMatches = append(m.searchMatches, cellMatch{row: i, col: c})
@@ -1516,12 +1521,9 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	}
 
 	priStr := m.formatPriority(t.Priority, m.priWidth)
-	var idStr string
-	if completed {
-		// Check mark instead of the raw (synthetic) display ID.
-		idStr = getStyle(colID).Render("✓")
-	} else {
-		idStr = getStyle(colID).Render(strconv.Itoa(t.ID))
+	idStr := getStyle(colID).Render(m.taskIDLabel(&t))
+	if t.IDText != "" {
+		idStr = m.highlightCell(getStyle(colID), re, t.IDText)
 	}
 	dueStr := m.formatDue(t.Due, m.dueWidth)
 	if completed {
@@ -1585,7 +1587,7 @@ func (m *Model) expandedCellView() string {
 	case colPri:
 		val = ansi.Strip(m.formatPriority(t.Priority, m.priWidth))
 	case colID:
-		val = strconv.Itoa(t.ID)
+		val = m.taskIDLabel(&t)
 	case colDue:
 		val = ansi.Strip(m.formatDue(t.Due, m.dueWidth))
 	case colRecur:
@@ -1668,7 +1670,7 @@ func (m *Model) computeColumnWidths() {
 	maxAnn := 1
 	maxProj := 1
 	for _, t := range m.tasks {
-		if l := ansi.StringWidth(strconv.Itoa(t.ID)); l > maxID {
+		if l := ansi.StringWidth(m.taskIDLabel(&t)); l > maxID {
 			maxID = l
 		}
 		urg := fmt.Sprintf("%.1f", t.Urgency)

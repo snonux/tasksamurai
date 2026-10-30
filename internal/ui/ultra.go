@@ -545,15 +545,17 @@ func (m *Model) ultraCursorStatus(tasks []task.Task) string {
 	return fmt.Sprintf("%d/%d", cursor+1, len(tasks))
 }
 
+func (m *Model) ultraIDText(t task.Task) string {
+	if t.IDText != "" || t.Status == "completed" {
+		return m.taskIDLabel(&t)
+	}
+	return fmt.Sprintf("#%d", t.ID)
+}
+
 // ultraStatusText returns the plain-text representation of the consolidated
 // status line for search indexing. Priority is omitted when unset.
 func (m *Model) ultraStatusText(t task.Task) string {
-	idText := fmt.Sprintf("#%d", t.ID)
-	if t.Status == "completed" {
-		// Keep the plain-text search index in sync with the rendered card,
-		// which shows a check mark instead of the synthetic display ID.
-		idText = "✓"
-	}
+	idText := m.ultraIDText(t)
 	parts := []string{idText}
 	if t.Priority != "" {
 		parts = append(parts, t.Priority)
@@ -669,12 +671,7 @@ func (m *Model) renderUltraAnnotations(t task.Task, width int) string {
 func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Regexp, bg string) string {
 	_ = width
 	completed := t.Status == "completed"
-	idText := fmt.Sprintf("#%d", t.ID)
-	if completed {
-		// Taskwarrior exports completed tasks with ID 0; show a check mark
-		// instead of the synthetic display ID.
-		idText = "✓"
-	}
+	idText := m.ultraIDText(t)
 	statusText := ultraOrDash(t.Status)
 	urgencyText := fmt.Sprintf("%.1f", t.Urgency)
 	due := ultraDueValue(m, t.Due)
