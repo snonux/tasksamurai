@@ -78,7 +78,9 @@ refreshes the task list instead of paging. All long content stays reachable —
 nothing is cut off at the bottom of the screen.
 
 When Jira is enabled, press `F` in table or ultra mode to choose a named Jira
-filter. Use `j`/`k` or the arrow keys, `Enter` to apply, and `Esc` to cancel.
+filter. Type to fuzzy-search names and JQL; use the arrow keys or Ctrl+n/Ctrl+p
+to navigate, `Enter` to apply, and `Esc` to cancel. Clearing the query restores
+the full list.
 `(none) all issues` removes the JQL restriction; some sites require a restricted
 filter. This selection lasts for the session and refreshes Jira issues only.
 
