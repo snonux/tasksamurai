@@ -257,8 +257,9 @@ the entire list afterward.
 Config parsing/defaults/validation/path precedence/token handling; mapping and
 source labels; literal control outcomes and actual TW UUID calls; shared-field
 editors; CJK/long keys; table/ultra/detail rendering; cancellation, stale reads,
-filter epochs, token reload failure and active-view selection. Both TST/TST2
-project and issue-key cells are asserted in hermetic UI rendering tests.
+filter epochs, token reload failure and active-view selection. Distinct TST/TST2 issue-key cells are asserted in hermetic UI rendering tests.
+Jira list rows omit redundant project values and synthetic source tags; real
+labels remain visible, while source metadata is retained for filtering.
 
 ### 7.2 httptest
 

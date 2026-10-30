@@ -293,8 +293,8 @@ func TestJiraProjectsRenderDistinctKeys(t *testing.T) {
 	}
 	for i, value := range m.tasks {
 		row := m.tbl.Rows()[i]
-		if got := strings.TrimSpace(ansi.Strip(row[m.logicalToDisplay(colProject)])); got != value.Project {
-			t.Fatalf("project cell %q, want %q", got, value.Project)
+		if got := strings.TrimSpace(ansi.Strip(row[m.logicalToDisplay(colProject)])); got != "" {
+			t.Fatalf("redundant project cell %q", got)
 		}
 		if got := strings.TrimSpace(ansi.Strip(row[m.logicalToDisplay(colID)])); got != value.IDText {
 			t.Fatalf("issue-key cell %q, want %q", got, value.IDText)

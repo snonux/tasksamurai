@@ -188,10 +188,10 @@ skips Jira semantic validation and token reads; TOML syntax, field-type and
 unknown-setting errors still fail startup. Configuration changes require a
 restart. An explicit `space` refresh rereads the token file for token rotation.
 
-Jira rows show keys such as `TST-42` and `TST2-42` in the ID column and the
-source project key in the Project column. The virtual `jira` tag identifies
-these rows. Existing real labels named `jira` are retained separately, so an
-unrelated label edit does not delete them.
+Jira rows show keys such as `TST-42` and `TST2-42` in the ID column. The list
+omits the redundant project value and synthetic `jira` tag; real Jira labels
+remain visible. Project metadata and the source tag remain available internally
+for filtering. Existing real labels named `jira` are retained separately.
 
 ### Jira controls
 

@@ -198,7 +198,7 @@ func (m *Model) renderDetailTagsField(labelStyle, valueStyle lipgloss.Style, cf 
 		m.tagsInput.Prompt = orig
 		return m.renderEditingField("Tags", v, labelStyle, cf)
 	}
-	tagStr := strings.Join(t.Tags, ", ")
+	tagStr := strings.Join(taskDisplayTags(*t), ", ")
 	if tagStr == "" {
 		tagStr = "-"
 	}

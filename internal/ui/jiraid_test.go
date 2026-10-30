@@ -93,3 +93,48 @@ func TestTaskwarriorJSONLeavesExternalIDEmpty(t *testing.T) {
 		t.Fatalf("TW parsing changed: %+v", value)
 	}
 }
+
+func TestJiraDisplayOmitsRedundantMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		value         task.Task
+		project, tags string
+	}{
+		{"synthetic tag", task.Task{UUID: "jira:FOO-123", IDText: "FOO-123", Project: "FOO", Tags: []string{"jira"}}, "", ""},
+		{"real labels", task.Task{UUID: "jira:FOO-123", IDText: "FOO-123", Project: "FOO", Tags: []string{"jira", "backend"}, JiraLabels: []string{"backend"}}, "", "backend"},
+		{"real jira label", task.Task{UUID: "jira:FOO-123", IDText: "FOO-123", Project: "FOO", Tags: []string{"jira", "backend"}, JiraLabels: []string{"jira", "backend"}}, "", "jira backend"},
+		{"Taskwarrior", task.Task{UUID: "tw-1", Project: "FOO", Tags: []string{"jira", "backend"}}, "FOO", "jira backend"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.value.Status = "pending"
+			m, err := NewWithTaskwarrior(nil, "firefox", &fakeTaskwarrior{tasks: []task.Task{tc.value}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			row := m.taskToRowSearch(tc.value, nil, m.tblStyles, -1)
+			for col, want := range map[int]string{colProject: tc.project, colTags: tc.tags} {
+				if got := strings.TrimSpace(ansi.Strip(row[m.logicalToDisplay(col)])); got != want {
+					t.Fatalf("column %d = %q, want %q", col, got, want)
+				}
+			}
+			if isJiraTask(&tc.value) {
+				for _, re := range []*regexp.Regexp{nil, regexp.MustCompile(`pending \|`)} {
+					for _, text := range []string{m.ultraStatusText(tc.value), ansi.Strip(m.renderUltraStatusWithRegex(tc.value, 120, re, ""))} {
+						if !strings.Contains(text, tc.value.IDText) || strings.Contains(text, "proj:") {
+							t.Fatalf("redundant project or missing issue key: %q", text)
+						}
+						if tc.tags == "" && strings.Contains(text, "tags:") {
+							t.Fatalf("empty synthetic tags: %q", text)
+						}
+						if tc.tags != "" && !strings.Contains(text, "tags: "+tc.tags) {
+							t.Fatalf("lost real labels: %q", text)
+						}
+					}
+				}
+			}
+			if tc.value.Project != "FOO" || tc.value.Tags[0] != "jira" {
+				t.Fatal("display mutated source metadata")
+			}
+		})
+	}
+}

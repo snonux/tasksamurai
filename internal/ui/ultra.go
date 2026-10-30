@@ -568,9 +568,13 @@ func (m *Model) ultraStatusText(t task.Task) string {
 		ultraOrDash(t.Status),
 		fmt.Sprintf("%.1f", t.Urgency),
 		"due: "+ultraDueValue(m, t.Due),
-		"proj: "+ultraOrDash(t.Project),
-		"tags: "+ultraOrDash(strings.Join(t.Tags, " ")),
 	)
+	if !isJiraTask(&t) {
+		parts = append(parts, "proj: "+ultraOrDash(t.Project))
+	}
+	if tags := taskDisplayTags(t); len(tags) > 0 || !isJiraTask(&t) {
+		parts = append(parts, "tags: "+ultraOrDash(strings.Join(tags, " ")))
+	}
 	return strings.Join(parts, " | ")
 }
 
@@ -684,7 +688,7 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 		due = ultraOrDash(formatDueText(t.Due))
 	}
 	project := ultraOrDash(t.Project)
-	tags := ultraOrDash(strings.Join(t.Tags, " "))
+	tags := ultraOrDash(strings.Join(taskDisplayTags(t), " "))
 
 	// Build plain-text line for whole-line search matching.
 	// Priority badges render as 3-char pills (Width(3)+Center) in the styled
@@ -694,7 +698,13 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 		plainParts = append(plainParts, " "+t.Priority+" ")
 	}
 	plainParts = append(plainParts, statusText, urgencyText,
-		"due: "+due, "proj: "+project, "tags: "+tags)
+		"due: "+due)
+	if !isJiraTask(&t) {
+		plainParts = append(plainParts, "proj: "+project)
+	}
+	if len(taskDisplayTags(t)) > 0 || !isJiraTask(&t) {
+		plainParts = append(plainParts, "tags: "+tags)
+	}
 	line := strings.Join(plainParts, " | ")
 
 	// Fall back to whole-line rendering when the regex spans a separator or a
@@ -752,9 +762,13 @@ func (m *Model) renderUltraStatusWithRegex(t task.Task, width int, re *regexp.Re
 	parts = append(parts,
 		status, urgency,
 		m.ultraKeyValue(re, "due", due, bg),
-		m.ultraKeyValue(re, "proj", project, bg),
-		m.ultraKeyValue(re, "tags", tags, bg),
 	)
+	if !isJiraTask(&t) {
+		parts = append(parts, m.ultraKeyValue(re, "proj", project, bg))
+	}
+	if len(taskDisplayTags(t)) > 0 || !isJiraTask(&t) {
+		parts = append(parts, m.ultraKeyValue(re, "tags", tags, bg))
+	}
 	return strings.Join(parts, sep)
 }
 

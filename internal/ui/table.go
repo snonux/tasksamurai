@@ -1585,7 +1585,7 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 		rowStyle = rowStyle.Reverse(true)
 	}
 
-	tags := strings.Join(t.Tags, " ")
+	tags := strings.Join(taskDisplayTags(t), " ")
 	urg := fmt.Sprintf("%.1f", t.Urgency)
 	recur := t.Recur
 
@@ -1622,7 +1622,7 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 		priStr = getStyle(colPri).Render(t.Priority)
 	}
 	recurStr := m.highlightCell(getStyle(colRecur), re, recur)
-	projStr := m.highlightCell(getStyle(colProject), re, t.Project)
+	projStr := m.highlightCell(getStyle(colProject), re, taskDisplayProject(t))
 	tagStr := m.highlightCell(getStyle(colTags), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
@@ -1681,9 +1681,9 @@ func (m *Model) expandedCellView() string {
 	case colRecur:
 		val = t.Recur
 	case colProject:
-		val = t.Project
+		val = taskDisplayProject(t)
 	case colTags:
-		val = strings.Join(t.Tags, " ")
+		val = strings.Join(taskDisplayTags(t), " ")
 	case colAnnotations:
 		var anns []string
 		for _, a := range t.Annotations {
@@ -1775,10 +1775,10 @@ func (m *Model) computeColumnWidths() {
 		if l := ansi.StringWidth(t.Recur); l > maxRecur {
 			maxRecur = l
 		}
-		if l := ansi.StringWidth(t.Project); l > maxProj {
+		if l := ansi.StringWidth(taskDisplayProject(t)); l > maxProj {
 			maxProj = l
 		}
-		tags := strings.Join(t.Tags, " ")
+		tags := strings.Join(taskDisplayTags(t), " ")
 		if l := ansi.StringWidth(tags); l > maxTags {
 			maxTags = l
 		}
