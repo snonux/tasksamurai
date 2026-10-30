@@ -21,6 +21,14 @@ type FilterSource interface {
 	FetchFilters(context.Context) ([]jira.SavedFilter, error)
 }
 
+// TransitionSource is the optional phase-2 workflow capability.
+type TransitionSource interface {
+	Transitions(context.Context, string) ([]jira.Transition, error)
+	DoTransition(context.Context, string, string, map[string]any) error
+}
+
+var _ TransitionSource = (*jira.Client)(nil)
+
 var _ FilterSource = (*jira.Client)(nil)
 
 var _ IssueSource = (*jira.Client)(nil)

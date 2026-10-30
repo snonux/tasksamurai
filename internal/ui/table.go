@@ -422,6 +422,9 @@ func (m *Model) cancelTaskOperations() {
 	if m.jira.commentCancel != nil {
 		m.jira.commentCancel()
 	}
+	if m.jira.mutationCancel != nil {
+		m.jira.mutationCancel()
+	}
 	if m.cancelTaskContext != nil {
 		m.cancelTaskContext()
 	}
@@ -619,6 +622,11 @@ func (m *Model) blinkDoneAddress(id int) string {
 }
 
 func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
+	if markDone {
+		if t := m.taskByID(id); isJiraTask(t) {
+			return m.scheduleJiraTransition(t, "done")
+		}
+	}
 	if markDone && m.blockJiraAddress(m.taskAddressByID(id), "d") {
 		return nil
 	}
@@ -878,6 +886,8 @@ func (m *Model) Init() tea.Cmd { return m.scheduleJiraReload(false) }
 // Update handles key and window events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case jiraMutationDoneMsg:
+		return m.handleJiraMutationDone(msg)
 	case jiraDetailDoneMsg:
 		return m.handleJiraDetailDone(msg)
 	case jiraCommentDoneMsg:

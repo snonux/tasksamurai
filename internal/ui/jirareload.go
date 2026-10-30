@@ -25,6 +25,7 @@ type jiraState struct {
 	view             string
 	filter           config.Filter
 	filterID         string
+	filterEpoch      int
 	tasks            []task.Task
 	lastFetched      time.Time
 	loading          bool
@@ -36,6 +37,9 @@ type jiraState struct {
 	detailCancel     context.CancelFunc
 	commentCancel    context.CancelFunc
 	commenting       bool
+	mutating         bool
+	mutationGen      int
+	mutationCancel   context.CancelFunc
 	remaining        map[string]int
 	picker           jiraFilterPicker
 	cloudFilters     []jira.SavedFilter
@@ -138,6 +142,7 @@ func (m *Model) setJiraFilter(filter config.Filter, identity string) tea.Cmd {
 		return nil
 	}
 	if identity != m.jira.filterID || filter.JQL != m.jira.filter.JQL {
+		m.jira.filterEpoch++
 		m.jira.tasks = nil
 		m.jira.lastFetched = time.Time{}
 	}

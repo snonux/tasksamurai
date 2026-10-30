@@ -1269,6 +1269,9 @@ func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
+	if isJiraTask(m.getTaskForOpenURL()) {
+		return m.handleMarkDone()
+	}
 	if m.blockJiraAction("d") {
 		return m, nil
 	}

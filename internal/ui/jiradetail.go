@@ -125,6 +125,9 @@ func (m *Model) scheduleJiraComment(value string) (tea.Cmd, error) {
 	if m.jira.commenting {
 		return nil, fmt.Errorf("Jira comment is still being submitted")
 	}
+	if m.jira.mutating {
+		return nil, fmt.Errorf("Jira write is still being submitted")
+	}
 	m.invalidateJiraReads()
 	ctx, cancel := m.jiraContext()
 	m.jira.commentCancel, m.jira.commenting = cancel, true

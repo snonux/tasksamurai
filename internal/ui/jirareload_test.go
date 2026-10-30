@@ -309,8 +309,8 @@ func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
 	cases := []struct{ key, reason string }{
 		{"e", "not yet — Jira write support for summary is planned"},
 		{"E", "not yet — Jira write support for summary is planned"},
-		{"s", "not yet — Jira write support for transitions is planned"},
-		{"d", "not yet — Jira write support for transitions is planned"},
+		{"s", "Jira transitions are unavailable"},
+		{"d", "Jira transitions are unavailable"},
 		{"D", "Jira issues can't be deleted from here"},
 		{"U", "no undo for Jira issues"},
 		{"w", "not yet — Jira write support for due dates is planned"},

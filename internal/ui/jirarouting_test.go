@@ -223,7 +223,7 @@ func TestRoutingCommitBoundariesRejectJira(t *testing.T) {
 	if cmd := m.startBlink(m.tasks[0].ID, true); cmd != nil || m.blinkID != 0 {
 		t.Fatal("Jira entered delayed completion")
 	}
-	if err := doneOp("jira:TST-42")(context.Background(), tw); err == nil || err.Error() != "not yet — Jira write support for transitions is planned" {
+	if err := doneOp("jira:TST-42")(context.Background(), tw); err == nil || err.Error() != "Jira transitions must use the Jira source" {
 		t.Fatalf("done boundary error: %v", err)
 	}
 	if len(tw.calls) != 0 {
@@ -349,8 +349,8 @@ func TestRoutingDirectHandlersAndEditorCallback(t *testing.T) {
 		{"E", "not yet — Jira write support for summary is planned", (*Model).handleEditTask},
 		{"r", "not yet — Jira write support for due dates is planned", (*Model).handleRandomDueDate},
 		{";", "task commands don't work on Jira issues", (*Model).handleShellPromptForSelectedTask},
-		{"s", "not yet — Jira write support for transitions is planned", (*Model).handleUltraToggleStart},
-		{"d", "not yet — Jira write support for transitions is planned", (*Model).handleDetailMarkDone},
+		{"s", "Jira transitions are unavailable", (*Model).handleUltraToggleStart},
+		{"d", "Jira transitions are unavailable", (*Model).handleDetailMarkDone},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key, func(t *testing.T) {

@@ -31,6 +31,9 @@ func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		return m, m.scheduleJiraTransition(t, "toggle")
+	}
 	if m.blockJiraAction("s") {
 		return m, nil
 	}
@@ -66,6 +69,9 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		return m, m.scheduleJiraTransition(t, "done")
+	}
 	if m.blockJiraAction("d") {
 		return m, nil
 	}

@@ -119,6 +119,8 @@ func (c *Client) request(ctx context.Context, method, path string, body, out any
 			if len(payload) == 0 || bytes.Equal(bytes.TrimSpace(payload), []byte("null")) || json.Unmarshal(payload, out) != nil {
 				return &APIError{status, fmt.Sprintf("unexpected response from Jira (HTTP %d)", status)}
 			}
+		} else if len(bytes.TrimSpace(payload)) > 0 && !json.Valid(payload) {
+			return &APIError{status, fmt.Sprintf("unexpected response from Jira (HTTP %d)", status)}
 		}
 		return nil
 	}

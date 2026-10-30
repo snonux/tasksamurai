@@ -100,6 +100,11 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleOpenURL()
 	case "d":
 		return m.handleDetailMarkDone()
+	case "s":
+		if isJiraTask(m.currentDetailTask()) {
+			return m.handleToggleStart()
+		}
+		return m, nil
 	case "D":
 		return m.handleDetailDeleteTask()
 	case "U":
@@ -119,6 +124,9 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // for the blink animation and so the (now-completed) task isn't shown as
 // pending after the async done mutate+reload completes.
 func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
+	if t := m.getTaskForOpenURL(); isJiraTask(t) {
+		return m, m.scheduleJiraTransition(t, "done")
+	}
 	if m.blockJiraAction("d") {
 		return m, nil
 	}

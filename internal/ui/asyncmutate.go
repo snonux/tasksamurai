@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -111,6 +112,9 @@ func (m *Model) busyCommitErr() error {
 // doneOp marks addr done.
 func doneOp(addr string) mutateOp {
 	return func(ctx context.Context, tw task.Taskwarrior) error {
+		if strings.HasPrefix(addr, "jira:") {
+			return fmt.Errorf("Jira transitions must use the Jira source")
+		}
 		if policy := routeControl(addr, "d"); policy.route == routeBlocked {
 			return fmt.Errorf("%s", policy.reason)
 		}
