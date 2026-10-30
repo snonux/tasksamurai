@@ -42,6 +42,7 @@ func main() {
 	flag.StringVar(&hotkeys.Agent, "agent-hotkey", hotkeys.Agent, "key used to toggle the +agent/-agent filter")
 	flag.StringVar(&hotkeys.Auto, "auto-hotkey", hotkeys.Auto, "key used to toggle the +auto/-auto filter")
 	flag.StringVar(&hotkeys.Track, "track-hotkey", hotkeys.Track, "key used to toggle the +track/-track filter")
+	flag.StringVar(&hotkeys.Source, "jira-hotkey", hotkeys.Source, "key used to cycle Taskwarrior and Jira source views")
 	disco := flag.Bool("disco", false, "enable disco mode")
 	ultra := flag.Bool("ultra", false, "start directly in ultra mode")
 	flag.Parse()
@@ -89,7 +90,7 @@ func main() {
 
 	if err := m.SetHotkeys(hotkeys); err != nil {
 		fmt.Fprintln(os.Stderr, "invalid hotkey configuration:", err)
-		fmt.Fprintln(os.Stderr, "using default hotkeys (0, 1, 2, 3, 4, 5)")
+		fmt.Fprintln(os.Stderr, "using default hotkeys (0, 1, 2, 3, 4, 5, 6)")
 	}
 	m.SetYouTubeBrowserCmd(*youtubeBrowserCmd)
 	m.SetDisco(*disco)

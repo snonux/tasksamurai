@@ -12,13 +12,13 @@ import (
 
 func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 	var m Model
-	if got := m.configuredHotkeys(); got != (Hotkeys{"0", "1", "2", "4", "5", "3"}) {
+	if got := m.configuredHotkeys(); got != (Hotkeys{"0", "1", "2", "4", "5", "3", "6"}) {
 		t.Fatalf("defaults = %+v", got)
 	}
 	// Track gets a fixed unassigned key ("Q") so reassigning Agent to "3"
 	// does not collide with the track default.
 	for _, key := range "0123456789" {
-		h := Hotkeys{First: "F", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y", Track: "Q"}
+		h := Hotkeys{First: "F", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y", Track: "Q", Source: "!"}
 		if err := m.SetHotkeys(h); err != nil {
 			t.Fatalf("digit %c: %v", key, err)
 		}
@@ -26,7 +26,7 @@ func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 			t.Fatalf("got %+v, want %+v", got, h)
 		}
 	}
-	if err := m.SetHotkeys(Hotkeys{First: "9", Random: "2", RandomNoDue: "1", Agent: "5", Auto: "4", Track: "6"}); err != nil {
+	if err := m.SetHotkeys(Hotkeys{First: "9", Random: "2", RandomNoDue: "1", Agent: "5", Auto: "4", Track: "6", Source: "3"}); err != nil {
 		t.Fatalf("swap: %v", err)
 	}
 	if err := m.SetHotkeys(Hotkeys{Agent: " Tab ", Auto: "SHIFT+TAB"}); err != nil {
@@ -42,6 +42,7 @@ func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 
 func TestHotkeysInvalidConfigurationIsAtomic(t *testing.T) {
 	for _, h := range []Hotkeys{
+		{Source: "4"}, {Source: "J"}, {Agent: "6"}, {Source: "q"},
 		{Agent: "5"}, {Auto: "4"}, {Random: "0"}, {RandomNoDue: "1"},
 		{First: "q"}, {Agent: "Enter"}, {Auto: "Ctrl+R"}, {Auto: "ctrl+c"},
 		{Agent: "nonsense"}, {Auto: "ctrl+ab"}, {Auto: "\x01"}, {Agent: string([]byte{0xff})},
@@ -143,7 +144,7 @@ func TestReboundNavigationAndHelp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := Hotkeys{First: "9", Random: "6", RandomNoDue: "7", Agent: "8", Auto: "3", Track: "5"}
+	h := Hotkeys{First: "9", Random: "6", RandomNoDue: "7", Agent: "8", Auto: "3", Track: "5", Source: "0"}
 	if err := m.SetHotkeys(h); err != nil {
 		t.Fatal(err)
 	}

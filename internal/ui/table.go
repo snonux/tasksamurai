@@ -800,6 +800,8 @@ func (m *Model) renderTasks(data reloadData) {
 		m.tbl.SetRows(rows)
 	}
 	if m.jira.source != nil {
+		// Source changes can hide the selected row; keep the fallback in range.
+		m.tbl.SetCursor(m.tbl.Cursor())
 		for i, t := range m.tasks {
 			if (data.selectedUUID != "" && t.UUID == data.selectedUUID) || (data.selectedUUID == "" && data.selectedID != 0 && t.ID == data.selectedID) {
 				m.tbl.SetCursor(i)
@@ -1357,6 +1359,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: m.agentFilterHotkeyLabel(), Desc: "toggle +agent/-agent filter"},
 				{Key: m.configuredHotkeys().Auto, Desc: "toggle +auto/-auto filter"},
 				{Key: m.configuredHotkeys().Track, Desc: "toggle +track/-track filter"},
+				{Key: m.configuredHotkeys().Source, Desc: "cycle sources: tw/both/jira"},
 				{Key: "f", Desc: "change filter"},
 				{Key: ":", Desc: "run task command prompt"},
 				{Key: ";", Desc: "run task command prompt for selected task"},

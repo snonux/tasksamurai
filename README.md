@@ -24,8 +24,11 @@ mode. With neither sign present, the first
 press adds the positive filter. Each later press switches between including
 and excluding that tag, preserving other filters.
 
+Press `6` in table or ultra mode to cycle source views: Taskwarrior only (`tw`) →
+both → Jira only (`jira`). This uses cached rows; Jira must be enabled.
+
 The number-key actions are configurable with the flags below. Any digit
-`0`–`9` can be assigned; `6`–`9` are unassigned by default. For example,
+`0`–`9` can be assigned; `7`–`9` are unassigned by default. For example,
 `tasksamurai --agent-hotkey 7 --auto-hotkey 8` moves the tag toggles to `7` and
 `8`. To swap two actions, use `--agent-hotkey 5 --auto-hotkey 4`. Help reflects
 your assignments. Keys that conflict with other commands or each other are
@@ -120,6 +123,7 @@ tasksamurai -- -excludetag +includetag
 - `--random-no-due-hotkey <key>`: jump to a random pending task without a due date in table mode (default: `2`)
 - `--agent-hotkey <key>`: toggle the `+agent` / `-agent` filter (default: `4`)
 - `--auto-hotkey <key>`: toggle the `+auto` / `-auto` filter (default: `5`)
+- `--jira-hotkey <key>`: cycle `tw` / `both` / `jira` source views (default: `6`)
 - `--track-hotkey <key>`: toggle the `+track` / `-track` filter (default: `3`)
 - `--debug-log <path>`: path to debug log file for Taskwarrior commands
 - `--debug-dir <directory>`: directory for runtime debug output (goroutine dumps, profiles)

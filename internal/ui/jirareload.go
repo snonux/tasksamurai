@@ -133,6 +133,22 @@ func (m *Model) setJiraFilter(filter config.Filter, identity string) tea.Cmd {
 	return m.scheduleJiraReload(false)
 }
 
+func (m *Model) handleCycleSourceView() (tea.Model, tea.Cmd) {
+	if m.jira.source == nil {
+		return m, nil
+	}
+	switch m.jira.view {
+	case "tw":
+		m.jira.view = "both"
+	case "both":
+		m.jira.view = "jira"
+	default:
+		m.jira.view = "tw"
+	}
+	m.rebuildJiraRows()
+	return m, m.showStatusTimed("Source view: " + m.jira.view)
+}
+
 func (m *Model) rebuildJiraRows() {
 	data := reloadData{tasks: cloneTasks(m.twTasks), ultraFilterIDs: m.ultraFilteredTaskIDs()}
 	m.processTasks(&data)
