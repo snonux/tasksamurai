@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
 
 	"github.com/snonux/tasksamurai/internal"
+	"github.com/snonux/tasksamurai/internal/config"
 	"github.com/snonux/tasksamurai/internal/debug"
 	"github.com/snonux/tasksamurai/internal/task"
 	"github.com/snonux/tasksamurai/internal/ui"
@@ -21,6 +23,8 @@ func main() {
 		browserCmdDefault = "open"
 	}
 
+	configPath := flag.String("config", "", "path to TOML configuration (overrides TASKSAMURAI_CONFIG)")
+	noJira := flag.Bool("no-jira", false, "disable Jira configuration and credential validation")
 	version := flag.Bool("version", false, "print version and exit")
 	debugLog := flag.String("debug-log", "", "path to debug log file")
 	debugDir := flag.String("debug-dir", "", "directory for runtime debug output (goroutine dumps, profiles)")
@@ -44,6 +48,17 @@ func main() {
 	if *version {
 		fmt.Println(internal.Version)
 		return
+	}
+
+	configPathSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			configPathSet = true
+		}
+	})
+	if _, err := config.Load(context.Background(), config.Options{Path: *configPath, PathSet: configPathSet, NoJira: *noJira}); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to load configuration:", err)
+		os.Exit(1)
 	}
 
 	if err := task.SetDebugLog(*debugLog); err != nil {

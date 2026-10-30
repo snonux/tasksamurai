@@ -6,6 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/magefile/mage v1.15.0
