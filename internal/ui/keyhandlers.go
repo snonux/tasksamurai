@@ -57,6 +57,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"p"}, modes: keyBindingAll, desc: "set priority", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setPriority })},
 	{keys: []string{"a"}, modes: keyBindingAll, desc: "add annotations", action: sharedAnnotateKeyAction(false)},
 	{keys: []string{"A"}, modes: keyBindingAll, desc: "replace annotations", action: sharedAnnotateKeyAction(true)},
+	{keys: []string{"F"}, modes: keyBindingAll, desc: "select Jira filter", action: modelKeyAction((*Model).handleJiraFilterPicker)},
 	{keys: []string{"f"}, modes: keyBindingAll, desc: "change filter", action: modelKeyAction((*Model).handleFilter)},
 	{keys: []string{":"}, modes: keyBindingAll, desc: "run task command prompt", action: modelKeyAction((*Model).handleShellPrompt)},
 	{keys: []string{";"}, modes: keyBindingAll, desc: "run task command prompt for selected task", action: modelKeyAction((*Model).handleShellPromptForSelectedTask)},

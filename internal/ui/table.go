@@ -914,6 +914,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyPressMsg:
+		if m.jira.picker.open {
+			return m.handleJiraFilterPickerKey(msg)
+		}
 		if !m.anyInputActive() && !m.showHelp && m.blockJiraAction(msg.String()) {
 			return m, nil
 		}
@@ -1122,7 +1125,7 @@ func (m *Model) clearRowBlink() {
 // are skipped while this is true so the reload never clobbers user input.
 func (m *Model) anyInputActive() bool {
 	return m.annotating || m.descEditing || m.tagsEditing || m.dueEditing ||
-		m.recurEditing || m.projEditing || m.filterEditing || m.addingTask ||
+		m.recurEditing || m.projEditing || m.filterEditing || m.jira.picker.open || m.addingTask ||
 		m.prioritySelecting || m.searching || m.shellActive ||
 		m.shellOutputVisible || m.detailSearching || m.ultraSearching ||
 		m.detailDescEditing || m.editID != 0
@@ -1183,6 +1186,8 @@ func (m *Model) View() tea.View {
 func (m *Model) appendInlineInputOverlay(view string) string {
 	var overlay string
 	switch {
+	case m.jira.picker.open:
+		overlay = m.jiraFilterPickerView()
 	case m.annotating:
 		overlay = m.annotateInput.View()
 	case m.dueEditing:
@@ -1361,6 +1366,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: m.configuredHotkeys().Track, Desc: "toggle +track/-track filter"},
 				{Key: m.configuredHotkeys().Source, Desc: "cycle sources: tw/both/jira"},
 				{Key: "f", Desc: "change filter"},
+				{Key: "F", Desc: "select Jira filter"},
 				{Key: ":", Desc: "run task command prompt"},
 				{Key: ";", Desc: "run task command prompt for selected task"},
 				{Key: "ctrl+o", Desc: "edit :prompt in $EDITOR"},
@@ -1707,6 +1713,9 @@ func (m *Model) updateTableHeight() {
 	}
 	if m.annotating || m.dueEditing || m.prioritySelecting || m.searching || m.descEditing || m.tagsEditing || m.recurEditing || m.projEditing || m.filterEditing || m.addingTask || m.shellActive {
 		h--
+	}
+	if m.jira.picker.open {
+		h -= lipgloss.Height(m.jiraFilterPickerView())
 	}
 	if h < 1 {
 		h = 1

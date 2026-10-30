@@ -31,6 +31,7 @@ type jiraState struct {
 	cancel      context.CancelFunc
 	displayIDs  map[string]int
 	nextID      int
+	picker      jiraFilterPicker
 	closed      bool
 }
 

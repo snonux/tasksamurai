@@ -117,6 +117,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 				{Key: m.configuredHotkeys().Track, Desc: "toggle +track/-track filter"},
 				{Key: m.configuredHotkeys().Source, Desc: "cycle sources: tw/both/jira"},
 				{Key: "f", Desc: "change filter"},
+				{Key: "F", Desc: "select Jira filter"},
 			},
 		},
 		{
@@ -364,6 +365,8 @@ func (m *Model) ultraOverlay() (string, int) {
 
 func (m *Model) ultraInputOverlay() string {
 	switch {
+	case m.jira.picker.open:
+		return m.jiraFilterPickerView()
 	case m.annotating:
 		return m.annotateInput.View()
 	case m.dueEditing:

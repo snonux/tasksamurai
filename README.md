@@ -77,6 +77,11 @@ detail view and `n`/`N` jump between matches. In table and ultra mode `space`
 refreshes the task list instead of paging. All long content stays reachable —
 nothing is cut off at the bottom of the screen.
 
+When Jira is enabled, press `F` in table or ultra mode to choose a named Jira
+filter. Use `j`/`k` or the arrow keys, `Enter` to apply, and `Esc` to cancel.
+`(none) all issues` removes the JQL restriction; some sites require a restricted
+filter. This selection lasts for the session and refreshes Jira issues only.
+
 ## Screenshot
 
 ![Task Samurai screenshot](screenshot.png)

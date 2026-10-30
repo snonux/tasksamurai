@@ -18,7 +18,7 @@ func TestHotkeysDefaultsAndRebinding(t *testing.T) {
 	// Track gets a fixed unassigned key ("Q") so reassigning Agent to "3"
 	// does not collide with the track default.
 	for _, key := range "0123456789" {
-		h := Hotkeys{First: "F", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y", Track: "Q", Source: "!"}
+		h := Hotkeys{First: "M", Random: "P", RandomNoDue: "L", Agent: string(key), Auto: "Y", Track: "Q", Source: "!"}
 		if err := m.SetHotkeys(h); err != nil {
 			t.Fatalf("digit %c: %v", key, err)
 		}
