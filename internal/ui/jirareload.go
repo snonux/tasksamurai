@@ -18,21 +18,26 @@ import (
 type ModelOption func(*Model) error
 
 type jiraState struct {
-	source      IssueSource
-	settings    config.Jira
-	reloadToken func(context.Context) error
-	view        string
-	filter      config.Filter
-	filterID    string
-	tasks       []task.Task
-	lastFetched time.Time
-	loading     bool
-	gen         int
-	cancel      context.CancelFunc
-	displayIDs  map[string]int
-	nextID      int
-	picker      jiraFilterPicker
-	closed      bool
+	source        IssueSource
+	settings      config.Jira
+	reloadToken   func(context.Context) error
+	view          string
+	filter        config.Filter
+	filterID      string
+	tasks         []task.Task
+	lastFetched   time.Time
+	loading       bool
+	gen           int
+	cancel        context.CancelFunc
+	displayIDs    map[string]int
+	nextID        int
+	detailGen     int
+	detailCancel  context.CancelFunc
+	commentCancel context.CancelFunc
+	commenting    bool
+	remaining     map[string]int
+	picker        jiraFilterPicker
+	closed        bool
 }
 
 type jiraReloadDoneMsg struct {
@@ -112,6 +117,7 @@ func (m *Model) handleJiraReloadDone(msg jiraReloadDoneMsg) (tea.Model, tea.Cmd)
 		m.showError(fmt.Errorf("Jira refresh: %w", msg.err))
 		return m, nil
 	}
+	m.jira.remaining = nil
 	m.jira.tasks = cloneTasks(msg.tasks)
 	m.jira.lastFetched = msg.fetched
 	m.rebuildJiraRows()

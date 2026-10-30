@@ -413,6 +413,12 @@ func (m *Model) cancelTaskOperations() {
 	if m.jira.cancel != nil {
 		m.jira.cancel()
 	}
+	if m.jira.detailCancel != nil {
+		m.jira.detailCancel()
+	}
+	if m.jira.commentCancel != nil {
+		m.jira.commentCancel()
+	}
 	if m.cancelTaskContext != nil {
 		m.cancelTaskContext()
 	}
@@ -866,6 +872,10 @@ func (m *Model) Init() tea.Cmd { return m.scheduleJiraReload(false) }
 // Update handles key and window events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case jiraDetailDoneMsg:
+		return m.handleJiraDetailDone(msg)
+	case jiraCommentDoneMsg:
+		return m.handleJiraCommentDone(msg)
 	case jiraReloadDoneMsg:
 		return m.handleJiraReloadDone(msg)
 	case debug.DumpStateMsg:
@@ -936,7 +946,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if we're in detail view
 		if m.showTaskDetail {
 			// If we're editing in detail view, let editing modes handle it
-			if m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.projEditing {
+			if m.annotating || m.prioritySelecting || m.tagsEditing || m.dueEditing || m.recurEditing || m.projEditing {
 				if handled, model, cmd := m.handleEditingModes(msg); handled {
 					return model, cmd
 				}
@@ -1597,7 +1607,7 @@ func (m *Model) taskToRowSearch(t task.Task, re *regexp.Regexp, styles atable.St
 	tagStr := m.highlightCell(getStyle(colTags), re, tags)
 	annRaw := strings.Join(anns, "; ")
 	annCount := ""
-	if n := len(anns); n > 0 {
+	if n := len(anns); n > 0 && !isJiraTask(&t) {
 		annCount = strconv.FormatInt(int64(n), 16)
 	}
 	annStr := m.highlightCellMatch(getStyle(colAnnotations), re, annRaw, annCount)

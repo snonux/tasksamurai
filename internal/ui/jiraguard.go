@@ -18,8 +18,6 @@ func jiraBlockedReason(key string) string {
 		return "moving Jira issues not supported (yet)"
 	case ";":
 		return "task commands don't work on Jira issues"
-	case "a":
-		return "not yet — Jira comment support is planned"
 	case "d", "s":
 		return "not yet — Jira write support for transitions is planned"
 	case "w", "W", "r":

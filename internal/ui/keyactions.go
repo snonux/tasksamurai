@@ -515,8 +515,8 @@ func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
 	if m.blockJiraAction(key) {
 		return m, nil
 	}
-	tsk, err := m.getSelectedTask()
-	if err != nil {
+	tsk := m.getTaskForOpenURL()
+	if tsk == nil {
 		return m, nil
 	}
 
@@ -525,6 +525,10 @@ func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
 	m.annotateAddr = taskAddress(*tsk)
 	m.annotating = true
 	m.replaceAnnotations = replace
+	m.annotateInput.Prompt = "annotation: "
+	if isJiraTask(tsk) {
+		m.annotateInput.Prompt = "comment: "
+	}
 	m.annotateInput.SetValue("")
 	m.annotateInput.Focus()
 	m.updateTableHeight()
@@ -917,6 +921,7 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 		m.detailSearchInput = textinput.New()
 		m.detailSearchInput.Placeholder = "Search..."
 		m.detailSearchInput.SetWidth(30)
+		return m, m.scheduleJiraDetail(t)
 	}
 
 	return m, nil

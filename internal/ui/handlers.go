@@ -55,6 +55,9 @@ func (m *Model) handleAnnotationMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if !m.replaceAnnotations && strings.TrimSpace(value) == "" {
 			return nil, fmt.Errorf("annotation cannot be empty")
 		}
+		if strings.HasPrefix(m.annotateAddr, "jira:") {
+			return m.scheduleJiraComment(value)
+		}
 		if m.taskFlightBlocks() {
 			return nil, m.busyCommitErr()
 		}

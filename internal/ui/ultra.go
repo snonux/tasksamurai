@@ -1148,6 +1148,12 @@ func (m *Model) handleUltraMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		m.ultraGoEnd()
 	case "enter":
+		if isJiraTask(m.getTaskForOpenURL()) {
+			if _, ok := m.ultraPrepareSelectedTask(); ok {
+				return m.handleShowTaskDetail()
+			}
+			return m, nil
+		}
 		return m.handleUltraEditTask()
 	}
 	return m, nil

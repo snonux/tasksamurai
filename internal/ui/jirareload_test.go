@@ -17,21 +17,33 @@ import (
 )
 
 type fakeJiraSource struct {
-	fetch func(context.Context, string) ([]task.Task, error)
-	calls atomic.Int32
+	fetch    func(context.Context, string) ([]task.Task, error)
+	calls    atomic.Int32
+	issue    func(context.Context, string) (task.Task, error)
+	comments func(context.Context, string) (jira.CommentPage, error)
+	comment  func(context.Context, string, string) (task.Annotation, error)
 }
 
 func (f *fakeJiraSource) FetchIssues(ctx context.Context, jql string) ([]task.Task, error) {
 	f.calls.Add(1)
 	return f.fetch(ctx, jql)
 }
-func (*fakeJiraSource) FetchIssue(context.Context, string) (task.Task, error) {
+func (f *fakeJiraSource) FetchIssue(ctx context.Context, key string) (task.Task, error) {
+	if f.issue != nil {
+		return f.issue(ctx, key)
+	}
 	return task.Task{}, errors.New("unexpected issue fetch")
 }
-func (*fakeJiraSource) FetchComments(context.Context, string) (jira.CommentPage, error) {
+func (f *fakeJiraSource) FetchComments(ctx context.Context, key string) (jira.CommentPage, error) {
+	if f.comments != nil {
+		return f.comments(ctx, key)
+	}
 	return jira.CommentPage{}, errors.New("unexpected comments fetch")
 }
-func (*fakeJiraSource) AddComment(context.Context, string, string) (task.Annotation, error) {
+func (f *fakeJiraSource) AddComment(ctx context.Context, key, value string) (task.Annotation, error) {
+	if f.comment != nil {
+		return f.comment(ctx, key, value)
+	}
 	return task.Annotation{}, errors.New("unexpected comment mutation")
 }
 
@@ -294,7 +306,7 @@ func TestJiraProjectsRenderDistinctKeys(t *testing.T) {
 }
 
 func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
-	keys := []string{"e", "E", "s", "d", "D", "U", "w", "W", "r", "p", "t", "a", "A", "J", "T", "R", "ctrl+r", ";"}
+	keys := []string{"e", "E", "s", "d", "D", "U", "w", "W", "r", "p", "t", "A", "J", "T", "R", "ctrl+r", ";"}
 	for _, mode := range []string{"table", "ultra", "detail"} {
 		for _, key := range keys {
 			t.Run(mode+"/"+key, func(t *testing.T) {

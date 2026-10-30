@@ -155,6 +155,9 @@ func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lip
 	if t.Recur != "" {
 		appendRow(m.renderDetailRecurField(labelStyle, cf))
 	}
+	if isJiraTask(t) {
+		lines = append(lines, labelStyle.Render("Assignee:")+" "+valueStyle.Render(t.Assignee), labelStyle.Render("URL:")+" "+valueStyle.Render(strings.TrimRight(m.jira.settings.Site, "/")+"/browse/"+strings.TrimPrefix(t.UUID, "jira:")))
+	}
 	return lines, cf
 }
 
@@ -298,13 +301,17 @@ func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, desc
 // for scroll-into-view support.
 func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, descStyle lipgloss.Style, fieldLines, fieldEndLines []int, searchLines *[]int) []string {
 	t := m.currentDetailTask()
-	if len(t.Annotations) == 0 {
+	if len(t.Annotations) == 0 && m.jira.remaining[t.UUID] == 0 {
 		return lines
 	}
 	lines = append(lines, "")
 	fieldLines[cf] = len(lines)
 	ls, vs := labelStyle, descStyle
-	if m.detailFieldIndex == cf {
+	if m.detailBlinkField == cf && m.detailBlinkOn {
+		bg := lipgloss.Color("226")
+		ls = ls.Background(bg).Foreground(lipgloss.Color("0"))
+		vs = vs.Background(bg).Foreground(lipgloss.Color("0"))
+	} else if m.detailFieldIndex == cf {
 		ls = ls.Background(lipgloss.Color(m.theme.SelectedBG))
 		vs = vs.Background(lipgloss.Color(m.theme.SelectedBG))
 	}
@@ -326,6 +333,9 @@ func (m *Model) renderDetailAnnotations(lines []string, cf int, labelStyle, desc
 			}
 			lines = append(lines, vs.Render(d))
 		}
+	}
+	if remaining := m.jira.remaining[t.UUID]; isJiraTask(t) && remaining > 0 {
+		lines = append(lines, vs.Render(fmt.Sprintf("+%d more", remaining)))
 	}
 	fieldEndLines[cf] = len(lines) - 1
 	return lines
@@ -438,7 +448,14 @@ func (m *Model) currentDetailTask() *task.Task {
 		return nil
 	}
 	if m.currentTaskDetailUUID != "" {
-		return m.taskByUUID(m.currentTaskDetailUUID)
+		if t := m.taskByUUID(m.currentTaskDetailUUID); t != nil {
+			return t
+		}
+		// A fresh Jira detail can move the row outside the completed window.
+		if strings.HasPrefix(m.currentTaskDetailUUID, "jira:") {
+			return m.jiraCachedTask(m.currentTaskDetailUUID)
+		}
+		return nil
 	}
 	if m.currentTaskDetailFallbackID != 0 {
 		return m.taskByID(m.currentTaskDetailFallbackID)
@@ -458,6 +475,7 @@ func (m *Model) setCurrentTaskDetail(t *task.Task) {
 }
 
 func (m *Model) clearCurrentTaskDetail() {
+	m.cancelJiraDetail()
 	m.currentTaskDetailUUID = ""
 	m.currentTaskDetailFallbackID = 0
 }
@@ -512,7 +530,7 @@ func (m *Model) getDetailFieldCount() int {
 	}
 
 	// Add annotations if present
-	if len(t.Annotations) > 0 {
+	if len(t.Annotations) > 0 || m.jira.remaining[t.UUID] > 0 {
 		count++
 	}
 

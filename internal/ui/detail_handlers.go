@@ -91,6 +91,11 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailFieldIndex = m.getDetailFieldCount() - 1
 		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
+	case "a", "A":
+		if isJiraTask(m.currentDetailTask()) {
+			return m.handleAnnotate(msg.String() == "A")
+		}
+		return m, nil
 	case "o":
 		return m.handleOpenURL()
 	case "d":

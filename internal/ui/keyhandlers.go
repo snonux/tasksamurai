@@ -301,9 +301,6 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.helpViewport = viewport.Model{}
 		return m, nil
 	}
-	if m.showUltra {
-		return m.handleUltraExitKey(true)
-	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
 		m.clearCurrentTaskDetail()
@@ -312,6 +309,9 @@ func (m *Model) handleQuitKey() (tea.Model, tea.Cmd) {
 		m.detailSearchRegex = nil
 		m.detailSearchInput.SetValue("")
 		return m, nil
+	}
+	if m.showUltra {
+		return m.handleUltraExitKey(true)
 	}
 	if m.cellExpanded {
 		m.cellExpanded = false
@@ -353,9 +353,6 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 		m.helpViewport = viewport.Model{}
 		return m, nil
 	}
-	if m.showUltra {
-		return m.handleUltraExitKey(false)
-	}
 	if m.showTaskDetail {
 		m.showTaskDetail = false
 		m.clearCurrentTaskDetail()
@@ -364,6 +361,9 @@ func (m *Model) handleEscapeKey() (tea.Model, tea.Cmd) {
 		m.detailSearchRegex = nil
 		m.detailSearchInput.SetValue("")
 		return m, nil
+	}
+	if m.showUltra {
+		return m.handleUltraExitKey(false)
 	}
 	if m.cellExpanded {
 		m.cellExpanded = false
