@@ -156,7 +156,7 @@ func (m *Model) renderDetailFieldRows(lines []string, labelStyle, valueStyle lip
 		appendRow(m.renderDetailRecurField(labelStyle, cf))
 	}
 	if isJiraTask(t) {
-		lines = append(lines, labelStyle.Render("Assignee:")+" "+valueStyle.Render(t.Assignee), labelStyle.Render("URL:")+" "+valueStyle.Render(strings.TrimRight(m.jira.settings.Site, "/")+"/browse/"+strings.TrimPrefix(t.UUID, "jira:")))
+		lines = append(lines, labelStyle.Render("Assignee:")+" "+valueStyle.Render(t.Assignee), labelStyle.Render("URL:")+" "+valueStyle.Render(m.jiraIssueURL(t)))
 	}
 	return lines, cf
 }
