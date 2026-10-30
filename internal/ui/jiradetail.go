@@ -21,6 +21,7 @@ type jiraDetailDoneMsg struct {
 
 type jiraCommentDoneMsg struct {
 	uuid, filterID, jql string
+	filterEpoch         int
 	annotation          task.Annotation
 	err                 error
 }
@@ -132,10 +133,11 @@ func (m *Model) scheduleJiraComment(value string) (tea.Cmd, error) {
 	ctx, cancel := m.jiraContext()
 	m.jira.commentCancel, m.jira.commenting = cancel, true
 	source, uuid, filterID, jql := m.jira.source, m.annotateAddr, m.jira.filterID, m.jira.filter.JQL
+	filterEpoch := m.jira.filterEpoch
 	return func() tea.Msg {
 		defer cancel()
 		annotation, err := source.AddComment(ctx, strings.TrimPrefix(uuid, "jira:"), value)
-		return jiraCommentDoneMsg{uuid: uuid, filterID: filterID, jql: jql, annotation: annotation, err: err}
+		return jiraCommentDoneMsg{uuid: uuid, filterID: filterID, jql: jql, filterEpoch: filterEpoch, annotation: annotation, err: err}
 	}, nil
 }
 
@@ -148,11 +150,11 @@ func (m *Model) handleJiraCommentDone(msg jiraCommentDoneMsg) (tea.Model, tea.Cm
 		m.showError(fmt.Errorf("Jira comment: %w", msg.err))
 		return m, nil
 	}
-	// Also invalidate searches opened while the POST was in flight.
-	m.invalidateJiraReads()
-	if msg.filterID != m.jira.filterID || msg.jql != m.jira.filter.JQL {
+	if msg.filterEpoch != m.jira.filterEpoch || msg.filterID != m.jira.filterID || msg.jql != m.jira.filter.JQL {
 		return m, nil
 	}
+	// Invalidate reads opened during this POST only in its original filter lifetime.
+	m.invalidateJiraReads()
 	cached := m.jiraCachedTask(msg.uuid)
 	if cached == nil {
 		return m, nil

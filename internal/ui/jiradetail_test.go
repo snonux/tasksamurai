@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -230,6 +231,90 @@ func TestJiraCommentFailuresAndFilterChange(t *testing.T) {
 				t.Fatal("error not shown")
 			}
 		})
+	}
+}
+
+func TestJiraCommentFilterChangePreservesCurrentFetch(t *testing.T) {
+	for _, path := range []string{"A-B", "A-B-A"} {
+		for _, outcome := range []string{"success", "failure"} {
+			for _, order := range []string{"comment-first", "fetch-first"} {
+				t.Run(path+"/"+outcome+"/"+order, func(t *testing.T) {
+					m, source := newJiraDetailFixture(t)
+					original, identity := m.jira.filter, m.jira.filterID
+					started, release := make(chan struct{}), make(chan struct{})
+					t.Cleanup(func() {
+						select {
+						case <-release:
+						default:
+							close(release)
+						}
+					})
+					writes := 0
+					source.comment = func(context.Context, string, string) (task.Annotation, error) {
+						writes++
+						close(started)
+						<-release
+						if outcome == "failure" {
+							return task.Annotation{}, errors.New("permission denied")
+						}
+						return task.Annotation{Description: "old filter comment"}, nil
+					}
+					m.annotateAddr = "jira:TST-42"
+					write, err := m.scheduleJiraComment("new")
+					if err != nil {
+						t.Fatal(err)
+					}
+					result := make(chan tea.Msg, 1)
+					go func() { result <- write() }()
+					select {
+					case <-started:
+					case <-time.After(time.Second):
+						t.Fatal("comment POST did not start")
+					}
+					current := m.setJiraFilter(config.Filter{Name: "other", JQL: "project=OTHER"}, "local:other")
+					if path == "A-B-A" {
+						current = m.setJiraFilter(original, identity)
+					}
+					source.fetch = func(ctx context.Context, jql string) ([]task.Task, error) {
+						if ctx.Err() != nil {
+							return nil, ctx.Err()
+						}
+						row := jiraRows()[0] // Same issue can belong to both filters.
+						row.Description = "current " + jql
+						return []task.Task{row}, nil
+					}
+					if order == "fetch-first" {
+						drainCmds(t, &m, current)
+					}
+					gen := m.jira.gen
+					close(release)
+					select {
+					case msg := <-result:
+						if _, cmd := m.Update(msg); cmd != nil {
+							t.Fatal("old filter comment scheduled extra work")
+						}
+					case <-time.After(time.Second):
+						t.Fatal("comment POST did not complete")
+					}
+					if m.jira.gen != gen || m.jira.commenting || (order == "comment-first" && !m.jira.loading) {
+						t.Fatal("old comment completion invalidated current filter fetch or kept write busy")
+					}
+					if order == "comment-first" {
+						drainCmds(t, &m, current)
+					}
+					cached := m.jiraCachedTask("jira:TST-42")
+					if cached == nil || cached.Description != "current "+m.jira.filter.JQL || len(cached.Annotations) != 0 || m.jira.loading {
+						t.Fatalf("current filter view lost or patched by old comment: %+v", cached)
+					}
+					if writes != 1 || source.calls.Load() != 2 {
+						t.Fatalf("unexpected writes/searches: %d/%d", writes, source.calls.Load())
+					}
+					if outcome == "failure" && !strings.Contains(m.statusMsg, "permission denied") {
+						t.Fatal("comment failure not shown")
+					}
+				})
+			}
+		}
 	}
 }
 
