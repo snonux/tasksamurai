@@ -1235,6 +1235,9 @@ func (m *Model) ultraPrepareSelectedTask() (int, bool) {
 }
 
 func (m *Model) handleUltraEditTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("e") {
+		return m, nil
+	}
 	id, ok := m.ultraPrepareSelectedTask()
 	if !ok {
 		return m, nil
@@ -1245,6 +1248,9 @@ func (m *Model) handleUltraEditTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("s") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1253,6 +1259,9 @@ func (m *Model) handleUltraToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("d") {
+		return m, nil
+	}
 	_, ok := m.ultraPrepareSelectedTask()
 	if !ok {
 		return m, nil
@@ -1269,6 +1278,9 @@ func (m *Model) handleUltraMarkDone() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraDeleteTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("D") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1277,6 +1289,9 @@ func (m *Model) handleUltraDeleteTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraSetPriority() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("p") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1285,6 +1300,9 @@ func (m *Model) handleUltraSetPriority() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraSetDueDate() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("w") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1293,6 +1311,9 @@ func (m *Model) handleUltraSetDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraRemoveDueDate() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("W") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1301,6 +1322,9 @@ func (m *Model) handleUltraRemoveDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraEditTags() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("t") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1309,6 +1333,13 @@ func (m *Model) handleUltraEditTags() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraAnnotate(replace bool) (tea.Model, tea.Cmd) {
+	key := "a"
+	if replace {
+		key = "A"
+	}
+	if m.blockJiraAction(key) {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1317,6 +1348,9 @@ func (m *Model) handleUltraAnnotate(replace bool) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraEditProject() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("J") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1325,6 +1359,9 @@ func (m *Model) handleUltraEditProject() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraSetRecurrence() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("R") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}
@@ -1333,6 +1370,9 @@ func (m *Model) handleUltraSetRecurrence() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUltraSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("ctrl+r") {
+		return m, nil
+	}
 	if _, ok := m.ultraPrepareSelectedTask(); !ok {
 		return m, nil
 	}

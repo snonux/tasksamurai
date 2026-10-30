@@ -18,6 +18,9 @@ import (
 )
 
 func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("e") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -28,6 +31,9 @@ func (m *Model) handleEditTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("s") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -60,6 +66,9 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("d") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -73,6 +82,9 @@ func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("D") {
+		return m, nil
+	}
 	tsk := m.getTaskForDelete()
 	if tsk == nil {
 		return m, nil
@@ -256,6 +268,9 @@ func (m *Model) handleOpenFileDone(msg openFileDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleUndo() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("U") {
+		return m, nil
+	}
 	if len(m.undoStack) == 0 {
 		return m, nil
 	}
@@ -337,6 +352,9 @@ func undoStatus(action undoAction) string {
 }
 
 func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("w") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -353,6 +371,9 @@ func (m *Model) handleSetDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("W") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -372,6 +393,9 @@ func (m *Model) handleRemoveDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("r") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -393,6 +417,9 @@ func (m *Model) handleRandomDueDate() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("R") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -412,6 +439,9 @@ func (m *Model) handleSetRecurrence() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("ctrl+r") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -444,6 +474,9 @@ func (m *Model) activateRecurringSeriesRecurrenceEdit(id int, tsk task.Task) (te
 }
 
 func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("p") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -459,6 +492,13 @@ func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
+	key := "a"
+	if replace {
+		key = "A"
+	}
+	if m.blockJiraAction(key) {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -505,6 +545,9 @@ func (m *Model) handleAddTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("t") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -521,6 +564,9 @@ func (m *Model) handleEditTags() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("J") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -544,6 +590,9 @@ func (m *Model) handleEditProject() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("T") {
+		return m, nil
+	}
 	tsk, err := m.getSelectedTask()
 	if err != nil {
 		return m, nil
@@ -711,7 +760,7 @@ func (m *Model) handleJumpToFirstTask() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleRefresh() (tea.Model, tea.Cmd) {
-	return m, m.scheduleTaskReload("Reloading…", reloadMeta{}, true)
+	return m, tea.Batch(m.scheduleTaskReload("Reloading…", reloadMeta{}, true), m.scheduleJiraReload(true))
 }
 
 // completedWindows is the V-key cycle: off → each of these → off.

@@ -96,6 +96,9 @@ func undoActionCmd(quitCtx context.Context, tw task.Taskwarrior, action undoActi
 
 // scheduleDeleteSeries arms a mutating flight and returns a delete-only Cmd.
 func (m *Model) scheduleDeleteSeries(tsk task.Task) tea.Cmd {
+	if m.blockJiraAddress(tsk.UUID, "D") {
+		return nil
+	}
 	if m.taskFlightBlocks() {
 		_ = m.rejectIfBusy()
 		return nil
@@ -165,8 +168,12 @@ func (m *Model) applyLocalDelete(restores []undoRestore) {
 	for _, r := range restores {
 		deleted[strings.TrimSpace(r.uuid)] = struct{}{}
 	}
-	remaining := make([]task.Task, 0, len(m.tasks))
-	for _, tsk := range m.tasks {
+	baseTasks := m.tasks
+	if m.jira.source != nil {
+		baseTasks = m.twTasks
+	}
+	remaining := make([]task.Task, 0, len(baseTasks))
+	for _, tsk := range baseTasks {
 		if _, gone := deleted[strings.TrimSpace(tsk.UUID)]; gone {
 			continue
 		}

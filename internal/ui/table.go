@@ -312,6 +312,8 @@ type Model struct {
 
 	filters []string
 	tasks   []task.Task
+	twTasks []task.Task
+	jira    jiraState
 
 	// completedWindow is the completed-task display window toggled by the
 	// V key: 0 hides completed tasks; 24h/4h/1h additionally show tasks
@@ -395,6 +397,8 @@ type descriptionTempFile interface {
 type reloadData struct {
 	tasks          []task.Task
 	ultraFilterIDs []int
+	selectedUUID   string
+	selectedID     int
 }
 
 func (m *Model) initTaskContext() {
@@ -405,6 +409,10 @@ func (m *Model) initTaskContext() {
 }
 
 func (m *Model) cancelTaskOperations() {
+	m.jira.closed = true
+	if m.jira.cancel != nil {
+		m.jira.cancel()
+	}
 	if m.cancelTaskContext != nil {
 		m.cancelTaskContext()
 	}
@@ -456,6 +464,9 @@ func prepareDescriptionTempFile(description string, newTempFile func() (descript
 // (taskAddress) — the UUID, so the editor opens the intended task even if
 // Taskwarrior renumbered IDs since the in-memory list was loaded.
 func (m *Model) editCmd(addr string) tea.Cmd {
+	if m.blockJiraAddress(addr, "e") {
+		return nil
+	}
 	c := m.taskwarriorClient().EditCmd(addr)
 	return tea.ExecProcess(c, func(err error) tea.Msg { return editDoneMsg{err: err} })
 }
@@ -637,17 +648,25 @@ func (m *Model) startBlink(id int, markDone bool) tea.Cmd {
 }
 
 // New creates a new UI model with the provided rows.
-func New(filters []string, browserCmd string) (Model, error) {
-	return NewWithTaskwarrior(filters, browserCmd, task.NewTaskwarrior())
+func New(filters []string, browserCmd string, options ...ModelOption) (Model, error) {
+	return NewWithTaskwarrior(filters, browserCmd, task.NewTaskwarrior(), options...)
 }
 
 // NewWithTaskwarrior creates a UI model using the provided Taskwarrior client.
-func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior) (Model, error) {
+func NewWithTaskwarrior(filters []string, browserCmd string, tw task.Taskwarrior, options ...ModelOption) (Model, error) {
 	if isNilTaskwarrior(tw) {
 		return Model{}, errors.New("taskwarrior client is nil")
 	}
 	m := Model{filters: filters, browserCmd: browserCmd, taskwarrior: tw, blinkState: blinkState{blinkEnabled: true}}
 	m.initTaskContext()
+	for _, option := range options {
+		if option != nil {
+			if err := option(&m); err != nil {
+				m.cancelTaskOperations()
+				return Model{}, err
+			}
+		}
+	}
 	m.annotateInput = textinput.New()
 	m.annotateInput.Prompt = "annotation: "
 	m.descInput = textinput.New()
@@ -719,6 +738,12 @@ func (m *Model) fetchTasks() (reloadData, error) {
 }
 
 func (m *Model) processTasks(data *reloadData) {
+	if m.jira.source != nil {
+		if selected := m.getTaskForOpenURL(); selected != nil {
+			data.selectedUUID, data.selectedID = selected.UUID, selected.ID
+		}
+	}
+	data.tasks = m.mergeJiraRows(data.tasks)
 	m.tasks = data.tasks
 	assignCompletedDisplayIDs(m.tasks)
 	m.total = m.taskwarriorClient().TotalTasks(data.tasks)
@@ -774,6 +799,17 @@ func (m *Model) renderTasks(data reloadData) {
 	} else {
 		m.tbl.SetRows(rows)
 	}
+	if m.jira.source != nil {
+		for i, t := range m.tasks {
+			if (data.selectedUUID != "" && t.UUID == data.selectedUUID) || (data.selectedUUID == "" && data.selectedID != 0 && t.ID == data.selectedID) {
+				m.tbl.SetCursor(i)
+				if m.showUltra && m.ultraFocusedID == 0 {
+					m.ultraFocusedID = t.ID
+				}
+				break
+			}
+		}
+	}
 	m.reconcileUltraSelection()
 	m.updateSelectionHighlight(-1, m.tbl.Cursor(), 0, m.tbl.ColumnCursor())
 }
@@ -823,11 +859,13 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 }
 
 // Init implements tea.Model.
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return m.scheduleJiraReload(false) }
 
 // Update handles key and window events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case jiraReloadDoneMsg:
+		return m.handleJiraReloadDone(msg)
 	case debug.DumpStateMsg:
 		// Handled unconditionally, ahead of every mode check below, so a
 		// SIGUSR1 dump still works even if a stuck mode flag is exactly
@@ -874,6 +912,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyPressMsg:
+		if !m.anyInputActive() && !m.showHelp && m.blockJiraAction(msg.String()) {
+			return m, nil
+		}
 		// Handle blinking state first
 		if m.blinkID != 0 {
 			return m.handleBlinkingState(msg)
@@ -1106,7 +1147,7 @@ func (m *Model) handleAutoRefresh(msg autoRefreshMsg) (tea.Model, tea.Cmd) {
 	// so this handler does not Batch a Tick together with the export Cmd.
 	if !m.anyInputActive() && m.blinkID == 0 && !m.taskFlightActive() {
 		if cmd := m.scheduleTaskReload("Reloading…", reloadMeta{reason: reloadReasonAuto}, false); cmd != nil {
-			return m, cmd
+			return m, tea.Batch(cmd, m.scheduleJiraReload(false))
 		}
 	}
 	return m, autoRefreshCmd(interval, m.autoRefreshGen)
@@ -1354,6 +1395,15 @@ func (m *Model) statusLine() string {
 	}
 	if m.statusMsg != "" {
 		status = m.statusMsg
+	}
+	if token := m.jiraStatusToken(); token != "" {
+		if width := m.tbl.Width(); width > 0 {
+			token = ansi.Truncate(token, max(1, width/2), "…")
+		}
+		status = token + " " + status
+		if width := m.tbl.Width(); width > 0 {
+			status = ansi.Truncate(status, width, "…")
+		}
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.StatusFG)).

@@ -10,6 +10,7 @@ import (
 	"github.com/snonux/tasksamurai/internal"
 	"github.com/snonux/tasksamurai/internal/config"
 	"github.com/snonux/tasksamurai/internal/debug"
+	"github.com/snonux/tasksamurai/internal/jira"
 	"github.com/snonux/tasksamurai/internal/task"
 	"github.com/snonux/tasksamurai/internal/ui"
 
@@ -56,7 +57,8 @@ func main() {
 			configPathSet = true
 		}
 	})
-	if _, err := config.Load(context.Background(), config.Options{Path: *configPath, PathSet: configPathSet, NoJira: *noJira}); err != nil {
+	cfg, err := config.Load(context.Background(), config.Options{Path: *configPath, PathSet: configPathSet, NoJira: *noJira})
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load configuration:", err)
 		os.Exit(1)
 	}
@@ -70,7 +72,16 @@ func main() {
 	debug.SetDebugDir(*debugDir)
 	debug.InitSignalHandlers()
 
-	m, err := ui.New(flag.Args(), *browserCmd)
+	var options []ui.ModelOption
+	if cfg.Jira.Enabled {
+		client, err := jira.New(context.Background(), cfg.Jira, nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to initialize Jira:", err)
+			os.Exit(1)
+		}
+		options = append(options, ui.WithJira(cfg.Jira, client, client.ReloadToken))
+	}
+	m, err := ui.New(flag.Args(), *browserCmd, options...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load tasks:", err)
 		os.Exit(1)

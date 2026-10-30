@@ -114,6 +114,9 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // for the blink animation and so the (now-completed) task isn't shown as
 // pending after the async done mutate+reload completes.
 func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("d") {
+		return m, nil
+	}
 	t := m.currentDetailTask()
 	if t == nil {
 		return m, nil
@@ -129,6 +132,9 @@ func (m *Model) handleDetailMarkDone() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailDeleteTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("D") {
+		return m, nil
+	}
 	t := m.currentDetailTask()
 	if t == nil {
 		return m, nil
@@ -147,6 +153,9 @@ func (m *Model) handleDetailDeleteTask() (tea.Model, tea.Cmd) {
 // differs from the one currently displayed, and handleUndo blinks the
 // restored row in the table.
 func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("U") {
+		return m, nil
+	}
 	if len(m.undoStack) == 0 {
 		return m, nil
 	}
@@ -155,6 +164,9 @@ func (m *Model) handleDetailUndo() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailSetRecurringSeriesRecurrence() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction("ctrl+r") {
+		return m, nil
+	}
 	t := m.currentDetailTask()
 	if t == nil {
 		return m, nil
@@ -211,6 +223,9 @@ func (m *Model) handleDetailFieldEdit() (tea.Model, tea.Cmd) {
 // handleDetailDynamicFields handles editing activation for the task fields
 // whose index depends on whether the optional Recur field is present.
 func (m *Model) handleDetailDynamicFields(id int, addr string, t *task.Task) (tea.Model, tea.Cmd) {
+	if m.blockJiraAddress(addr, "e") {
+		return m, nil
+	}
 	// fieldEntry is 8; the next slot is 9, which holds Recur when present.
 	fieldPos := fieldEntry + 1
 	if t.Recur != "" {
@@ -233,6 +248,9 @@ func (m *Model) handleDetailDynamicFields(id int, addr string, t *task.Task) (te
 // activatePriorityEdit enables the priority-selector for task id,
 // pre-selecting the option that matches currentPriority.
 func (m *Model) activatePriorityEdit(id int, addr, currentPriority string) {
+	if m.blockJiraAddress(addr, "p") {
+		return
+	}
 	m.clearEditingModes()
 	m.priorityID = id
 	m.priorityAddr = addr
@@ -253,6 +271,9 @@ func (m *Model) activatePriorityEdit(id int, addr, currentPriority string) {
 // activateDueEdit enables due-date editing for task id, initialising the
 // date picker from currentDue (falls back to now if empty or unparseable).
 func (m *Model) activateDueEdit(id int, addr, currentDue string) {
+	if m.blockJiraAddress(addr, "w") {
+		return
+	}
 	m.dueID = id
 	m.dueAddr = addr
 	if currentDue != "" {
@@ -271,6 +292,9 @@ func (m *Model) activateDueEdit(id int, addr, currentDue string) {
 
 // activateTagsEdit enables tags editing for task id with an empty input.
 func (m *Model) activateTagsEdit(id int, addr string) {
+	if m.blockJiraAddress(addr, "t") {
+		return
+	}
 	m.clearEditingModes()
 	m.tagsID = id
 	m.tagsAddr = addr
@@ -283,6 +307,9 @@ func (m *Model) activateTagsEdit(id int, addr string) {
 // activateProjectEdit enables project editing for task id,
 // pre-filling the input with currentProject.
 func (m *Model) activateProjectEdit(id int, addr, currentProject string) {
+	if m.blockJiraAddress(addr, "J") {
+		return
+	}
 	m.clearEditingModes()
 	m.projID = id
 	m.projAddr = addr
@@ -295,6 +322,9 @@ func (m *Model) activateProjectEdit(id int, addr, currentProject string) {
 // activateRecurEdit enables recurrence editing for task id,
 // pre-filling the input with currentRecur.
 func (m *Model) activateRecurEdit(id int, addr, currentRecur string) {
+	if m.blockJiraAddress(addr, "R") {
+		return
+	}
 	m.clearEditingModes()
 	m.recurID = id
 	m.recurAddr = addr
@@ -310,6 +340,9 @@ func (m *Model) activateRecurEdit(id int, addr, currentRecur string) {
 // The current annotations are joined with "; " and pre-filled in the input
 // so the user can revise all annotations in one pass.
 func (m *Model) activateAnnotationsEdit(id int, addr string, tsk *task.Task) (tea.Model, tea.Cmd) {
+	if m.blockJiraAddress(addr, "A") {
+		return m, nil
+	}
 	m.clearEditingModes()
 	m.annotateID = id
 	m.annotateAddr = addr
@@ -330,6 +363,9 @@ func (m *Model) activateAnnotationsEdit(id int, addr string, tsk *task.Task) (te
 // activateDescriptionEdit enables inline description editing for task id,
 // pre-filling the input with the current description.
 func (m *Model) activateDescriptionEdit(id int, addr string, tsk *task.Task) (tea.Model, tea.Cmd) {
+	if m.blockJiraAddress(addr, "e") {
+		return m, nil
+	}
 	m.clearEditingModes()
 	m.descID = id
 	m.descAddr = addr

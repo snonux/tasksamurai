@@ -32,6 +32,9 @@ func (m *Model) handleBlinkingState(msg tea.Msg) (tea.Model, tea.Cmd) {
 // (shell/mutate/reload) is in progress. Navigation and quit remain available;
 // other keys get a Busy status so sync Update-path task calls cannot overlap.
 func (m *Model) handleBusyFlightKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "space" && m.jira.source != nil && !m.anyInputActive() {
+		return m.handleRefresh()
+	}
 	switch msg.String() {
 	case "q", "Q":
 		return m.handleQuitKey()

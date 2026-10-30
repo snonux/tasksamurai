@@ -137,6 +137,9 @@ func (m *Model) handleShellPrompt() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleShellPromptForSelectedTask() (tea.Model, tea.Cmd) {
+	if m.blockJiraAction(";") {
+		return m, nil
+	}
 	uuid := m.shellSelectedTaskUUID()
 	if uuid == "" {
 		return m.handleShellPrompt()
