@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/snonux/tasksamurai/internal"
 	"github.com/snonux/tasksamurai/internal/task"
@@ -847,25 +848,54 @@ func (m *Model) ultraRenderCards(tasks []task.Task, width, selected, start, card
 			continue
 		}
 
-		cardHeight := lipgloss.Height(card)
-		// Account for separator line (1 line) between cards.
+		// Every card after the first costs one extra line for the separator.
+		sepHeight := 0
 		if len(lines) > 0 {
-			if used+1+cardHeight > cardBudget {
-				break
-			}
-			lines = append(lines, sep)
-			used++
-		} else if cardHeight > cardBudget {
+			sepHeight = 1
+		}
+		remaining := cardBudget - used - sepHeight
+		if remaining <= 0 {
 			break
 		}
 
-		if used+cardHeight > cardBudget {
+		cardLines := strings.Split(card, "\n")
+		if sepHeight > 0 {
+			lines = append(lines, sep)
+			used++
+		}
+
+		if len(cardLines) > remaining {
+			// The card does not fully fit: fill the remaining screen space with
+			// its first lines instead of leaving a gap at the bottom, so huge
+			// descriptions no longer blank out a third of the view.
+			lines = append(lines, ultraClipCardLines(cardLines, remaining, width)...)
+			used += remaining
 			break
 		}
-		lines = append(lines, strings.Split(card, "\n")...)
-		used += cardHeight
+
+		lines = append(lines, cardLines...)
+		used += len(cardLines)
 	}
 	return lines
+}
+
+// ultraClipCardLines returns the first maxLines lines of a card that is
+// taller than the space left on screen. The last returned line is cut by one
+// cell and ends with "…" so a card sliced by the screen edge reads as
+// continuing below the fold rather than complete. Card lines are padded to
+// width by the card style and ansi.Truncate preserves ANSI styling, so
+// selected cards keep their background colour up to the ellipsis.
+func ultraClipCardLines(cardLines []string, maxLines, width int) []string {
+	if maxLines <= 0 {
+		return nil
+	}
+	if len(cardLines) <= maxLines {
+		return cardLines
+	}
+	clipped := make([]string, maxLines)
+	copy(clipped, cardLines[:maxLines-1])
+	clipped[maxLines-1] = ansi.Truncate(cardLines[maxLines-1], width-1, "…")
+	return clipped
 }
 
 // ultraStyledText renders text with style, applying bg as the background so

@@ -3986,6 +3986,126 @@ func TestUltraVisibleCountMeasuredStopsAfterViewport(t *testing.T) {
 	}
 }
 
+func TestUltraClipCardLines(t *testing.T) {
+	// Lines are padded to the card width by the card style.
+	padded := []string{
+		strings.Repeat("x", 10),
+		strings.Repeat("y", 10),
+		strings.Repeat("z", 10),
+	}
+
+	if got := ultraClipCardLines(nil, 0, 10); got != nil {
+		t.Fatalf("maxLines <= 0 should clip to nothing, got %v", got)
+	}
+	if got := ultraClipCardLines(padded, 0, 10); got != nil {
+		t.Fatalf("maxLines <= 0 should clip to nothing, got %v", got)
+	}
+	if got := ultraClipCardLines(padded, 3, 10); !reflect.DeepEqual(got, padded) {
+		t.Fatalf("card fitting within maxLines should pass through unchanged, got %v", got)
+	}
+
+	got := ultraClipCardLines(padded, 2, 10)
+	want := []string{strings.Repeat("x", 10), strings.Repeat("y", 8) + "…"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("clipped lines = %q, want %q", got, want)
+	}
+	if len(got) != 2 {
+		t.Fatalf("clipped line count = %d, want 2", len(got))
+	}
+	if !reflect.DeepEqual(padded, []string{strings.Repeat("x", 10), strings.Repeat("y", 10), strings.Repeat("z", 10)}) {
+		t.Fatal("clipping must not mutate the input card lines")
+	}
+}
+
+// TestUltraViewFillsGapWithClippedNextCard verifies that a card which does not
+// fully fit in the remaining screen space still renders its first lines to
+// fill the bottom of the ultra view instead of leaving a gap when task
+// descriptions are huge.
+func TestUltraViewFillsGapWithClippedNextCard(t *testing.T) {
+	tasks := []task.Task{
+		{ID: 1, UUID: "1", Description: "short task", Status: "pending"},
+		{ID: 2, UUID: "2", Description: strings.Repeat("huge task text ", 200), Status: "pending"},
+		{ID: 3, UUID: "3", Description: "tail task", Status: "pending"},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", &fakeTaskwarrior{tasks: tasks})
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	m.tbl.SetWidth(80)
+	m.windowHeight = 24
+	m.showUltra = true
+	m.ultraCursor = 0
+	m.ultraOffset = 0
+	m.ultraEnsureVisible()
+
+	lines := strings.Split(ansi.Strip(m.renderUltraModus()), "\n")
+	if len(lines) != m.windowHeight {
+		t.Fatalf("ultra view has %d lines, want %d to fill the window; got:\n%s",
+			len(lines), m.windowHeight, strings.Join(lines, "\n"))
+	}
+	if !anyLineContains(lines, "short task") {
+		t.Fatalf("first card missing from view; got:\n%s", strings.Join(lines, "\n"))
+	}
+	if !anyLineContains(lines, "huge task text") {
+		t.Fatalf("clipped card lines missing from view; got:\n%s", strings.Join(lines, "\n"))
+	}
+	if anyLineContains(lines, "tail task") {
+		t.Fatalf("third card rendered despite clipped second card; got:\n%s", strings.Join(lines, "\n"))
+	}
+	// The line above the bottom status bar is the clipped card's last visible
+	// line and must signal that the card continues below the fold.
+	lastCard := strings.TrimRight(lines[len(lines)-2], " ")
+	if !strings.HasSuffix(lastCard, "…") {
+		t.Fatalf("clipped card line does not end with continuation marker: %q", lastCard)
+	}
+}
+
+// TestUltraViewClipsCardTallerThanViewport verifies that a card taller than
+// the whole card budget (the card at the scroll offset) renders clipped from
+// its first lines instead of blanking the screen.
+func TestUltraViewClipsCardTallerThanViewport(t *testing.T) {
+	tasks := []task.Task{
+		{ID: 1, UUID: "1", Description: "small", Status: "pending"},
+		{ID: 2, UUID: "2", Description: strings.Repeat("huge task text ", 200), Status: "pending"},
+		{ID: 3, UUID: "3", Description: "charlie", Status: "pending"},
+	}
+	m, err := NewWithTaskwarrior(nil, "firefox", &fakeTaskwarrior{tasks: tasks})
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	m.tbl.SetWidth(80)
+	m.windowHeight = 24
+	m.showUltra = true
+	m.ultraCursor = 1
+	m.ultraOffset = 1
+	m.ultraEnsureVisible()
+	if m.ultraOffset != 1 {
+		t.Fatalf("offset = %d, want 1 (cursor card taller than viewport)", m.ultraOffset)
+	}
+
+	lines := strings.Split(ansi.Strip(m.renderUltraModus()), "\n")
+	if len(lines) != m.windowHeight {
+		t.Fatalf("ultra view has %d lines, want %d to fill the window; got:\n%s",
+			len(lines), m.windowHeight, strings.Join(lines, "\n"))
+	}
+	if !anyLineContains(lines, "huge task text") {
+		t.Fatalf("clipped cursor card missing from view; got:\n%s", strings.Join(lines, "\n"))
+	}
+	lastCard := strings.TrimRight(lines[len(lines)-2], " ")
+	if !strings.HasSuffix(lastCard, "…") {
+		t.Fatalf("clipped card line does not end with continuation marker: %q", lastCard)
+	}
+}
+
+func anyLineContains(lines []string, substr string) bool {
+	for _, line := range lines {
+		if strings.Contains(line, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestUltraBlinkUsesVisibleSelectionAndRendersBlink(t *testing.T) {
 	tmp := t.TempDir()
 	taskPath := setupUltraTaskSet(t, tmp)
