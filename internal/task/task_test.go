@@ -1,6 +1,7 @@
 package task
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -276,6 +277,61 @@ func TestExportReturnsCapturedErrorOutput(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "export-failed") {
 		t.Fatalf("error did not include stderr: %v", err)
+	}
+}
+
+func TestExportParsesLinesBeyondScannerTokenLimit(t *testing.T) {
+	// Regression: a single exported task whose JSON line exceeds the 64KiB
+	// bufio.Scanner token limit used to abort every reload with
+	// "bufio.Scanner: token too long". Export must stream values instead of
+	// scanning lines.
+	long := strings.Repeat("x", 3*bufio.MaxScanTokenSize)
+	first := `{"uuid":"long-1","status":"pending","description":"` + long + `"}`
+	second := `{"uuid":"short-1","status":"pending","description":"short"}`
+
+	tmp := t.TempDir()
+	fixture := filepath.Join(tmp, "export.json")
+	if err := os.WriteFile(fixture, []byte(first+"\n"+second+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	taskPath := filepath.Join(tmp, "task")
+	script := "#!/bin/sh\ncat \"$EXPORT_FIXTURE\"\n"
+	if err := os.WriteFile(taskPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", tmp+":"+origPath)
+	t.Setenv("EXPORT_FIXTURE", fixture)
+
+	tasks, err := Export(context.Background())
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("got %d tasks, want 2", len(tasks))
+	}
+	if tasks[0].Description != long {
+		t.Fatalf("long description mangled: got %d bytes, want %d", len(tasks[0].Description), len(long))
+	}
+	if tasks[1].Description != "short" {
+		t.Fatalf("second task description = %q, want %q", tasks[1].Description, "short")
+	}
+}
+
+func TestParseExportOutputSkipsBlankAndRejectsGarbage(t *testing.T) {
+	// Blank output and whitespace-only lines yield no tasks, matching the
+	// old line-scanner behavior.
+	tasks, err := parseExportOutput([]byte("\n  \n"))
+	if err != nil {
+		t.Fatalf("parse blank output: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("got %d tasks, want 0", len(tasks))
+	}
+
+	if _, err := parseExportOutput([]byte("{\"uuid\":\"u\",\"description\":\"ok\"}\nnot-json\n")); err == nil {
+		t.Fatal("expected error for non-JSON trailer, got nil")
 	}
 }
 

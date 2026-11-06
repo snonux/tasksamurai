@@ -33,6 +33,10 @@ func completionList(ctx context.Context, command string) []string {
 
 func outputLines(output string) []string {
 	scanner := bufio.NewScanner(strings.NewReader(output))
+	// Completion lists should be one short entry per line, but a single
+	// pathological line longer than the default 64KiB scanner limit must not
+	// silently truncate the result.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	seen := make(map[string]struct{})
 	var lines []string
 	for scanner.Scan() {
@@ -72,22 +76,23 @@ func Export(ctx context.Context, filters ...string) ([]Task, error) {
 		return nil, err
 	}
 
+	return parseExportOutput(out)
+}
+
+// parseExportOutput decodes the newline-delimited JSON objects emitted by
+// `task export rc.json.array=off`. A streaming json.Decoder is used instead
+// of a line scanner so tasks whose exported JSON exceeds the 64KiB
+// bufio.Scanner token limit (long descriptions, large annotation sets)
+// still parse.
+func parseExportOutput(out []byte) ([]Task, error) {
 	var tasks []Task
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
+	dec := json.NewDecoder(bytes.NewReader(out))
+	for dec.More() {
 		var t Task
-		if err := json.Unmarshal(line, &t); err != nil {
-			return nil, err
+		if err := dec.Decode(&t); err != nil {
+			return nil, fmt.Errorf("parsing exported task: %w", err)
 		}
 		tasks = append(tasks, t)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return tasks, nil
 }
