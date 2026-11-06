@@ -378,7 +378,7 @@ func (m *Model) activateRecurEdit(id int, addr, currentRecur string) {
 // The current annotations are joined with "; " and pre-filled in the input
 // so the user can revise all annotations in one pass.
 func (m *Model) activateAnnotationsEdit(id int, addr string, tsk *task.Task) (tea.Model, tea.Cmd) {
-	if m.blockJiraAddress(addr, "A") {
+	if m.blockJiraAddress(addr, "annotations-replace") {
 		return m, nil
 	}
 	m.clearEditingModes()

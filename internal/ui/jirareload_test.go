@@ -311,7 +311,6 @@ func TestJiraBaselineBlocksAllMutationAliases(t *testing.T) {
 		{"d", "Jira transitions are unavailable"},
 		{"D", "Jira issues can't be deleted from here"},
 		{"U", "no undo for Jira issues"},
-		{"A", "comments can't be replaced wholesale — use a to add"},
 		{"J", "moving Jira issues not supported (yet)"},
 		{"T", "moving Jira issues not supported (yet)"},
 		{"R", "Jira issues have no recurrence"},

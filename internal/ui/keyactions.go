@@ -535,15 +535,21 @@ func (m *Model) handleSetPriority() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleAnnotate(replace bool) (tea.Model, tea.Cmd) {
+	tsk := m.getTaskForOpenURL()
+	if tsk == nil {
+		return m, nil
+	}
+	// On Jira rows A is an alias for a: comments are only added, never
+	// replaced wholesale. The A guard stays in force at the field-edit and
+	// commit boundaries.
+	if isJiraTask(tsk) {
+		replace = false
+	}
 	key := "a"
 	if replace {
 		key = "A"
 	}
 	if m.blockJiraAction(key) {
-		return m, nil
-	}
-	tsk := m.getTaskForOpenURL()
-	if tsk == nil {
 		return m, nil
 	}
 

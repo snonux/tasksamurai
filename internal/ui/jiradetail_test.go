@@ -170,6 +170,55 @@ func TestJiraCommentRoutesAndRejectsEmpty(t *testing.T) {
 	}
 }
 
+func TestJiraCommentAliasKey(t *testing.T) {
+	for _, mode := range []string{"table", "ultra", "detail"} {
+		t.Run(mode, func(t *testing.T) {
+			m, source := newJiraDetailFixture(t)
+			if mode == "ultra" {
+				m.showUltra = true
+				m.reconcileUltraSelection()
+			}
+			if mode == "detail" {
+				m.showTaskDetail = true
+				m.setCurrentTaskDetail(&m.tasks[0])
+			}
+			calls := 0
+			confirmed := task.Annotation{Entry: "20261030T123456Z", Description: "server created alias"}
+			source.comment = func(_ context.Context, key, value string) (task.Annotation, error) {
+				calls++
+				if key != "TST-42" || value != "alias comment" {
+					t.Fatalf("wrong comment %s %q", key, value)
+				}
+				return confirmed, nil
+			}
+			_, _ = m.Update(jiraKeyPress("A"))
+			if !m.annotating || m.replaceAnnotations || m.annotateInput.Prompt != "comment: " {
+				t.Fatalf("A did not open the comment input: annotating=%t replace=%t prompt=%q", m.annotating, m.replaceAnnotations, m.annotateInput.Prompt)
+			}
+			m.annotateInput.SetValue("alias comment")
+			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			if cmd == nil || m.annotating || !m.jira.commenting {
+				t.Fatal("A submit did not schedule a Jira comment")
+			}
+			m.blinkEnabled = false
+			drainCmds(t, &m, cmd)
+			if calls != 1 || len(m.jira.tasks[0].Annotations) != 1 || m.jira.tasks[0].Annotations[0] != confirmed {
+				t.Fatal("confirmed alias comment missing")
+			}
+			// Wholesale annotation replacement stays blocked on Jira rows.
+			tsk := m.tasks[0]
+			mv, _ := m.activateAnnotationsEdit(tsk.ID, taskAddress(tsk), &tsk)
+			blocked := mv.(*Model)
+			if blocked.annotating || blocked.anyInputActive() {
+				t.Fatal("wholesale annotation edit opened on a Jira row")
+			}
+			if want := "comments can't be replaced wholesale — use a to add"; blocked.statusMsg != want {
+				t.Fatalf("guard reason %q, want %q", blocked.statusMsg, want)
+			}
+		})
+	}
+}
+
 func TestJiraCommentInvalidatesEarlierReads(t *testing.T) {
 	m, source := newJiraDetailFixture(t)
 	source.issue = func(context.Context, string) (task.Task, error) { return jiraRows()[0], nil }

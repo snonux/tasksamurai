@@ -115,7 +115,7 @@ func (m *Model) handleJiraDetailDone(msg jiraDetailDoneMsg) (tea.Model, tea.Cmd)
 
 func (m *Model) scheduleJiraComment(value string) (tea.Cmd, error) {
 	if m.replaceAnnotations {
-		return nil, fmt.Errorf("%s", jiraBlockedReason("A"))
+		return nil, fmt.Errorf("%s", jiraBlockedReason("annotations-replace"))
 	}
 	if strings.TrimSpace(value) == "" {
 		return nil, fmt.Errorf("comment cannot be empty")

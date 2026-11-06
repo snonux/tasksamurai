@@ -27,31 +27,32 @@ type controlPolicy struct {
 // control here must never send Jira addresses through a TW-only commit,
 // description-editor callback or delayed-done pipeline.
 var jiraControlPolicy = map[string]controlPolicy{
-	"ctrl+w": {route: routeJira},
-	"a":      {route: routeJira},
-	"o":      {route: routeJira},
-	"i":      {route: routeField},
-	"enter":  {route: routeField},
-	":":      {route: routeGlobal},
-	"+":      {route: routeGlobal},
-	"A":      {routeBlocked, "comments can't be replaced wholesale — use a to add"},
-	"D":      {routeBlocked, "Jira issues can't be deleted from here"},
-	"U":      {routeBlocked, "no undo for Jira issues"},
-	"R":      {routeBlocked, "Jira issues have no recurrence"},
-	"J":      {routeBlocked, "moving Jira issues not supported (yet)"},
-	";":      {routeBlocked, "task commands don't work on Jira issues"},
-	"d":      {route: routeJira},
-	"s":      {route: routeJira},
-	"w":      {route: routeJira},
-	"p":      {route: routeJira},
-	"t":      {route: routeJira},
-	"e":      {route: routeJira},
+	"ctrl+w":              {route: routeJira},
+	"a":                   {route: routeJira},
+	"o":                   {route: routeJira},
+	"i":                   {route: routeField},
+	"enter":               {route: routeField},
+	":":                   {route: routeGlobal},
+	"+":                   {route: routeGlobal},
+	"annotations-replace": {routeBlocked, "comments can't be replaced wholesale — use a to add"},
+	"D":                   {routeBlocked, "Jira issues can't be deleted from here"},
+	"U":                   {routeBlocked, "no undo for Jira issues"},
+	"R":                   {routeBlocked, "Jira issues have no recurrence"},
+	"J":                   {routeBlocked, "moving Jira issues not supported (yet)"},
+	";":                   {routeBlocked, "task commands don't work on Jira issues"},
+	"d":                   {route: routeJira},
+	"s":                   {route: routeJira},
+	"w":                   {route: routeJira},
+	"p":                   {route: routeJira},
+	"t":                   {route: routeJira},
+	"e":                   {route: routeJira},
 }
 
 // Aliases share the canonical control's policy and reason. In particular E
-// must never fall through to the external Taskwarrior editor on a Jira row.
+// must never fall through to the external Taskwarrior editor on a Jira row,
+// and A must never reach the wholesale annotation replacement commit on one.
 var controlAliases = map[string]string{
-	"E": "e", "r": "w", "W": "w", "ctrl+r": "R", "T": "J",
+	"E": "e", "r": "w", "W": "w", "ctrl+r": "R", "T": "J", "A": "a",
 }
 
 func routeControl(addr, key string) controlPolicy {
