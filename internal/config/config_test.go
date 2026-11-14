@@ -291,3 +291,15 @@ func TestCredentialsStayOutOfConfigAndErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestPathResolvesWithoutExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	want := filepath.Join(dir, "missing.toml")
+	got, err := Path(Options{Path: want})
+	if err != nil || got != want {
+		t.Fatalf("Path = %q, %v; want %q", got, err, want)
+	}
+	if _, err := Path(Options{PathSet: true}); err == nil {
+		t.Fatal("empty explicit path accepted")
+	}
+}

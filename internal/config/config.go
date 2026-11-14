@@ -128,6 +128,13 @@ func (j Jira) ReadToken(ctx context.Context) (string, error) {
 	return token, nil
 }
 
+// Path returns the absolute config path Load would read for opts. The file may
+// not exist yet: the UI's config editor uses it to create the default file.
+func Path(opts Options) (string, error) {
+	path, _, err := configPath(opts)
+	return path, err
+}
+
 func configPath(opts Options) (string, bool, error) {
 	path := opts.Path
 	explicit := opts.PathSet || path != ""

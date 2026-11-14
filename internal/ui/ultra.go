@@ -145,6 +145,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 			Title: "General",
 			Items: []uihelp.Item{
 				{Key: "H", Desc: "toggle help"},
+				{Key: "ctrl+e", Desc: "edit config in $EDITOR and reload it"},
 				{Key: "esc", Desc: "close help/input or exit ultra mode"},
 				{Key: "q", Desc: "exit ultra mode"},
 			},

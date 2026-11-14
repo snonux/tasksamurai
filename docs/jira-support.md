@@ -62,7 +62,8 @@ structural TOML errors still fail.
 paths resolve against the config directory. Only surrounding token whitespace
 is trimmed; interior characters and any `=…` suffix remain intact. Recommend
 mode 600 for token and config files. Config values never retain token contents.
-Explicit space refresh rereads the token; other config changes need a restart.
+Explicit space refresh rereads the token. Ctrl+E edits the config in `$EDITOR`
+and reloads it in-session; an invalid file keeps the running settings.
 
 Optional workflow overrides preserve native JSON field shapes:
 

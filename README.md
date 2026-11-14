@@ -185,8 +185,18 @@ Config-path precedence is explicit `--config`, then non-empty
 is an error. Filter names must be unique, JQL must be non-empty, and
 `default_filter` must name a local filter; omitting it selects `(none)`. `enabled = false` or `--no-jira`
 skips Jira semantic validation and token reads; TOML syntax, field-type and
-unknown-setting errors still fail startup. Configuration changes require a
-restart. An explicit `space` refresh rereads the token file for token rotation.
+unknown-setting errors still fail startup. An explicit `space` refresh rereads
+the token file for token rotation.
+
+Press `Ctrl+E` in table or ultra mode to open the selected config file in
+`$EDITOR` (`vi` by default); a missing default file's directory is created so
+the editor can save a new config. When the editor exits, Task Samurai rereads
+the file with the same `--config`, `TASKSAMURAI_CONFIG` and `--no-jira`
+selection and applies the Jira settings without a restart, then refetches
+issues. An invalid file keeps the running settings and reports the error.
+Your current source view and a still-defined filter carry over. `Ctrl+E` is
+refused while a Jira write is in progress, and a reload is not applied if a
+write or input started meanwhile; press `Ctrl+E` again and save to retry.
 
 Jira rows show keys such as `TST-42` and `TST2-42` in the ID column. The list
 uses the Project column for workflow status and Recur for assignee, with headers

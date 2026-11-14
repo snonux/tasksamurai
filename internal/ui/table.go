@@ -291,6 +291,7 @@ type Model struct {
 	shellState        // Taskwarrior command prompt and output panel
 	editState         // inline field editing (see editState)
 	taskFlightState   // single-flight Taskwarrior gate (see taskFlightState)
+	configEditState   // ctrl+e config editor and reload (see configedit.go)
 
 	cellExpanded bool
 
@@ -411,6 +412,15 @@ func (m *Model) initTaskContext() {
 
 func (m *Model) cancelTaskOperations() {
 	m.jira.closed = true
+	m.cancelJiraRequests()
+	if m.cancelTaskContext != nil {
+		m.cancelTaskContext()
+	}
+}
+
+// cancelJiraRequests cancels every outstanding Jira request context without
+// closing the Jira state, so a config reload can replace the state afterwards.
+func (m *Model) cancelJiraRequests() {
 	if m.jira.cancel != nil {
 		m.jira.cancel()
 	}
@@ -425,9 +435,6 @@ func (m *Model) cancelTaskOperations() {
 	}
 	if m.jira.mutationCancel != nil {
 		m.jira.mutationCancel()
-	}
-	if m.cancelTaskContext != nil {
-		m.cancelTaskContext()
 	}
 }
 
@@ -945,6 +952,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, launchShellEditorCmd(msg.tempFile)
 	case shellEditDoneMsg:
 		return m.handleShellEditDone(msg)
+	case configEditLaunchMsg:
+		return m.handleConfigEditLaunch(msg)
+	case configEditDoneMsg:
+		return m.handleConfigEditDone(msg)
+	case configReloadDoneMsg:
+		return m.handleConfigReloadDone(msg)
 	case shellCompletionMsg:
 		return m.handleShellCompletion(msg)
 	case openURLDoneMsg:
@@ -1447,6 +1460,7 @@ func (m *Model) helpSections() []uihelp.Section {
 			Title: "General",
 			Items: []uihelp.Item{
 				{Key: "H", Desc: "toggle help"},
+				{Key: "ctrl+e", Desc: "edit config in $EDITOR and reload it"},
 				{Key: "ESC", Desc: "close dialogs/cancel"},
 				{Key: "q", Desc: "quit"},
 			},

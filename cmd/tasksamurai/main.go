@@ -58,9 +58,17 @@ func main() {
 			configPathSet = true
 		}
 	})
-	cfg, err := config.Load(context.Background(), config.Options{Path: *configPath, PathSet: configPathSet, NoJira: *noJira})
+	configOpts := config.Options{Path: *configPath, PathSet: configPathSet, NoJira: *noJira}
+	cfg, err := config.Load(context.Background(), configOpts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to load configuration:", err)
+		os.Exit(1)
+	}
+	// Resolved once so ctrl+e edits the same file that was loaded, even when
+	// it does not exist yet (the editor then creates it).
+	resolvedConfigPath, err := config.Path(configOpts)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to resolve configuration path:", err)
 		os.Exit(1)
 	}
 
@@ -73,14 +81,14 @@ func main() {
 	debug.SetDebugDir(*debugDir)
 	debug.InitSignalHandlers()
 
-	var options []ui.ModelOption
-	if cfg.Jira.Enabled {
-		client, err := jira.New(context.Background(), cfg.Jira, nil)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to initialize Jira:", err)
-			os.Exit(1)
-		}
-		options = append(options, ui.WithJira(cfg.Jira, client, client.ReloadToken))
+	startup, err := jiraRuntime(context.Background(), cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to initialize Jira:", err)
+		os.Exit(1)
+	}
+	options := []ui.ModelOption{ui.WithConfigEditor(resolvedConfigPath, configReloader(configOpts))}
+	if startup.Source != nil {
+		options = append(options, ui.WithJira(startup.Jira, startup.Source, startup.ReloadToken))
 	}
 	m, err := ui.New(flag.Args(), *browserCmd, options...)
 	if err != nil {
@@ -108,5 +116,30 @@ func main() {
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error running ui:", err)
 		os.Exit(1)
+	}
+}
+
+// jiraRuntime builds the Jira client for cfg. A disabled Jira config yields a
+// ConfigReload without Source, which the UI treats as "Jira off".
+func jiraRuntime(ctx context.Context, cfg config.Config) (ui.ConfigReload, error) {
+	if !cfg.Jira.Enabled {
+		return ui.ConfigReload{Jira: cfg.Jira}, nil
+	}
+	client, err := jira.New(ctx, cfg.Jira, nil)
+	if err != nil {
+		return ui.ConfigReload{}, err
+	}
+	return ui.ConfigReload{Jira: cfg.Jira, Source: client, ReloadToken: client.ReloadToken}, nil
+}
+
+// configReloader rereads the config with the startup options after ctrl+e, so
+// --config, TASKSAMURAI_CONFIG and --no-jira keep applying to the reload.
+func configReloader(opts config.Options) ui.ConfigReloader {
+	return func(ctx context.Context) (ui.ConfigReload, error) {
+		cfg, err := config.Load(ctx, opts)
+		if err != nil {
+			return ui.ConfigReload{}, err
+		}
+		return jiraRuntime(ctx, cfg)
 	}
 }

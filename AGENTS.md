@@ -71,6 +71,9 @@ gofmt/goimports, and run errcheck. The local full reference, when available, is
   and `jirafilters.go`: independent Jira caches, requests and completion messages.
   `jirasource.go` owns consumer interfaces; `jiraguard.go` owns routing policy.
 - `internal/atable/`: table sizing, scrolling and cell rendering.
+- `internal/ui/configedit.go`: Ctrl+E config editing; the reload callback from
+  `main.go` rereads the config and swaps the Jira state in Update, keeping
+  generation counters monotonic so stale old-client messages are rejected.
 - `internal/ui/theme.go`: themes and disco mode.
 
 Network results change issue/filter caches only in Bubble Tea's Update loop.
@@ -85,7 +88,8 @@ epochs distinguish A→B→A selection changes during writes.
   `IDText` supplies issue keys in all views, including completed issues.
 - Keep the routing policy and every activation/commit/editor/delayed-action
   boundary consistent. A route-policy change alone does not enable a write.
-- Jira search caches refetch on startup, space, auto-refresh and filter changes.
+- Jira search caches refetch on startup, space, auto-refresh, filter changes
+  and Ctrl+E config reloads.
   View cycling and ordinary navigation reuse them. Detail opening refreshes
   only that issue and its first comment page; writes patch from confirmed
   results, with one per-issue GET after a 204 field/transition response.

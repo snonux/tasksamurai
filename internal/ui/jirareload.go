@@ -62,30 +62,42 @@ type jiraReloadDoneMsg struct {
 // reload callback; settings contain only non-secret configuration.
 func WithJira(settings config.Jira, source IssueSource, reloadToken func(context.Context) error) ModelOption {
 	return func(m *Model) error {
-		if !settings.Enabled || source == nil {
-			return nil
+		state, err := newJiraState(settings, source, reloadToken)
+		if err != nil {
+			return err
 		}
-		v := reflect.ValueOf(source)
-		if v.Kind() == reflect.Pointer && v.IsNil() {
-			return fmt.Errorf("Jira source is nil")
-		}
-		view := settings.DefaultView
-		if view == "" {
-			view = "both"
-		}
-		if view != "tw" && view != "both" && view != "jira" {
-			return fmt.Errorf("invalid Jira source view")
-		}
-		m.jira = jiraState{source: source, settings: settings, reloadToken: reloadToken, view: view, filter: config.Filter{Name: "none"}, displayIDs: make(map[string]int), nextID: -1}
-		for _, filter := range settings.Filters {
-			if filter.Name == settings.DefaultFilter {
-				m.jira.filter = filter
-				m.jira.filterID = "local:" + filter.Name
-				break
-			}
-		}
+		m.jira = state
 		return nil
 	}
+}
+
+// newJiraState builds a fresh Jira state for the configured default view and
+// filter. Disabled settings or a nil source yield the zero (Jira-off) state.
+// It is shared by startup (WithJira) and the in-session config reload.
+func newJiraState(settings config.Jira, source IssueSource, reloadToken func(context.Context) error) (jiraState, error) {
+	if !settings.Enabled || source == nil {
+		return jiraState{}, nil
+	}
+	v := reflect.ValueOf(source)
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		return jiraState{}, fmt.Errorf("Jira source is nil")
+	}
+	view := settings.DefaultView
+	if view == "" {
+		view = "both"
+	}
+	if view != "tw" && view != "both" && view != "jira" {
+		return jiraState{}, fmt.Errorf("invalid Jira source view")
+	}
+	state := jiraState{source: source, settings: settings, reloadToken: reloadToken, view: view, filter: config.Filter{Name: "none"}, displayIDs: make(map[string]int), nextID: -1}
+	for _, filter := range settings.Filters {
+		if filter.Name == settings.DefaultFilter {
+			state.filter = filter
+			state.filterID = "local:" + filter.Name
+			break
+		}
+	}
+	return state, nil
 }
 
 // scheduleJiraReload is independent of the Taskwarrior single-flight gate.
