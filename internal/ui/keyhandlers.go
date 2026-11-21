@@ -66,7 +66,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"+"}, modes: keyBindingAll, desc: "add new task", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.addTask })},
 	{keys: []string{"t"}, modes: keyBindingAll, desc: "edit tags", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.editTags })},
 	{keys: []string{"J"}, modes: keyBindingAll, desc: "edit project", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.editProject })},
-	{keys: []string{"c"}, modes: keyBindingAll, desc: "random theme", action: modelKeyAction((*Model).handleRandomTheme)},
+	{keys: []string{"c"}, modes: keyBindingAll, desc: "random theme (comment on Jira issue)", action: modelKeyAction((*Model).handleCommentOrRandomTheme)},
 	{keys: []string{"C"}, modes: keyBindingAll, desc: "reset theme", action: modelKeyAction((*Model).handleResetTheme)},
 	{keys: []string{"x"}, modes: keyBindingAll, desc: "toggle disco mode", action: modelKeyAction((*Model).handleToggleDisco)},
 	{keys: []string{"B"}, modes: keyBindingAll, desc: "toggle blinking", action: modelKeyAction((*Model).handleToggleBlink)},

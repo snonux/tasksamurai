@@ -311,7 +311,9 @@ func TestRoutingUnchangedGlobalControls(t *testing.T) {
 func TestRoutingGlobalNavigationAndPresentation(t *testing.T) {
 	// This is the remaining unchanged matrix from docs/jira-support.md section 6.
 	// Both sources accept the same keys without starting a TW mutation.
-	for _, key := range []string{"q", "esc", "c", "C", "Z", "V", "space", "0", "1", "2", "3", "4", "5", "6", "g", "G", "up", "down", "left", "right"} {
+	// c is excluded: on Jira rows it adds a comment (see
+	// TestRoutingRandomThemeKeyOnTaskwarriorRows and TestJiraCommentAliasKey).
+	for _, key := range []string{"q", "esc", "C", "Z", "V", "space", "0", "1", "2", "3", "4", "5", "6", "g", "G", "up", "down", "left", "right"} {
 		for _, jiraRow := range []bool{false, true} {
 			t.Run(key+map[bool]string{true: "/jira", false: "/tw"}[jiraRow], func(t *testing.T) {
 				m, tw := routingModel(t, jiraRow)
@@ -330,6 +332,22 @@ func TestRoutingGlobalNavigationAndPresentation(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestRoutingRandomThemeKeyOnTaskwarriorRows pins c as the random theme key
+// outside Jira rows: it must neither open the comment input nor run task.
+func TestRoutingRandomThemeKeyOnTaskwarriorRows(t *testing.T) {
+	m, tw := routingModel(t, false)
+	theme := m.theme
+	for i := 0; i < 5 && m.theme == theme; i++ {
+		_, _ = m.Update(routingKey("c"))
+	}
+	if m.theme == theme {
+		t.Fatal("c did not pick a random theme on a Taskwarrior row")
+	}
+	if len(tw.calls) != 0 || m.anyInputActive() {
+		t.Fatalf("c became a row action on a Taskwarrior row: calls=%v", tw.calls)
 	}
 }
 

@@ -679,6 +679,17 @@ func (m *Model) handleTagToProject() (tea.Model, tea.Cmd) {
 		})
 }
 
+// handleCommentOrRandomTheme implements the "c" key. On a Jira row c is an
+// alias for a (add a comment), as requested for Jira workflows; everywhere
+// else it keeps its original random-theme meaning, so Taskwarrior users and
+// empty tables see no change. C (reset theme) is unaffected.
+func (m *Model) handleCommentOrRandomTheme() (tea.Model, tea.Cmd) {
+	if isJiraTask(m.getTaskForOpenURL()) {
+		return m.handleAnnotate(false)
+	}
+	return m.handleRandomTheme()
+}
+
 func (m *Model) handleRandomTheme() (tea.Model, tea.Cmd) {
 	m.theme = RandomTheme()
 	m.applyTheme()

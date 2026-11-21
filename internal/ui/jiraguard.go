@@ -51,8 +51,10 @@ var jiraControlPolicy = map[string]controlPolicy{
 // Aliases share the canonical control's policy and reason. In particular E
 // must never fall through to the external Taskwarrior editor on a Jira row,
 // and A must never reach the wholesale annotation replacement commit on one.
+// c adds a Jira comment like a; on Taskwarrior rows it stays the global
+// random-theme key (handleCommentOrRandomTheme), not an annotation.
 var controlAliases = map[string]string{
-	"E": "e", "r": "w", "W": "w", "ctrl+r": "R", "T": "J", "A": "a",
+	"E": "e", "r": "w", "W": "w", "ctrl+r": "R", "T": "J", "A": "a", "c": "a",
 }
 
 func routeControl(addr, key string) controlPolicy {

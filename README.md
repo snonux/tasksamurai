@@ -215,7 +215,7 @@ edits.
 | --- | --- |
 | `6` | Cycle cached source views: `tw` → `both` → `jira` → `tw` (`--jira-hotkey` changes the key) |
 | `F` | Pick a local or cloud saved filter with fuzzy search; arrows/Ctrl+n/Ctrl+p navigate, Enter applies, Esc cancels, Ctrl+r refreshes cloud filters |
-| `a` / `A` | Add a comment; blank comments are refused |
+| `a` / `A` / `c` | Add a comment; blank comments are refused |
 | Ctrl+w | Log work with a duration and optional note; Enter submits, Esc cancels |
 | `o` | Open the issue in the configured browser, ahead of description URLs or file references |
 | `d` | Transition to an available done-category status |
@@ -231,8 +231,8 @@ edits.
 | `V` | Include recently completed issues using the same completed window as Taskwarrior |
 
 `D`, `U`, `R`/Ctrl+r, `J`, `T`, and the selected-task `;` prompt are blocked
-on Jira rows, with a reason in the status bar. `A` is an alias for `a` on Jira
-rows; wholesale annotation replacement stays blocked. The global `:` prompt and `+`
+on Jira rows, with a reason in the status bar. `A` and `c` are aliases for `a` on Jira
+rows (`c` stays the random-theme key on Taskwarrior rows); wholesale annotation replacement stays blocked. The global `:` prompt and `+`
 always operate on Taskwarrior, including in Jira-only mode. The picker handles
 Ctrl+r as cloud refresh while it is open; outside it Ctrl+r remains the
 Taskwarrior recurrence action and is blocked on Jira rows.

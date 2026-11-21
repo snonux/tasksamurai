@@ -1448,7 +1448,7 @@ func (m *Model) helpSections() []uihelp.Section {
 		{
 			Title: "Appearance",
 			Items: []uihelp.Item{
-				{Key: "c, C", Desc: "random/reset theme"},
+				{Key: "c, C", Desc: "random/reset theme (c comments on Jira issues)"},
 				{Key: "x", Desc: "toggle disco mode"},
 				{Key: "B", Desc: "toggle blinking"},
 				{Key: "v", Desc: "toggle compact view"},

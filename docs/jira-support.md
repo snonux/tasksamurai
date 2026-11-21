@@ -230,7 +230,7 @@ rejects Jira addresses even though `d` is a supported Jira operation.
 
 | Control | Implemented Jira behavior |
 | --- | --- |
-| `a`/`A`, `o` | Add comment / open issue |
+| `a`/`A`/`c`, `o` | Add comment / open issue |
 | Ctrl+w | Manual worklog duration plus optional semicolon-separated note, from table/ultra/detail; never changes estimates |
 | `d` | Available done-category transition; completed issues no-op politely |
 | `s` | Available indeterminate/new transition for start/stop |
@@ -238,6 +238,7 @@ rejects Jira addresses even though `d` is a supported Jira operation.
 | `p`, `t`, `e`/`E` | Priority, incremental labels, inline summary |
 | Enter / `i` | Open details or delegate to an editable field in the relevant view |
 | `A` | Alias for `a`: add comment; wholesale annotation replacement stays blocked |
+| `c` | Alias for `a` on Jira rows and in Jira details; random theme elsewhere |
 | `D`, `U` | Block Jira deletion and undo |
 | `R`/Ctrl+r | Block recurrence outside the picker |
 | `J`, table `T` | Block project moves/tag-to-project conversion |

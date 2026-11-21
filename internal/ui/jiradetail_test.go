@@ -170,9 +170,15 @@ func TestJiraCommentRoutesAndRejectsEmpty(t *testing.T) {
 	}
 }
 
+// TestJiraCommentAliasKey covers both comment aliases of a on Jira rows: A
+// (never a wholesale replacement there) and c (random theme on other rows).
 func TestJiraCommentAliasKey(t *testing.T) {
-	for _, mode := range []string{"table", "ultra", "detail"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct{ key, mode string }{
+		{"A", "table"}, {"A", "ultra"}, {"A", "detail"},
+		{"c", "table"}, {"c", "ultra"}, {"c", "detail"},
+	} {
+		key, mode := tc.key, tc.mode
+		t.Run(key+"/"+mode, func(t *testing.T) {
 			m, source := newJiraDetailFixture(t)
 			if mode == "ultra" {
 				m.showUltra = true
@@ -191,14 +197,18 @@ func TestJiraCommentAliasKey(t *testing.T) {
 				}
 				return confirmed, nil
 			}
-			_, _ = m.Update(jiraKeyPress("A"))
+			theme := m.theme
+			_, _ = m.Update(jiraKeyPress(key))
+			if m.theme != theme {
+				t.Fatalf("%s changed the theme on a Jira row", key)
+			}
 			if !m.annotating || m.replaceAnnotations || m.annotateInput.Prompt != "comment: " {
-				t.Fatalf("A did not open the comment input: annotating=%t replace=%t prompt=%q", m.annotating, m.replaceAnnotations, m.annotateInput.Prompt)
+				t.Fatalf("%s did not open the comment input: annotating=%t replace=%t prompt=%q", key, m.annotating, m.replaceAnnotations, m.annotateInput.Prompt)
 			}
 			m.annotateInput.SetValue("alias comment")
 			_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			if cmd == nil || m.annotating || !m.jira.commenting {
-				t.Fatal("A submit did not schedule a Jira comment")
+				t.Fatalf("%s submit did not schedule a Jira comment", key)
 			}
 			m.blinkEnabled = false
 			drainCmds(t, &m, cmd)

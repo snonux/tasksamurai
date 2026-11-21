@@ -91,7 +91,8 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailFieldIndex = m.getDetailFieldCount() - 1
 		m.scrollDetailToField(m.detailFieldIndex)
 		return m, nil
-	case "a", "A":
+	case "a", "A", "c":
+		// c is a Jira-only comment alias here; detail view has no theme key.
 		if isJiraTask(m.currentDetailTask()) {
 			return m.handleAnnotate(msg.String() == "A")
 		}
