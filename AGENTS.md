@@ -66,7 +66,8 @@ gofmt/goimports, and run errcheck. The local full reference, when available, is
   `keyhandlers.go` and `keyactions.go` define bindings/actions; `handlers.go`
   handles inputs, and `detail_handlers.go` handles detail fields.
 - `internal/ui/asyncreload.go`, `asyncmutate.go`, `asyncdelete.go` and
-  `taskflight.go`: the Taskwarrior single-flight pipelines.
+  `taskflight.go`: the Taskwarrior single-flight pipelines. `queuedactions.go`
+  queues D/d/s pressed while busy (by UUID) and replays them when idle.
 - `internal/ui/jirareload.go`, `jiradetail.go`, `jiramutation.go`, `jirafields.go`
   and `jirafilters.go`: independent Jira caches, requests and completion messages.
   `jirasource.go` owns consumer interfaces; `jiraguard.go` owns routing policy.

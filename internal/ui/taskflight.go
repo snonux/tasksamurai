@@ -37,11 +37,14 @@ func (k taskFlightKind) String() string {
 
 // taskFlightState tracks in-flight Taskwarrior pipelines and a generation
 // token so late tea.Msg results from superseded or quit-cancelled Cmds are
-// ignored in Update.
+// ignored in Update. queuedActions holds D/d/s presses made while the gate
+// (or a row blink) was busy; they replay in order once it is free
+// (see queuedactions.go).
 type taskFlightState struct {
 	taskFlight      taskFlightKind
 	taskFlightLabel string
 	taskOpGen       int
+	queuedActions   []queuedTaskAction
 }
 
 // taskFlightBlocks reports whether a non-completion Taskwarrior pipeline is
@@ -110,8 +113,10 @@ func (m *Model) endTaskFlight() {
 
 // invalidateTaskFlights bumps the generation and clears flight state so late
 // Cmd results are ignored. Used on quit after cancelling the parent context.
+// Queued actions are dropped too, so no replay can start a write after quit.
 func (m *Model) invalidateTaskFlights() {
 	m.taskOpGen++
+	m.queuedActions = nil
 	m.shellCompletionLoad = false
 	m.endTaskFlight()
 }

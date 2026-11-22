@@ -359,13 +359,23 @@ func TestBusyFlightKeyRejectsMutationsAllowsNav(t *testing.T) {
 		t.Fatal("arm shell")
 	}
 
-	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	// Keys that open editors/prompts are rejected outright.
+	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'p', Text: "p"})
+	m = *mv.(*Model)
+	if cmd != nil || m.prioritySelecting {
+		t.Fatal("p should not start work while busy")
+	}
+	if !strings.Contains(m.statusMsg, "Busy:") {
+		t.Fatalf("statusMsg = %q, want Busy", m.statusMsg)
+	}
+	// Immediate single-task actions are queued instead of dropped.
+	mv, cmd = (&m).Update(tea.KeyPressMsg{Code: 's', Text: "s"})
 	m = *mv.(*Model)
 	if cmd != nil {
 		t.Fatal("s should not start work while busy")
 	}
-	if !strings.Contains(m.statusMsg, "Busy:") {
-		t.Fatalf("statusMsg = %q, want Busy", m.statusMsg)
+	if len(m.queuedActions) != 1 || m.queuedActions[0].key != "s" {
+		t.Fatalf("queue = %#v, want queued s", m.queuedActions)
 	}
 
 	before := m.tbl.Cursor()

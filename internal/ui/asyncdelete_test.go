@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -148,7 +149,9 @@ func TestDeleteHotkeySchedulesMutatingFlight(t *testing.T) {
 	}
 }
 
-func TestDeleteRejectedWhenBusy(t *testing.T) {
+// TestDeleteQueuedWhenBusy: D during another blocking flight must not
+// mutate synchronously; it is queued and runs once the flight ends.
+func TestDeleteQueuedWhenBusy(t *testing.T) {
 	fake := &statusRecordingTaskwarrior{
 		fakeTaskwarrior: fakeTaskwarrior{
 			tasks: []task.Task{{ID: 1, UUID: "u1", Description: "a", Status: "pending"}},
@@ -166,13 +169,87 @@ func TestDeleteRejectedWhenBusy(t *testing.T) {
 	mv, cmd := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
 	m = *mv.(*Model)
 	if cmd != nil {
-		t.Fatal("delete should be rejected while busy")
+		t.Fatal("delete must not start while busy")
 	}
 	if len(fake.statuses) != baseline {
 		t.Fatal("busy delete mutated")
 	}
-	if !strings.Contains(m.statusMsg, "Busy:") {
-		t.Fatalf("statusMsg = %q, want Busy", m.statusMsg)
+	if len(m.queuedActions) != 1 || !strings.Contains(m.statusMsg, "Queued") {
+		t.Fatalf("queue = %#v status = %q, want one queued delete", m.queuedActions, m.statusMsg)
+	}
+
+	// Once the shell flight is over, the next message drains the queue.
+	m.endTaskFlight()
+	mv, cmd = (&m).Update(clearStatusMsg{})
+	m = *mv.(*Model)
+	if cmd == nil || m.taskFlight != taskFlightMutating {
+		t.Fatalf("queued delete did not start (flight = %s)", m.taskFlight)
+	}
+	mv, _ = (&m).Update(cmd())
+	m = *mv.(*Model)
+	if len(fake.statuses) != baseline+1 || fake.statuses[baseline].uuid != "u1" {
+		t.Fatalf("statuses = %#v, want u1 deleted", fake.statuses)
+	}
+	if len(m.queuedActions) != 0 {
+		t.Fatalf("queue not drained: %#v", m.queuedActions)
+	}
+}
+
+// TestDeleteAnotherTaskWhileDeleting reproduces the reported bug: deleting a
+// second task while the first async delete is in flight. The second D must be
+// queued for the task the user selected, the cursor must not jump, and the
+// second delete must run after the first completes.
+func TestDeleteAnotherTaskWhileDeleting(t *testing.T) {
+	var tasks []task.Task
+	for i := 1; i <= 40; i++ {
+		tasks = append(tasks, task.Task{ID: i, UUID: fmt.Sprintf("u%d", i), Description: "t", Status: "pending"})
+	}
+	fake := &statusRecordingTaskwarrior{fakeTaskwarrior: fakeTaskwarrior{tasks: tasks}}
+	m, err := NewWithTaskwarrior(nil, "firefox", fake)
+	if err != nil {
+		t.Fatalf("NewWithTaskwarrior: %v", err)
+	}
+	mv, _ := (&m).Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = *mv.(*Model)
+
+	mv, first := (&m).Update(tea.KeyPressMsg{Code: 'D', Text: "D"})
+	m = *mv.(*Model)
+	if first == nil || m.taskFlight != taskFlightMutating {
+		t.Fatal("first delete should start a mutating flight")
+	}
+	mv, _ = (&m).Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = *mv.(*Model)
+	cursor := m.tbl.Cursor()
+	target := m.tasks[cursor].UUID
+
+	for _, k := range []string{"D", "d"} {
+		mv, _ = (&m).Update(tea.KeyPressMsg{Code: rune(k[0]), Text: k})
+		m = *mv.(*Model)
+		if m.tbl.Cursor() != cursor {
+			t.Fatalf("%s while busy moved the cursor from %d to %d", k, cursor, m.tbl.Cursor())
+		}
+	}
+	if len(m.queuedActions) != 2 || m.queuedActions[0].uuid != target {
+		t.Fatalf("queue = %#v, want D then d on %s", m.queuedActions, target)
+	}
+
+	// First delete completes: the queued delete must start right away.
+	mv, second := (&m).Update(first())
+	m = *mv.(*Model)
+	if second == nil || m.taskFlight != taskFlightMutating {
+		t.Fatalf("queued delete did not start after first delete (flight = %s)", m.taskFlight)
+	}
+	mv, _ = (&m).Update(second())
+	m = *mv.(*Model)
+	if len(fake.statuses) != 2 || fake.statuses[0].uuid != "u1" || fake.statuses[1].uuid != target {
+		t.Fatalf("statuses = %#v, want u1 then %s deleted", fake.statuses, target)
+	}
+	// The queued d targeted the now-deleted task and is skipped.
+	if len(m.queuedActions) != 0 || m.blinkID != 0 {
+		t.Fatalf("queue = %#v blinkID = %d, want drained without blink", m.queuedActions, m.blinkID)
+	}
+	if !strings.Contains(m.statusMsg, "task is gone") {
+		t.Fatalf("statusMsg = %q, want skipped notice", m.statusMsg)
 	}
 }
 

@@ -126,8 +126,12 @@ paths to Cmds:
   Taskwarrior risk.
 - Prefer a small enum (`idle` / `mutating` / `reloading` / `shell`) plus label
   over a lone bool that forgets shell/blink.
-- Second action while in flight (v1): **reject** with status `Busy: …`
-  (no multi-op queue).
+- Second action while in flight: `D`, `d` and `s` are **queued** (up to 32,
+  deduplicated) with the UUID of the task selected at press time, and replay
+  in order once the gate is idle and no blink runs (`internal/ui/queuedactions.go`).
+  Every other non-navigation key is still rejected with status `Busy: …`.
+  (v1 rejected everything; `d` then fell through to the table keymap's
+  half-page-down binding and made the cursor jump.)
 - Auto-refresh must skip when `inFlight || blinkID != 0`. Do **not** rely on
   `shellActive`: it is cleared **before** `shellRunCmd` is returned, so it is
   false while the shell `task` is still running. The flight gate is what
@@ -320,7 +324,7 @@ unconditional `nil` as today’s lossy path).
 
 | Topic | Options | Recommendation |
 |-------|---------|----------------|
-| Second keypress while busy | Ignore / queue 1 / queue N | Ignore with status (v1) |
+| Second keypress while busy | Ignore / queue 1 / queue N | Queue N for D/d/s by UUID; ignore others with status |
 | Auto-refresh during blink/flight | Skip | Skip when `inFlight \|\| blinkID != 0` (not `shellActive`) |
 | Completion vs gate | Gate / accept overlap | Gate in v1; snapshot `Taskwarrior` client into Cmd (today’s completion Cmd closes over `*Model`) |
 | Failed mutate + optimistic UI | N/A | No optimistic edits in v1 |

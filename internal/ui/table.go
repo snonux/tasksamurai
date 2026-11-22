@@ -907,8 +907,9 @@ func (m *Model) buildTaskRows(tasks []task.Task) []atable.Row {
 // Init implements tea.Model.
 func (m *Model) Init() tea.Cmd { return m.scheduleJiraReload(false) }
 
-// Update handles key and window events.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// update is the message dispatcher behind Update (queuedactions.go), which
+// wraps it to replay task actions queued while a flight was busy.
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case jiraMutationDoneMsg:
 		return m.handleJiraMutationDone(msg)
@@ -979,6 +980,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleJiraFilterPickerKey(msg)
 		}
 		if !m.anyInputActive() && !m.showHelp && m.blockJiraAction(msg.String()) {
+			return m, nil
+		}
+		// While a blink or blocking Taskwarrior flight runs, D/d/s are queued
+		// against the selected task and replayed once the gate frees up
+		// (queuedactions.go). Without this they reached the table keymap,
+		// where d means half-page-down and made the cursor jump.
+		if (m.blinkID != 0 || m.taskFlightBlocks()) && !m.anyInputActive() && !m.showHelp &&
+			m.queueTaskActionKey(msg.String()) {
 			return m, nil
 		}
 		// Handle blinking state first

@@ -44,17 +44,30 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
+	return m, m.toggleStartTask(*tsk)
+}
+
+// toggleStartTask starts or stops tsk. It is shared by the s key and by the
+// replay of an s press queued while another Taskwarrior flight was running
+// (queuedactions.go), so both paths apply the same checks.
+func (m *Model) toggleStartTask(tsk task.Task) tea.Cmd {
+	if isJiraTask(&tsk) {
+		return m.scheduleJiraTransition(&tsk, "toggle")
+	}
+	if m.blockJiraAddress(tsk.UUID, "s") {
+		return nil
+	}
 	if tsk.Status == "completed" {
 		m.statusMsg = "Cannot start a completed task"
-		return m, nil
+		return nil
 	}
 	id := tsk.ID
-	addr := taskAddress(*tsk)
+	addr := taskAddress(tsk)
 	started := tsk.Start != ""
 
 	if m.taskFlightBlocks() {
 		_ = m.rejectIfBusy()
-		return m, nil
+		return nil
 	}
 	var op mutateOp
 	label := "Starting…"
@@ -68,7 +81,7 @@ func (m *Model) handleToggleStart() (tea.Model, tea.Cmd) {
 			return tw.StartContext(ctx, addr)
 		}
 	}
-	return m, m.scheduleMutateReload(label, mutateMeta{blinkID: id}, op)
+	return m.scheduleMutateReload(label, mutateMeta{blinkID: id}, op)
 }
 
 func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
@@ -82,12 +95,20 @@ func (m *Model) handleMarkDone() (tea.Model, tea.Cmd) {
 	if err != nil {
 		return m, nil
 	}
+	return m, m.markTaskDone(*tsk)
+}
+
+// markTaskDone starts the done blink for tsk (the done mutation runs when the
+// blink ends). Shared by the d key and queued-action replay.
+func (m *Model) markTaskDone(tsk task.Task) tea.Cmd {
+	if isJiraTask(&tsk) {
+		return m.scheduleJiraTransition(&tsk, "done")
+	}
 	if tsk.Status == "completed" {
 		m.statusMsg = "Task is already completed"
-		return m, nil
+		return nil
 	}
-	id := tsk.ID
-	return m, m.startBlink(id, true)
+	return m.startBlink(tsk.ID, true)
 }
 
 func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
@@ -98,11 +119,17 @@ func (m *Model) handleDeleteTask() (tea.Model, tea.Cmd) {
 	if tsk == nil {
 		return m, nil
 	}
+	return m, m.deleteTask(*tsk)
+}
+
+// deleteTask schedules the async delete of tsk (and its recurring series).
+// Shared by the D key and queued-action replay.
+func (m *Model) deleteTask(tsk task.Task) tea.Cmd {
 	if strings.TrimSpace(tsk.UUID) == "" {
 		m.showError(fmt.Errorf("task %d has no UUID", tsk.ID))
-		return m, nil
+		return nil
 	}
-	return m, m.scheduleDeleteSeries(*tsk)
+	return m.scheduleDeleteSeries(tsk)
 }
 
 // handleOpenURL implements the "o" key. Jira issue URLs take precedence over
