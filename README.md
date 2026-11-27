@@ -55,7 +55,8 @@ annotations) in the browser, or, when there is none, the first `@path/to/file`
 reference in `$EDITOR`. When a task has several links or file references, press
 `O`: the status bar lists them numbered (URLs first, so `1` is what `o` opens),
 and the next key `1`–`9` opens that one; any other key cancels. With a single
-target `O` opens it directly. Jira issues always open the issue page.
+target `O` opens it directly. Jira issues always open the issue page. Since
+`O` is now a command key, it can no longer be assigned as a number-key hotkey.
 
 Task Samurai has several toggle keys. Press `v` to switch between the full
 table and a compact view (Pri, Project, Description, Urg). Press `Z` to cycle

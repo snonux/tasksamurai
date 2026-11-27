@@ -12,7 +12,8 @@ import (
 // The "O" key opens the Nth link of a task. Plain "o" only ever opens the
 // first URL (or, without one, the first @file reference). A vim-style count
 // prefix ("2o") is not possible because digits 0-6 are configurable hotkeys,
-// so "O" instead lists every target numbered in the status bar and the next
+// so "O" instead lists every target numbered in the status bar (rendered
+// from openPick, see visibleStatusMsg; auto-refresh pauses meanwhile) and the next
 // key picks one: 1-9 opens that target, anything else cancels. The order
 // matches "o" (URLs before @files), so "O1" opens what "o" opens.
 
@@ -106,9 +107,44 @@ func (m *Model) handleOpenPick() (tea.Model, tea.Cmd) {
 	case 1:
 		return m, m.openTargetCmd(targets[0], tsk.ID)
 	}
+	// The prompt is rendered from openPick (visibleStatusMsg), not stored in
+	// statusMsg, so timed status clears or reload messages cannot hide it
+	// while the pick is still waiting for its key.
 	m.openPick = openPickState{targets: targets, taskID: tsk.ID}
-	m.statusMsg = openPickPrompt(targets)
 	return m, nil
+}
+
+// handleOpenKey dispatches "o" (first target) and "O" (pick the Nth); the
+// detail view routes both keys through it.
+func (m *Model) handleOpenKey(key string) (tea.Model, tea.Cmd) {
+	if key == "O" {
+		return m.handleOpenPick()
+	}
+	return m.handleOpenURL()
+}
+
+// visibleStatusMsg is the text for the status bar (table/ultra) and the
+// detail overlay: the pending "O" prompt takes precedence over statusMsg.
+func (m *Model) visibleStatusMsg() string {
+	if m.openPick.active() {
+		return openPickPrompt(m.openPick.targets)
+	}
+	return m.statusMsg
+}
+
+// handleOverlayKey routes keys to modal overlays that sit above every view:
+// the shell output panel and a pending "O" pick. It reports whether the key
+// was consumed.
+func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (bool, tea.Model, tea.Cmd) {
+	switch {
+	case m.shellOutputVisible:
+		model, cmd := m.handleShellOutputMode(msg)
+		return true, model, cmd
+	case m.openPick.active():
+		model, cmd := m.handleOpenPickKey(msg)
+		return true, model, cmd
+	}
+	return false, m, nil
 }
 
 // openPickPrompt renders the numbered target list for the status bar.
@@ -133,7 +169,6 @@ func openPickPrompt(targets []openTarget) string {
 func (m *Model) handleOpenPickKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pick := m.openPick
 	m.openPick = openPickState{}
-	m.statusMsg = ""
 	key := msg.String()
 	if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
 		if n := int(key[0] - '0'); n <= len(pick.targets) {

@@ -68,8 +68,8 @@ func TestOpenPickOpensNthTarget(t *testing.T) {
 	if cmd := pressKey(&m, 'O'); cmd != nil {
 		t.Fatalf("O with several targets should only prompt, got a command")
 	}
-	if !strings.Contains(m.statusMsg, "1:") || !strings.Contains(m.statusMsg, "2:") {
-		t.Fatalf("status does not list numbered targets: %q", m.statusMsg)
+	if st := m.statusLine(); !strings.Contains(st, "1: https://one.example") || !strings.Contains(st, "2: https://two.example") {
+		t.Fatalf("status does not list numbered targets: %q", st)
 	}
 	cmd := pressKey(&m, '2')
 	if cmd == nil {
@@ -125,5 +125,50 @@ func TestOpenPickSingleTargetOpensDirectly(t *testing.T) {
 	pressKey(&m2, 'O')
 	if m2.openPick.active() || !strings.Contains(m2.statusMsg, "No URL") {
 		t.Fatalf("no-target O status = %q", m2.statusMsg)
+	}
+}
+
+// TestOpenPickPromptSurvivesStatusChanges: a status clear (timed tick or
+// reload message) must not hide a pending pick, and auto-refresh must pause
+// while it waits, so the next key is never swallowed by an invisible prompt.
+func TestOpenPickPromptSurvivesStatusChanges(t *testing.T) {
+	m, _ := newOpenPickModel(t, "a https://one.example b https://two.example")
+	pressKey(&m, 'O')
+
+	mv, _ := m.Update(clearStatusMsg{})
+	m = *mv.(*Model)
+	m.statusMsg = "Reloading…"
+	if st := m.statusLine(); !strings.Contains(st, "Open which?") {
+		t.Fatalf("pick prompt hidden by status change: %q", st)
+	}
+	if !m.anyInputActive() {
+		t.Fatalf("auto-refresh is not paused while a pick is pending")
+	}
+}
+
+// TestOpenPickFileTargetAndDetailView: O works in the detail view and a
+// chosen @file target opens in the editor rather than the browser.
+func TestOpenPickFileTargetAndDetailView(t *testing.T) {
+	m, _ := newOpenPickModel(t, "see https://one.example and @notes/x.txt")
+	mv, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *mv.(*Model)
+	if !m.showTaskDetail {
+		t.Fatalf("detail view did not open")
+	}
+	pressKey(&m, 'O')
+	if !m.openPick.active() {
+		t.Fatalf("O in detail view did not start a pick")
+	}
+	if !strings.Contains(m.renderDetailScreen(), "2: @notes/x.txt") {
+		t.Fatalf("detail overlay does not show the pick prompt")
+	}
+	if got := m.openPick.targets[1]; got.kind != openTargetFile || got.value != "notes/x.txt" {
+		t.Fatalf("second target = %#v, want @file notes/x.txt", got)
+	}
+	if cmd := pressKey(&m, '2'); cmd == nil {
+		t.Fatalf("O2 on a file target returned no command")
+	}
+	if !m.showTaskDetail || m.openPick.active() {
+		t.Fatalf("pick did not finish cleanly inside the detail view")
 	}
 }

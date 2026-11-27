@@ -1000,12 +1000,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.taskFlightBlocks() {
 			return m.handleBusyFlightKey(msg)
 		}
-		if m.shellOutputVisible {
-			return m.handleShellOutputMode(msg)
-		}
-		// The key after "O" picks a target (or cancels) in every view.
-		if m.openPick.active() {
-			return m.handleOpenPickKey(msg)
+		if handled, model, cmd := m.handleOverlayKey(msg); handled {
+			return model, cmd
 		}
 
 		// Check if we're in detail view
@@ -1209,7 +1205,7 @@ func (m *Model) anyInputActive() bool {
 		m.recurEditing || m.projEditing || m.filterEditing || m.jira.picker.open || m.addingTask ||
 		m.prioritySelecting || m.searching || m.shellActive ||
 		m.shellOutputVisible || m.detailSearching || m.ultraSearching ||
-		m.detailDescEditing || m.editID != 0
+		m.detailDescEditing || m.editID != 0 || m.openPick.active()
 }
 
 // handleAutoRefresh reloads the task list on the periodic auto-refresh tick
@@ -1489,8 +1485,8 @@ func (m *Model) statusLine() string {
 	if m.completed > 0 {
 		status = fmt.Sprintf("Total:%d Done:%d InProgress:%d Due:%d | press H for help", m.total, m.completed, m.inProgress, m.due)
 	}
-	if m.statusMsg != "" {
-		status = m.statusMsg
+	if msg := m.visibleStatusMsg(); msg != "" {
+		status = msg
 	}
 	if token := m.jiraStatusToken(); token != "" {
 		if width := m.tbl.Width(); width > 0 {

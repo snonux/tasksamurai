@@ -248,7 +248,7 @@ func (m *Model) renderDetailScreen() string {
 		lines = append(lines, lipgloss.NewStyle().Padding(0, 2).
 			Render("Search: "+m.detailSearchInput.View()))
 	}
-	if msg := m.statusMsg; msg != "" {
+	if msg := m.visibleStatusMsg(); msg != "" {
 		// The table view shows statusMsg in its status bar; without this line
 		// the detail overlay would swallow the only feedback for busy-commit
 		// errors, detail search ("No matches"), invalid regexes, and similar.
