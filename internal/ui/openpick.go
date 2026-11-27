@@ -123,8 +123,9 @@ func (m *Model) handleOpenKey(key string) (tea.Model, tea.Cmd) {
 	return m.handleOpenURL()
 }
 
-// visibleStatusMsg is the text for the status bar (table/ultra) and the
-// detail overlay: the pending "O" prompt takes precedence over statusMsg.
+// visibleStatusMsg is the text for the table status bar and the detail
+// overlay: the pending "O" prompt takes precedence over statusMsg. Ultra
+// appends the prompt to its own bottom status line (ultraCursorStatus).
 func (m *Model) visibleStatusMsg() string {
 	if m.openPick.active() {
 		return openPickPrompt(m.openPick.targets)

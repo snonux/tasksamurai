@@ -172,3 +172,22 @@ func TestOpenPickFileTargetAndDetailView(t *testing.T) {
 		t.Fatalf("pick did not finish cleanly inside the detail view")
 	}
 }
+
+// TestOpenPickPromptInUltraView: ultra draws its own status lines, so the
+// pick prompt must be added there too or the pick would be invisible.
+func TestOpenPickPromptInUltraView(t *testing.T) {
+	m, _ := newOpenPickModel(t, "a https://one.example b https://two.example")
+	pressKey(&m, 'u')
+	if !m.showUltra {
+		t.Fatalf("u did not open ultra view")
+	}
+	mv, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = *mv.(*Model)
+	pressKey(&m, 'O')
+	if !m.openPick.active() {
+		t.Fatalf("O in ultra view did not start a pick")
+	}
+	if !strings.Contains(m.renderUltraModus(), "Open which?") {
+		t.Fatalf("ultra view does not show the pick prompt")
+	}
+}

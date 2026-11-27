@@ -546,12 +546,18 @@ func (m *Model) ultraMoveSearchMatch(delta int) {
 	m.ultraMoveCursor(delta)
 }
 
+// ultraCursorStatus renders the bottom ultra status line: the cursor
+// position, followed by a pending "O" pick prompt so the pick is never
+// invisible in ultra (which has no table status bar).
 func (m *Model) ultraCursorStatus(tasks []task.Task) string {
-	cursor := m.ultraVisibleCursor(tasks)
-	if cursor < 0 {
-		return fmt.Sprintf("0/%d", len(tasks))
+	pos := fmt.Sprintf("0/%d", len(tasks))
+	if cursor := m.ultraVisibleCursor(tasks); cursor >= 0 {
+		pos = fmt.Sprintf("%d/%d", cursor+1, len(tasks))
 	}
-	return fmt.Sprintf("%d/%d", cursor+1, len(tasks))
+	if m.openPick.active() {
+		return pos + " | " + m.visibleStatusMsg()
+	}
+	return pos
 }
 
 func (m *Model) ultraIDText(t task.Task) string {
