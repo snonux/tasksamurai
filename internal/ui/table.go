@@ -333,9 +333,10 @@ type Model struct {
 
 	theme        Theme
 	defaultTheme Theme
-	disco        bool   // disco mode changes theme on every task modification
-	compactView  bool   // compact view shows only Pri, Project, Description, Urg
-	statusMsg    string // temporary status message shown in status bar
+	disco        bool          // disco mode changes theme on every task modification
+	compactView  bool          // compact view shows only Pri, Project, Description, Urg
+	statusMsg    string        // temporary status message shown in status bar
+	openPick     openPickState // "O" target list awaiting a digit (see openpick.go)
 
 	taskContext       context.Context
 	cancelTaskContext context.CancelFunc
@@ -1002,6 +1003,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.shellOutputVisible {
 			return m.handleShellOutputMode(msg)
 		}
+		// The key after "O" picks a target (or cancels) in every view.
+		if m.openPick.active() {
+			return m.handleOpenPickKey(msg)
+		}
 
 		// Check if we're in detail view
 		if m.showTaskDetail {
@@ -1420,6 +1425,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "T", Desc: "convert first tag to project"},
 				{Key: "a, A", Desc: "add/replace annotations"},
 				{Key: "o", Desc: "open URL, @file, or Jira issue in browser"},
+				{Key: "O<n>", Desc: "list URLs/@files and open the Nth (1-9)"},
 			},
 		},
 		{
@@ -1434,6 +1440,7 @@ func (m *Model) helpSections() []uihelp.Section {
 				{Key: "i, Enter", Desc: "edit selected field"},
 				{Key: "d, D, U", Desc: "done/delete/undo"},
 				{Key: "o", Desc: "open URL, @file, or Jira issue in browser"},
+				{Key: "O<n>", Desc: "list URLs/@files and open the Nth (1-9)"},
 				{Key: "q, ESC", Desc: "back to table"},
 			},
 		},
@@ -2058,6 +2065,7 @@ var reservedAgentHotkeys = map[string]struct{}{
 	"H":      {},
 	"J":      {},
 	"N":      {},
+	"O":      {},
 	"R":      {},
 	"ctrl+r": {},
 	"ctrl+c": {},

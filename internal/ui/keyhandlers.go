@@ -50,6 +50,7 @@ var sharedKeyBindings = []keyBinding{
 	{keys: []string{"d"}, modes: keyBindingAll, desc: "mark task done", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.markDone })},
 	{keys: []string{"D"}, modes: keyBindingAll, desc: "delete task/recurring series", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.deleteTask })},
 	{keys: []string{"o"}, modes: keyBindingAll, desc: "open URL, @file, or Jira issue in browser", action: modelKeyAction((*Model).handleOpenURL)},
+	{keys: []string{"O"}, modes: keyBindingAll, desc: "list URLs/@files and open the Nth (1-9)", action: modelKeyAction((*Model).handleOpenPick)},
 	{keys: []string{"U"}, modes: keyBindingAll, desc: "undo last done/delete", action: modelKeyAction((*Model).handleUndo)},
 	{keys: []string{"w"}, modes: keyBindingAll, desc: "set due date", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.setDueDate })},
 	{keys: []string{"W"}, modes: keyBindingAll, desc: "remove due date", action: sharedKeyAction(func(h sharedKeyHandlers) func() (tea.Model, tea.Cmd) { return h.removeDueDate })},

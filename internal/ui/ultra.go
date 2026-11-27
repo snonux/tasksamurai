@@ -94,6 +94,7 @@ func (m *Model) ultraHelpSections() []uihelp.Section {
 			Items: []uihelp.Item{
 				{Key: "Enter, e, E", Desc: "edit selected task"},
 				{Key: "o", Desc: "open URL, @file, or Jira issue in browser"},
+				{Key: "O<n>", Desc: "list URLs/@files and open the Nth (1-9)"},
 				{Key: "s", Desc: "start/stop task"},
 				{Key: "d", Desc: "mark task done"},
 				{Key: "D", Desc: "delete task/recurring series"},

@@ -50,6 +50,13 @@ quit, the edited text is loaded back into the prompt so you can review it and pr
 `Enter` to run. Commands that print output
 open a scrollable output panel.
 
+Press `o` to open the first URL in the selected task (description, then
+annotations) in the browser, or, when there is none, the first `@path/to/file`
+reference in `$EDITOR`. When a task has several links or file references, press
+`O`: the status bar lists them numbered (URLs first, so `1` is what `o` opens),
+and the next key `1`–`9` opens that one; any other key cancels. With a single
+target `O` opens it directly. Jira issues always open the issue page.
+
 Task Samurai has several toggle keys. Press `v` to switch between the full
 table and a compact view (Pri, Project, Description, Urg). Press `Z` to cycle
 auto-refresh through off → 10s → 60s → 5m → 15m → off; while enabled the task
