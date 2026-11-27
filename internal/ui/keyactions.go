@@ -989,7 +989,8 @@ func (m *Model) handleShowTaskDetail() (tea.Model, tea.Cmd) {
 		m.initDetailViewport()
 		m.detailSearching = false
 		m.detailSearchRegex = nil
-		m.detailFieldIndex = 0
+		// Select the Description, which is rendered at the top of the view.
+		m.detailFieldIndex = m.detailDescriptionFieldIndex()
 		m.detailBlinkField = -1
 		m.detailBlinkOn = false
 		m.detailBlinkCount = 0

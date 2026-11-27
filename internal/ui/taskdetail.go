@@ -88,10 +88,15 @@ func (m *Model) renderTaskDetail() string {
 		fieldEndLines[i] = -1
 	}
 	var searchLines []int
-	lines, nextField := m.renderDetailFieldRows(lines, labelStyle, valueStyle, fieldLines, fieldEndLines, &searchLines)
-	lines = m.renderDetailDescription(lines, nextField, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
-	nextField++
-	lines = m.renderDetailAnnotations(lines, nextField, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
+	// The Description is rendered first (directly below the title) so it is
+	// visible without scrolling in short terminals such as a tmux split; the
+	// metadata rows follow. Field indices stay logical (Description keeps its
+	// index after the metadata rows); navigation uses detailVisualOrder.
+	descField := m.detailDescriptionFieldIndex()
+	lines = m.renderDetailDescription(lines, descField, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
+	lines = append(lines, "")
+	lines, _ = m.renderDetailFieldRows(lines, labelStyle, valueStyle, fieldLines, fieldEndLines, &searchLines)
+	lines = m.renderDetailAnnotations(lines, descField+1, labelStyle, descStyle, fieldLines, fieldEndLines, &searchLines)
 	lines = m.renderDetailFooter(lines)
 	// Render-time state sync (same pattern as the detail viewport content):
 	// these offsets describe the content that was just rendered and are used
@@ -249,11 +254,11 @@ func (m *Model) renderDetailRecurField(labelStyle lipgloss.Style, cf int) string
 
 // renderDetailDescription appends the Description section (label + wrapped body)
 // to lines, applying selection/blink highlighting and search match colouring.
+// It is the first section below the title, so it adds no leading blank line.
 // The field's first line offset and any search-match line offsets are recorded
 // for scroll-into-view support.
 func (m *Model) renderDetailDescription(lines []string, cf int, labelStyle, descStyle lipgloss.Style, fieldLines, fieldEndLines []int, searchLines *[]int) []string {
 	t := m.currentDetailTask()
-	lines = append(lines, "")
 
 	fieldLines[cf] = len(lines)
 
@@ -356,7 +361,7 @@ func (m *Model) renderDetailFooter(lines []string) []string {
 	} else {
 		lines = append(lines, ist.Render("Press ESC or q to return to table view"))
 		lines = append(lines, ist.Render("Use ↑/k and ↓/j to navigate fields, PgUp/PgDn or Ctrl+U/Ctrl+D to scroll"))
-		lines = append(lines, ist.Render("Press i or Enter to edit (Priority, Tags, Due, Recurrence, Description)"))
+		lines = append(lines, ist.Render("Press i or Enter to edit (Description, Priority, Tags, Due, Recurrence)"))
 		lines = append(lines, ist.Render("Press d to mark task done, D to delete, U to undo last done/delete"))
 		if m.detailSearching {
 			lines = append(lines, ist.Render("Type to search, Enter to confirm"))
@@ -517,6 +522,46 @@ func (m *Model) detailDescriptionFieldIndex() int {
 		return fieldRecur + 1 // 10
 	}
 	return fieldRecur // 9
+}
+
+// detailVisualOrder returns the navigable field indices in on-screen order:
+// Description first (it is rendered at the top), then the metadata rows
+// (ID … optional Recurrence), then Annotations when present. Up/down and
+// g/G navigation walk this order so the highlight moves with the layout.
+func (m *Model) detailVisualOrder() []int {
+	count := m.getDetailFieldCount()
+	if count == 0 {
+		return nil
+	}
+	desc := m.detailDescriptionFieldIndex()
+	order := make([]int, 0, count)
+	order = append(order, desc)
+	for i := 0; i < desc; i++ {
+		order = append(order, i)
+	}
+	for i := desc + 1; i < count; i++ {
+		order = append(order, i)
+	}
+	return order
+}
+
+// stepDetailField moves the selected detail field delta positions along the
+// visual order, clamping at both ends, and scrolls it into view.
+func (m *Model) stepDetailField(delta int) {
+	order := m.detailVisualOrder()
+	if len(order) == 0 {
+		return
+	}
+	pos := 0
+	for i, f := range order {
+		if f == m.detailFieldIndex {
+			pos = i
+			break
+		}
+	}
+	pos = min(max(pos+delta, 0), len(order)-1)
+	m.detailFieldIndex = order[pos]
+	m.scrollDetailToField(m.detailFieldIndex)
 }
 
 // getDetailFieldCount returns the actual number of navigable fields for the current task

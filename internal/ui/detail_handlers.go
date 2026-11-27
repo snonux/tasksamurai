@@ -71,25 +71,17 @@ func (m *Model) handleTaskDetailMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.detailStepSearchMatch(-1)
 		return m, nil
 	case "up", "k":
-		if m.detailFieldIndex > 0 {
-			m.detailFieldIndex--
-		}
-		m.scrollDetailToField(m.detailFieldIndex)
+		// Navigation follows the on-screen order (Description first).
+		m.stepDetailField(-1)
 		return m, nil
 	case "down", "j":
-		maxFields := m.getDetailFieldCount()
-		if m.detailFieldIndex < maxFields-1 {
-			m.detailFieldIndex++
-		}
-		m.scrollDetailToField(m.detailFieldIndex)
+		m.stepDetailField(1)
 		return m, nil
 	case "g", "home":
-		m.detailFieldIndex = 0
-		m.scrollDetailToField(m.detailFieldIndex)
+		m.stepDetailField(-fieldCount)
 		return m, nil
 	case "G", "end":
-		m.detailFieldIndex = m.getDetailFieldCount() - 1
-		m.scrollDetailToField(m.detailFieldIndex)
+		m.stepDetailField(fieldCount)
 		return m, nil
 	case "a", "A", "c":
 		// c is a Jira-only comment alias here; detail view has no theme key.

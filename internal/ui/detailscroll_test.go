@@ -374,3 +374,45 @@ func TestDetailScreenShowsStatusMessage(t *testing.T) {
 	}
 	m.statusMsg = ""
 }
+
+// TestDetailDescriptionRenderedFirst checks that the Description section sits
+// directly below the title (visible without scrolling in short splits), that
+// it is selected on open, and that j/k walk the fields in on-screen order.
+func TestDetailDescriptionRenderedFirst(t *testing.T) {
+	m := newDetailScrollTestModel(t, []task.Task{{ID: 1, UUID: "one", Description: "top text", Status: "pending"}})
+	openDetail(t, &m)
+
+	desc := m.detailDescriptionFieldIndex()
+	if m.detailFieldIndex != desc {
+		t.Fatalf("detail opened on field %d, want Description (%d)", m.detailFieldIndex, desc)
+	}
+	if m.detailFieldLines[desc] >= m.detailFieldLines[fieldID] {
+		t.Fatalf("Description line %d not above ID line %d", m.detailFieldLines[desc], m.detailFieldLines[fieldID])
+	}
+	if m.detailViewport.YOffset() != 0 {
+		t.Fatalf("detail view scrolled on open: YOffset = %d", m.detailViewport.YOffset())
+	}
+
+	// k at the top stays on Description; j moves to the first metadata row.
+	mv, _ := m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	m = *mv.(*Model)
+	if m.detailFieldIndex != desc {
+		t.Fatalf("k from top moved to field %d", m.detailFieldIndex)
+	}
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = *mv.(*Model)
+	if m.detailFieldIndex != fieldID {
+		t.Fatalf("j from Description selected field %d, want ID", m.detailFieldIndex)
+	}
+	// G selects the last metadata row (no annotations); g returns to Description.
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = *mv.(*Model)
+	if m.detailFieldIndex != fieldEntry {
+		t.Fatalf("G selected field %d, want Entry", m.detailFieldIndex)
+	}
+	mv, _ = m.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
+	m = *mv.(*Model)
+	if m.detailFieldIndex != desc {
+		t.Fatalf("g selected field %d, want Description", m.detailFieldIndex)
+	}
+}
